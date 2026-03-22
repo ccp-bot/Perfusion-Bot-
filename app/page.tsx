@@ -67,6 +67,7 @@ export default function Home() {
           src="/COR-Wave-3.mp4"
           autoPlay
           loop
+          muted
           playsInline
           preload="auto"
           style={{
