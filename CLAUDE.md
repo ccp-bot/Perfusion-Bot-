@@ -57,15 +57,8 @@ Supabase documents table with 59+ chunks from:
 - OPENAI_API_KEY
 - ANTHROPIC_API_KEY
 
-## Deployment
-Push to GitHub triggers auto-deploy:
-git add .
-git commit -m "message"
-git push
-
 ## Business Context
 - This is a proof of concept for an AI agency business
 - Target users: cardiovascular perfusionists
 - Future plans: iOS/Android app, case log feature, institution-specific memory
 - Cost: ~$0.01-0.05 per conversation (Anthropic API)
-```
