@@ -5,8 +5,16 @@ import { supabase } from './lib/supabase'
 
 const CATEGORIES = ['Protocol', 'Case Note', 'Equipment', 'Policy', 'Logbook']
 
+const SIDEBAR_ITEMS = [
+  { key: 'Logbook', emoji: null, image: '/logbook.icon.png', label: 'Logbook' },
+  { key: 'Protocol', emoji: '📋', image: null, label: 'Protocol' },
+  { key: 'Case Note', emoji: '🗒️', image: null, label: 'Cases' },
+  { key: 'Equipment', emoji: '⚙️', image: null, label: 'Equipment' },
+  { key: 'Policy', emoji: '📜', image: null, label: 'Policy' },
+]
+
 export default function Home() {
-  const [messages, setMessages] = useState<{role: string, content: string}[]>([])
+  const [messages, setMessages] = useState<{role: string, content: string, image?: string}[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showSplash, setShowSplash] = useState(true)
@@ -18,14 +26,17 @@ export default function Home() {
   const [saving, setSaving] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [showLogbook, setShowLogbook] = useState(false)
-  const [logbookEntries, setLogbookEntries] = useState<any[]>([])
-  const [logbookLoading, setLogbookLoading] = useState(false)
+  const [activePanel, setActivePanel] = useState<string | null>(null)
+  const [panelEntries, setPanelEntries] = useState<any[]>([])
+  const [panelLoading, setPanelLoading] = useState(false)
   const [listening, setListening] = useState(false)
+  const [attachedImage, setAttachedImage] = useState<string | null>(null)
+  const [attachedImageName, setAttachedImageName] = useState<string>('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const recognitionRef = useRef<any>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -51,52 +62,67 @@ export default function Home() {
 
   if (authLoading) return null
 
-  async function fetchLogbook() {
-    setLogbookLoading(true)
+  async function fetchPanel(category: string) {
+    setPanelLoading(true)
     try {
-      const res = await fetch(`/api/logbook?userId=${user?.id}`)
+      const res = await fetch(`/api/logbook?userId=${user?.id}&category=${category}`)
       const data = await res.json()
-      setLogbookEntries(data.entries || [])
+      setPanelEntries(data.entries || [])
     } catch {
-      setLogbookEntries([])
+      setPanelEntries([])
     }
-    setLogbookLoading(false)
+    setPanelLoading(false)
   }
 
-  async function deleteLogbookEntry(id: number) {
+  function openPanel(key: string) {
+    if (activePanel === key) {
+      setActivePanel(null)
+      return
+    }
+    setActivePanel(key)
+    fetchPanel(key)
+  }
+
+  async function deletePanelEntry(id: number) {
     try {
       await fetch('/api/logbook', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id })
       })
-      setLogbookEntries(prev => prev.filter(e => e.id !== id))
+      setPanelEntries(prev => prev.filter(e => e.id !== id))
     } catch {
       console.error('Failed to delete entry')
     }
   }
 
-  function openLogbook() {
-    setShowLogbook(true)
-    fetchLogbook()
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setAttachedImage(ev.target?.result as string)
+      setAttachedImageName(file.name)
+    }
+    reader.readAsDataURL(file)
   }
 
   async function sendMessage() {
-    if (!input.trim()) return
-    if (input.trim().toLowerCase() === 'logbook') {
-      setInput('')
-      openLogbook()
-      return
-    }
+    if (!input.trim() && !attachedImage) return
     const userMessage = input
+    const imageToSend = attachedImage
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    setAttachedImage(null)
+    setAttachedImageName('')
+    const newUserMsg: any = { role: 'user', content: userMessage }
+    if (imageToSend) newUserMsg.image = imageToSend
+    setMessages(prev => [...prev, newUserMsg])
     setLoading(true)
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage, messages: messages, userId: user?.id })
+        body: JSON.stringify({ message: userMessage, messages: messages, userId: user?.id, image: imageToSend })
       })
       const data = await res.json()
       if (data.savePreview) {
@@ -157,9 +183,7 @@ export default function Home() {
     recognition.onstart = () => setListening(true)
     recognition.onend = () => setListening(false)
     recognition.onresult = (event: any) => {
-      const transcript = Array.from(event.results)
-        .map((result: any) => result[0].transcript)
-        .join('')
+      const transcript = Array.from(event.results).map((r: any) => r[0].transcript).join('')
       setInput(transcript)
     }
     recognition.onerror = (event: any) => {
@@ -176,11 +200,11 @@ export default function Home() {
 
   if (showSplash) {
     return (
-      <div style={{ position: 'relative', height: '100vh', background: '#0f1117', opacity: fadingSplash ? 0 : 1, transition: 'opacity 1s ease', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ position: 'relative', height: '100vh', background: '#080b12', opacity: fadingSplash ? 0 : 1, transition: 'opacity 1.2s ease', fontFamily: 'system-ui, sans-serif' }}>
         <video ref={videoRef} src="/COR-Opening.mp4" autoPlay muted playsInline preload="auto" style={{ width: '100vw', height: '100vh', objectFit: 'cover' }} />
         <button
           onClick={() => { if (videoRef.current) { videoRef.current.muted = !videoRef.current.muted; setIsMuted(!isMuted) } }}
-          style={{ position: 'absolute', bottom: '2rem', right: '2rem', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '1.2rem', zIndex: 10 }}
+          style={{ position: 'absolute', bottom: '2rem', right: '2rem', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '1.2rem', zIndex: 10 }}
         >
           {isMuted ? '🔇' : '🔊'}
         </button>
@@ -189,183 +213,277 @@ export default function Home() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f1117', color: '#e8e8e8', fontFamily: 'system-ui, sans-serif', overflow: 'hidden', position: 'relative' }}>
-
-      {loading && (
-        <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 10 }}>
-          <div style={{ position: 'absolute', bottom: '80px', left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, transparent, #e63946, transparent)', animation: 'pulse 1s ease-in-out infinite' }} />
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#e63946', fontSize: '0.85rem', fontWeight: '500', letterSpacing: '0.1em', opacity: 0.7, animation: 'fadeInOut 1.5s ease-in-out infinite' }}>
-            searching through knowledge...
-          </div>
-          <img src="/COR-Bot.PNG" alt="COR" style={{ position: 'absolute', top: '42%', width: '140px', height: '140px', objectFit: 'contain', animation: 'runAcross 10s linear infinite', filter: 'drop-shadow(0 0 8px #e63946)' }} />
-          <img src="/COR-Tank.PNG" alt="COR-T" style={{ position: 'absolute', bottom: '100px', width: '160px', height: '160px', objectFit: 'contain', animation: 'runAcross 14s linear infinite 2s', filter: 'drop-shadow(0 0 8px #3b82f6)' }} />
-          <img src="/COR-Hovering-GIF.gif" alt="COR-H" style={{ position: 'absolute', top: '12%', width: '120px', height: '120px', objectFit: 'contain', animation: 'flyAcross 8s linear infinite 1s', mixBlendMode: 'screen' as any, filter: 'drop-shadow(0 0 12px #22c55e)' }} />
-        </div>
-      )}
+    <div style={{ display: 'flex', height: '100vh', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif", overflow: 'hidden' }}>
 
       <style>{`
         @keyframes runAcross { 0% { left: -180px; } 100% { left: 110%; } }
         @keyframes flyAcross { 0% { left: -150px; transform: translateY(-5px); } 50% { transform: translateY(5px); } 100% { left: 110%; transform: translateY(-5px); } }
-        @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+        @keyframes pulseBar { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
         @keyframes fadeInOut { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
-        @keyframes bob { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
-        @keyframes modalIn { from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(230,57,70,0.4); } 70% { box-shadow: 0 0 0 10px rgba(230,57,70,0); } 100% { box-shadow: 0 0 0 0 rgba(230,57,70,0); } }
+        @keyframes bob { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }
+        @keyframes modalIn { from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+        @keyframes panelSlide { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes micGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(230,57,70,0.5); } 50% { box-shadow: 0 0 0 6px rgba(230,57,70,0); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .sidebar-btn:hover { background: rgba(255,255,255,0.06) !important; }
+        .sidebar-btn.active { background: rgba(230,57,70,0.12) !important; border-color: rgba(230,57,70,0.4) !important; }
+        .msg-bubble { animation: fadeUp 0.2s ease; }
+        input::placeholder { color: #4a5568; }
+        ::-webkit-scrollbar { width: 4px; } 
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
       `}</style>
 
-      {/* HEADER */}
-      <div style={{ padding: '1rem 2rem', borderBottom: '1px solid #2a2a3a', display: 'flex', alignItems: 'center', gap: '12px', background: '#0f1117', zIndex: 20 }}>
-        <img src="/COR-1.PNG" alt="COR" style={{ width: '36px', height: '36px', objectFit: 'contain', animation: 'bob 3s ease-in-out infinite' }} />
-        <div>
-          <div style={{ fontWeight: '600', fontSize: '1rem', color: '#ffffff' }}>COR</div>
-          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Cardiovascular Perfusion Assistant</div>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{user?.email}</div>
-          <button onClick={openLogbook} title="My Logbook" style={{ padding: '0.25rem', borderRadius: '8px', border: '1px solid #2a2a3a', background: showLogbook ? '#1a1a2e' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-            <img src="/logbook.icon.png" alt="Logbook" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
-          </button>
-          <button onClick={signOut} style={{ padding: '0.3rem 0.75rem', borderRadius: '8px', border: '1px solid #2a2a3a', background: 'transparent', color: '#6b7280', fontSize: '0.75rem', cursor: 'pointer' }}>Sign out</button>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></div>
-        </div>
-      </div>
+      {/* ── LEFT SIDEBAR ── */}
+      <div style={{ width: '200px', background: '#0d1117', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', flexShrink: 0, zIndex: 30 }}>
 
-      {/* MESSAGES */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '1rem', zIndex: 20 }}>
-        {messages.length === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'space-between' }}>
-            <div style={{ textAlign: 'center', marginTop: '3rem' }}>
-              <div style={{ fontSize: '1.1rem', fontWeight: '500', color: '#9ca3af', marginBottom: '0.5rem' }}>Hello, I am COR</div>
-              <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>Your cardiovascular perfusion assistant.<br/>Ask me anything about CPB, ECMO, or perfusion guidelines.</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '2rem', paddingBottom: '1rem' }}>
-              <img src="/COR-Tank.PNG" alt="COR-T" style={{ width: '120px', height: '120px', objectFit: 'contain', animation: 'bob 3.2s ease-in-out infinite' }} />
-              <img src="/COR-1.PNG" alt="COR" style={{ width: '140px', height: '140px', objectFit: 'contain', animation: 'bob 2.8s ease-in-out infinite 0.3s' }} />
-              <video src="/COR-Hovering.webm" autoPlay loop muted playsInline style={{ width: '110px', height: '110px', objectFit: 'contain', animation: 'bob 3.5s ease-in-out infinite 0.6s' }} />
+        {/* COR Branding */}
+        <div style={{ padding: '1.25rem 1rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.25rem' }}>
+            <img src="/COR-1.PNG" alt="COR" style={{ width: '36px', height: '36px', objectFit: 'contain', animation: 'bob 3s ease-in-out infinite' }} />
+            <div>
+              <div style={{ fontWeight: '700', fontSize: '1rem', color: '#ffffff', letterSpacing: '0.05em' }}>COR</div>
+              <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Perfusion AI</div>
             </div>
           </div>
-        )}
-        {messages.map((m, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-            {m.role === 'assistant' && (
-              <img src="/COR-1.PNG" alt="COR" style={{ width: '28px', height: '28px', objectFit: 'contain', marginRight: '8px', flexShrink: 0, marginTop: '4px' }} />
-            )}
-            <div style={{ maxWidth: '70%', padding: '0.75rem 1rem', borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: m.role === 'user' ? '#e63946' : '#1a1a2e', color: '#e8e8e8', fontSize: '0.9rem', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-              {m.content}
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <img src="/COR-1.PNG" alt="COR" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
-            <div style={{ background: '#1a1a2e', padding: '0.75rem 1rem', borderRadius: '18px 18px 18px 4px', color: '#6b7280', fontSize: '0.9rem' }}>COR is thinking...</div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
+        </div>
 
-      {/* LOGBOOK PANEL */}
-      {showLogbook && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 40 }}>
-          <div onClick={() => setShowLogbook(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-          <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '90%', maxWidth: '480px', background: '#1a1a2e', borderLeft: '1px solid #2a2a3a', display: 'flex', flexDirection: 'column', animation: 'slideIn 0.25s ease' }}>
-            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #2a2a3a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '1.2rem' }}>📓</span>
-                <div>
-                  <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.95rem' }}>My Logbook</div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{logbookEntries.length} entries</div>
-                </div>
-              </div>
-              <button onClick={() => setShowLogbook(false)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1.25rem', cursor: 'pointer' }}>✕</button>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {logbookLoading && <div style={{ textAlign: 'center', color: '#6b7280', fontSize: '0.9rem', marginTop: '2rem' }}>Loading entries...</div>}
-              {!logbookLoading && logbookEntries.length === 0 && (
-                <div style={{ textAlign: 'center', marginTop: '3rem' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📭</div>
-                  <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>No logbook entries yet.</div>
-                  <div style={{ color: '#4b5563', fontSize: '0.8rem', marginTop: '0.5rem' }}>Save a conversation and select "Logbook" to add entries.</div>
-                </div>
+        {/* Category Nav */}
+        <div style={{ padding: '0.75rem 0.5rem', flex: 1 }}>
+          <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginBottom: '0.5rem' }}>Knowledge Base</div>
+          {SIDEBAR_ITEMS.map(item => (
+            <button
+              key={item.key}
+              onClick={() => openPanel(item.key)}
+              className={`sidebar-btn${activePanel === item.key ? ' active' : ''}`}
+              style={{
+                width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px',
+                background: 'transparent',
+                border: '1px solid transparent',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left'
+              }}
+            >
+              <span style={{ fontSize: '1rem', width: '20px', textAlign: 'center', flexShrink: 0 }}>
+                {item.image
+                  ? <img src={item.image} alt={item.label} style={{ width: '18px', height: '18px', objectFit: 'contain', verticalAlign: 'middle' }} />
+                  : item.emoji
+                }
+              </span>
+              <span style={{ fontSize: '0.82rem', color: activePanel === item.key ? '#e63946' : '#94a3b8', fontWeight: activePanel === item.key ? '600' : '400' }}>{item.label}</span>
+              {activePanel === item.key && (
+                <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />
               )}
-              {logbookEntries.map((entry) => (
-                <div key={entry.id} style={{ background: '#0f1117', border: '1px solid #2a2a3a', borderRadius: '12px', padding: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                      {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                    <button onClick={() => deleteLogbookEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#4b5563', fontSize: '0.8rem', cursor: 'pointer', padding: '0' }}>🗑️</button>
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: '#e8e8e8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content}</div>
-                </div>
-              ))}
+            </button>
+          ))}
+        </div>
+
+        {/* User + Sign out */}
+        <div style={{ padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ fontSize: '0.65rem', color: '#4a5568', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
+          <button onClick={signOut} style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#4a5568', fontSize: '0.72rem', cursor: 'pointer', transition: 'all 0.15s ease' }}>
+            Sign out
+          </button>
+        </div>
+      </div>
+
+      {/* ── PANEL ── */}
+      {activePanel && (
+        <div style={{ width: '300px', background: '#0d1117', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', flexShrink: 0, animation: 'panelSlide 0.2s ease' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel}</div>
+              <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>{panelEntries.length} saved entries</div>
             </div>
+            <button onClick={() => setActivePanel(null)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '1rem', cursor: 'pointer', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+            {panelLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '2rem' }}>Loading...</div>}
+            {!panelLoading && panelEntries.length === 0 && (
+              <div style={{ textAlign: 'center', marginTop: '4rem' }}>
+                <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>📭</div>
+                <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No {activePanel} entries yet.</div>
+              </div>
+            )}
+            {panelEntries.map((entry) => (
+              <div key={entry.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.6rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                    {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                  <button onClick={() => deletePanelEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6 }}>🗑️</button>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* SAVE PREVIEW MODAL */}
-      {savePreview && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 50 }}>
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#1a1a2e', border: '1px solid #2a2a3a', borderRadius: '16px', padding: '2rem', width: '90%', maxWidth: '520px', animation: 'modalIn 0.2s ease' }}>
-            <div style={{ fontWeight: '600', fontSize: '1rem', color: '#ffffff', marginBottom: '0.5rem' }}>💾 Save to Knowledge Base</div>
-            <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1.25rem' }}>Review the summary COR generated, then pick a category.</div>
-            <div style={{ background: '#0f1117', border: '1px solid #2a2a3a', borderRadius: '10px', padding: '1rem', fontSize: '0.85rem', color: '#e8e8e8', lineHeight: '1.6', marginBottom: '1.25rem', whiteSpace: 'pre-wrap' }}>{pendingSummary}</div>
-            <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '0.6rem' }}>Select a category:</div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-              {CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => setSelectedCategory(cat)} style={{ padding: '0.4rem 1rem', borderRadius: '20px', border: `1px solid ${selectedCategory === cat ? '#e63946' : '#2a2a3a'}`, background: selectedCategory === cat ? '#e63946' : 'transparent', color: selectedCategory === cat ? '#ffffff' : '#9ca3af', fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.15s ease' }}>
-                  {cat}
-                </button>
-              ))}
+      {/* ── MAIN CHAT AREA ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+
+        {/* Loading robots */}
+        {loading && (
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}>
+            <div style={{ position: 'absolute', bottom: '80px', left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, #e63946, transparent)', animation: 'pulseBar 1.2s ease-in-out infinite' }} />
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#e63946', fontSize: '0.75rem', fontWeight: '500', letterSpacing: '0.15em', textTransform: 'uppercase', opacity: 0.6, animation: 'fadeInOut 1.5s ease-in-out infinite' }}>
+              searching knowledge base
             </div>
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-              <button onClick={cancelSave} style={{ padding: '0.6rem 1.25rem', borderRadius: '10px', border: '1px solid #2a2a3a', background: 'transparent', color: '#9ca3af', fontSize: '0.85rem', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={confirmSave} disabled={!selectedCategory || saving} style={{ padding: '0.6rem 1.25rem', borderRadius: '10px', border: 'none', background: !selectedCategory || saving ? '#4b5563' : '#e63946', color: 'white', fontSize: '0.85rem', fontWeight: '500', cursor: !selectedCategory || saving ? 'not-allowed' : 'pointer' }}>
-                {saving ? 'Saving...' : 'Save'}
+            <img src="/COR-Bot.PNG" alt="COR" style={{ position: 'absolute', top: '42%', width: '120px', height: '120px', objectFit: 'contain', animation: 'runAcross 10s linear infinite', filter: 'drop-shadow(0 0 8px #e63946)' }} />
+            <img src="/COR-Tank.PNG" alt="COR-T" style={{ position: 'absolute', bottom: '100px', width: '140px', height: '140px', objectFit: 'contain', animation: 'runAcross 14s linear infinite 2s', filter: 'drop-shadow(0 0 8px #3b82f6)' }} />
+            <img src="/COR-Hovering-GIF.gif" alt="COR-H" style={{ position: 'absolute', top: '12%', width: '110px', height: '110px', objectFit: 'contain', animation: 'flyAcross 8s linear infinite 1s', mixBlendMode: 'screen' as any, filter: 'drop-shadow(0 0 12px #22c55e)' }} />
+          </div>
+        )}
+
+        {/* Messages */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '2rem 2rem 1rem' }}>
+          {messages.length === 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', height: '100%', minHeight: '400px' }}>
+              <div style={{ textAlign: 'center', paddingTop: '3rem' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: '300', color: '#e2e8f0', marginBottom: '0.5rem', letterSpacing: '-0.02em' }}>Hello, I am <span style={{ color: '#e63946', fontWeight: '700' }}>COR</span></div>
+                <div style={{ fontSize: '0.88rem', color: '#4a5568', lineHeight: '1.6' }}>Your cardiovascular perfusion assistant.<br/>Ask me anything about CPB, ECMO, or perfusion guidelines.</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '2rem', paddingBottom: '1rem' }}>
+                <img src="/COR-Tank.PNG" alt="COR-T" style={{ width: '110px', height: '110px', objectFit: 'contain', animation: 'bob 3.2s ease-in-out infinite' }} />
+                <img src="/COR-1.PNG" alt="COR" style={{ width: '130px', height: '130px', objectFit: 'contain', animation: 'bob 2.8s ease-in-out infinite 0.3s' }} />
+                <video src="/COR-Hovering.webm" autoPlay loop muted playsInline style={{ width: '100px', height: '100px', objectFit: 'contain', animation: 'bob 3.5s ease-in-out infinite 0.6s' }} />
+              </div>
+            </div>
+          )}
+
+          {messages.map((m, i) => (
+            <div key={i} className="msg-bubble" style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: '0.75rem' }}>
+              {m.role === 'assistant' && (
+                <img src="/COR-1.PNG" alt="COR" style={{ width: '26px', height: '26px', objectFit: 'contain', marginRight: '8px', flexShrink: 0, marginTop: '4px' }} />
+              )}
+              <div style={{
+                maxWidth: '68%', padding: '0.7rem 1rem',
+                borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                background: m.role === 'user' ? '#e63946' : 'rgba(255,255,255,0.05)',
+                border: m.role === 'user' ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                color: '#e2e8f0', fontSize: '0.88rem', lineHeight: '1.65', whiteSpace: 'pre-wrap'
+              }}>
+                {m.image && <img src={m.image} alt="attachment" style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: '0.5rem', display: 'block' }} />}
+                {m.content}
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+              <img src="/COR-1.PNG" alt="COR" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
+              <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', padding: '0.7rem 1rem', borderRadius: '18px 18px 18px 4px', color: '#4a5568', fontSize: '0.85rem' }}>
+                COR is thinking...
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Save Preview Modal */}
+        {savePreview && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 50, backdropFilter: 'blur(4px)' }}>
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.75rem', width: '90%', maxWidth: '500px', animation: 'modalIn 0.2s ease' }}>
+              <div style={{ fontWeight: '600', fontSize: '0.95rem', color: '#ffffff', marginBottom: '0.4rem' }}>💾 Save to Knowledge Base</div>
+              <div style={{ fontSize: '0.78rem', color: '#4a5568', marginBottom: '1rem' }}>Review the summary, then pick a category.</div>
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.9rem', fontSize: '0.82rem', color: '#94a3b8', lineHeight: '1.6', marginBottom: '1rem', whiteSpace: 'pre-wrap', maxHeight: '150px', overflowY: 'auto' }}>{pendingSummary}</div>
+              <div style={{ fontSize: '0.75rem', color: '#4a5568', marginBottom: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Category</div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                {CATEGORIES.map(cat => (
+                  <button key={cat} onClick={() => setSelectedCategory(cat)} style={{ padding: '0.35rem 0.9rem', borderRadius: '20px', border: `1px solid ${selectedCategory === cat ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: selectedCategory === cat ? '#e63946' : 'transparent', color: selectedCategory === cat ? '#ffffff' : '#94a3b8', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s ease' }}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
+                <button onClick={cancelSave} style={{ padding: '0.55rem 1.1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: '0.82rem', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={confirmSave} disabled={!selectedCategory || saving} style={{ padding: '0.55rem 1.1rem', borderRadius: '8px', border: 'none', background: !selectedCategory || saving ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.82rem', fontWeight: '500', cursor: !selectedCategory || saving ? 'not-allowed' : 'pointer' }}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Input Area */}
+        <div style={{ padding: '0.75rem 1.5rem 1.25rem', background: '#080b12', flexShrink: 0 }}>
+          {attachedImage && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', padding: '0.4rem 0.75rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', width: 'fit-content' }}>
+              <img src={attachedImage} alt="attachment" style={{ width: '28px', height: '28px', objectFit: 'cover', borderRadius: '4px' }} />
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{attachedImageName}</span>
+              <button onClick={() => { setAttachedImage(null); setAttachedImageName('') }} style={{ background: 'transparent', border: 'none', color: '#4a5568', cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1 }}>✕</button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '0.6rem', maxWidth: '780px', margin: '0 auto', alignItems: 'center' }}>
+
+            {/* Plus button */}
+            <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileSelect} style={{ display: 'none' }} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach image or video"
+              style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.25rem', color: '#94a3b8', transition: 'all 0.15s ease' }}
+            >
+              +
+            </button>
+
+            {/* Input with mic inside */}
+            <div style={{ flex: 1, position: 'relative' }}>
+              <input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                placeholder={listening ? 'Listening...' : 'Ask COR anything about perfusion...'}
+                style={{
+                  width: '100%', padding: '0.75rem 3rem 0.75rem 1.1rem',
+                  borderRadius: '24px',
+                  border: `1px solid ${listening ? 'rgba(230,57,70,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                  background: 'rgba(255,255,255,0.04)',
+                  color: '#e2e8f0', fontSize: '0.88rem', outline: 'none',
+                  boxSizing: 'border-box', transition: 'border-color 0.2s ease',
+                  backdropFilter: 'blur(8px)'
+                }}
+              />
+              <button
+                onClick={startListening}
+                title={listening ? 'Stop' : 'Speak'}
+                style={{
+                  position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)',
+                  width: '30px', height: '30px', borderRadius: '50%',
+                  background: listening ? '#e63946' : 'transparent',
+                  border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  animation: listening ? 'micGlow 1.5s ease-in-out infinite' : 'none'
+                }}
+              >
+                {listening
+                  ? <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: 'white' }} />
+                  : <img src="/mic.png" alt="mic" style={{ width: '16px', height: '16px', objectFit: 'contain', opacity: 0.5 }} />
+                }
               </button>
             </div>
+
+            {/* Send button */}
+            <button
+              onClick={sendMessage}
+              disabled={loading}
+              style={{
+                width: '38px', height: '38px', borderRadius: '50%',
+                background: loading ? 'rgba(255,255,255,0.06)' : '#e63946',
+                color: 'white', border: 'none',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, fontSize: '0.9rem', transition: 'all 0.15s ease'
+              }}
+            >
+              ➤
+            </button>
           </div>
         </div>
-      )}
 
-      {/* INPUT */}
-      <div style={{ padding: '1rem 2rem', borderTop: '1px solid #2a2a3a', background: '#0f1117', zIndex: 20 }}>
-        <div style={{ display: 'flex', gap: '0.75rem', maxWidth: '800px', margin: '0 auto' }}>
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-            placeholder={listening ? 'Listening... click mic to stop' : 'Ask COR a perfusion question...'}
-            style={{ flex: 1, padding: '0.75rem 1rem', borderRadius: '12px', border: `1px solid ${listening ? '#e63946' : '#2a2a3a'}`, background: '#1a1a2e', color: '#e8e8e8', fontSize: '0.9rem', outline: 'none' }}
-          />
-          <button
-            onClick={startListening}
-            title={listening ? 'Stop listening' : 'Speak your question'}
-            style={{
-              width: '46px',
-              height: '46px',
-              borderRadius: '50%',
-              background: listening ? '#e63946' : '#1a1a2e',
-              border: `2px solid ${listening ? '#e63946' : '#3a3a4a'}`,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              boxShadow: listening ? '0 0 0 4px rgba(230,57,70,0.2)' : 'none',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            {listening
-              ? <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'white' }} />
-              : <img src="/mic.png" alt="mic" style={{ width: '22px', height: '22px', objectFit: 'contain', filter: 'invert(1)' }} />
-            }
-          </button>
-        </div>
       </div>
-
     </div>
   )
 }
