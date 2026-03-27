@@ -343,16 +343,25 @@ export default function Home() {
           <button
             onClick={startListening}
             title={listening ? 'Stop listening' : 'Speak your question'}
-            style={{ padding: '0.75rem', background: listening ? '#e63946' : '#1a1a2e', color: 'white', border: '1px solid #2a2a3a', borderRadius: '12px', cursor: 'pointer', fontSize: '1.1rem', animation: listening ? 'pulse-ring 1.5s ease-in-out infinite' : 'none' }}
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '50%',
+              background: listening ? '#e63946' : '#1a1a2e',
+              border: `2px solid ${listening ? '#e63946' : '#3a3a4a'}`,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: listening ? '0 0 0 4px rgba(230,57,70,0.2)' : 'none',
+              transition: 'all 0.2s ease'
+            }}
           >
-            {listening ? '🔴' : <img src="/microphone.icon.png" alt="mic" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />}
-          </button>
-          <button
-            onClick={sendMessage}
-            disabled={loading}
-            style={{ padding: '0.75rem 1.25rem', background: loading ? '#4b5563' : '#e63946', color: 'white', border: 'none', borderRadius: '12px', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.9rem', fontWeight: '500' }}
-          >
-            Send
+            {listening
+              ? <div style={{ width: '14px', height: '14px', borderRadius: '2px', background: 'white' }} />
+              : <img src="/mic.png" alt="mic" style={{ width: '22px', height: '22px', objectFit: 'contain', filter: 'invert(1)' }} />
+            }
           </button>
         </div>
       </div>
