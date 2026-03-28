@@ -344,7 +344,7 @@ export default function Home() {
                 <div style={{ fontSize: '0.88rem', color: '#4a5568', lineHeight: '1.6' }}>Your cardiovascular perfusion assistant.<br/>Ask me anything about CPB, ECMO, or perfusion guidelines.</div>
               </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingBottom: '1rem' }}>
-              <img src="/CORx3Dance.gif" autoPlay loop muted playsInline style={{ width: '500px', height: 'auto', objectFit: 'contain' }} />
+              <img src="/CORx3Dance.gif" alt="COR dancing" style={{ width: '500px', height: 'auto', objectFit: 'contain' }} />
               </div>
             </div>
           )}
