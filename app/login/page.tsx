@@ -27,55 +27,80 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f1117', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ background: '#1a1a2e', border: '1px solid #2a2a3a', borderRadius: '16px', padding: '2.5rem', width: '90%', maxWidth: '400px' }}>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '2rem' }}>
-          <img src="/COR-1.PNG" alt="COR" style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
-          <div>
-            <div style={{ fontWeight: '600', fontSize: '1.1rem', color: '#ffffff' }}>COR</div>
-            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Cardiovascular Perfusion Assistant</div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#080b12', fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif", overflow: 'hidden', position: 'relative' }}>
+
+      <style>{`
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes bob { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
+        @keyframes glow { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+        input::placeholder { color: #4a5568; }
+      `}</style>
+
+      {/* Background glow effects */}
+      <div style={{ position: 'absolute', top: '20%', left: '30%', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(230,57,70,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '20%', right: '25%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+      {/* Main layout - COR on left, form on right */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0rem', width: '90%', maxWidth: '1000px', animation: 'fadeUp 0.6s ease' }}>
+
+        {/* COR waving */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'visible' }}>
+            <img
+              src="/LittleCorWave.gif"
+              alt="COR waving"
+              style={{ width: '100%', maxWidth: '450px', animation: 'none', filter: 'drop-shadow(0 20px 40px rgba(0, 0, 0, 0.15))' }}
+            />
+           </div>
+
+        {/* Login form */}
+        <div style={{ width: '360px', flexShrink: 0 }}>
+          <div style={{ marginBottom: '2rem' }}>
+            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ffffff', letterSpacing: '-0.03em', marginBottom: '0.25rem' }}>
+              Welcome to <span style={{ color: '#e63946' }}>COR</span>
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#4a5568' }}>Cardiovascular Perfusion AI Assistant</div>
           </div>
-        </div>
 
-        <div style={{ fontSize: '1rem', fontWeight: '500', color: '#ffffff', marginBottom: '1.5rem' }}>
-          {isSignUp ? 'Create your account' : 'Sign in to your account'}
-        </div>
+          <div style={{ fontSize: '0.82rem', fontWeight: '500', color: '#94a3b8', marginBottom: '1.25rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {isSignUp ? 'Create your account' : 'Sign in to continue'}
+          </div>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid #2a2a3a', background: '#0f1117', color: '#e8e8e8', fontSize: '0.9rem', outline: 'none', marginBottom: '0.75rem', boxSizing: 'border-box' }}
-        />
+          <input
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', marginBottom: '0.75rem', boxSizing: 'border-box', transition: 'border-color 0.2s ease' }}
+          />
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleAuth()}
-          style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid #2a2a3a', background: '#0f1117', color: '#e8e8e8', fontSize: '0.9rem', outline: 'none', marginBottom: '1rem', boxSizing: 'border-box' }}
-        />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAuth()}
+            style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', marginBottom: '1rem', boxSizing: 'border-box', transition: 'border-color 0.2s ease' }}
+          />
 
-        {error && (
-          <div style={{ color: '#e63946', fontSize: '0.8rem', marginBottom: '1rem' }}>{error}</div>
-        )}
+          {error && (
+            <div style={{ color: '#e63946', fontSize: '0.78rem', marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(230,57,70,0.08)', borderRadius: '8px', border: '1px solid rgba(230,57,70,0.2)' }}>{error}</div>
+          )}
 
-        <button
-          onClick={handleAuth}
-          disabled={loading}
-          style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', border: 'none', background: loading ? '#4b5563' : '#e63946', color: 'white', fontSize: '0.9rem', fontWeight: '500', cursor: loading ? 'not-allowed' : 'pointer', marginBottom: '1rem' }}
-        >
-          {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
-        </button>
+          <button
+            onClick={handleAuth}
+            disabled={loading}
+            style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: 'none', background: loading ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.88rem', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', marginBottom: '1rem', letterSpacing: '0.02em', transition: 'all 0.15s ease' }}
+          >
+            {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+          </button>
 
-        <div
-          onClick={() => setIsSignUp(!isSignUp)}
-          style={{ textAlign: 'center', fontSize: '0.85rem', color: '#6b7280', cursor: 'pointer' }}
-        >
-          {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          <div
+            onClick={() => setIsSignUp(!isSignUp)}
+            style={{ textAlign: 'center', fontSize: '0.8rem', color: '#4a5568', cursor: 'pointer', transition: 'color 0.15s ease' }}
+          >
+            {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+            <span style={{ color: '#94a3b8', fontWeight: '500' }}>{isSignUp ? 'Sign in' : 'Sign up'}</span>
+          </div>
         </div>
 
       </div>

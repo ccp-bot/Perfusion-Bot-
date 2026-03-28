@@ -6,11 +6,10 @@ import { supabase } from './lib/supabase'
 const CATEGORIES = ['Protocol', 'Case Note', 'Equipment', 'Policy', 'Logbook']
 
 const SIDEBAR_ITEMS = [
-  { key: 'Logbook', emoji: null, image: '/logbook.icon.png', label: 'Logbook' },
+  { key: 'Logbook', emoji: null, image: '/Logbook.icon.png', label: 'Logbook' },
   { key: 'Protocol', emoji: '📋', image: null, label: 'Protocol' },
-  { key: 'Case Note', emoji: '🗒️', image: null, label: 'Cases' },
-  { key: 'Equipment', emoji: '⚙️', image: null, label: 'Equipment' },
-  { key: 'Policy', emoji: '📜', image: null, label: 'Policy' },
+  { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
+  { key: 'Policy', emoji: null, image: '/Policy.Icon.png', label: 'Policy' },
 ]
 
 export default function Home() {
@@ -204,7 +203,7 @@ export default function Home() {
         <video ref={videoRef} src="/COR-Opening.mp4" autoPlay muted playsInline preload="auto" style={{ width: '100vw', height: '100vh', objectFit: 'cover' }} />
         <button
           onClick={() => { if (videoRef.current) { videoRef.current.muted = !videoRef.current.muted; setIsMuted(!isMuted) } }}
-          style={{ position: 'absolute', bottom: '2rem', right: '2rem', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '1.2rem', zIndex: 10 }}
+          style={{ position: 'absolute', bottom: '2rem', right: '2rem', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: '100px', height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '1.2rem', zIndex: 10 }}
         >
           {isMuted ? '🔇' : '🔊'}
         </button>
@@ -240,7 +239,7 @@ export default function Home() {
         {/* COR Branding */}
         <div style={{ padding: '1.25rem 1rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.25rem' }}>
-            <img src="/COR-1.PNG" alt="COR" style={{ width: '36px', height: '36px', objectFit: 'contain', animation: 'bob 3s ease-in-out infinite' }} />
+            <img src="/RotatingHeart.gif" alt="COR" style={{ width: '75px', height: '75px', objectFit: 'contain', animation: 'bob 3s ease-in-out infinite' }} />
             <div>
               <div style={{ fontWeight: '700', fontSize: '1rem', color: '#ffffff', letterSpacing: '0.05em' }}>COR</div>
               <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Perfusion AI</div>
@@ -264,9 +263,9 @@ export default function Home() {
                 transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left'
               }}
             >
-              <span style={{ fontSize: '1rem', width: '20px', textAlign: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: '1rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>
                 {item.image
-                  ? <img src={item.image} alt={item.label} style={{ width: '18px', height: '18px', objectFit: 'contain', verticalAlign: 'middle' }} />
+                  ? <img src={item.image} alt={item.label} style={{ width: '50px', height: '50px', objectFit: 'contain', verticalAlign: 'middle' }} />
                   : item.emoji
                 }
               </span>
@@ -344,10 +343,8 @@ export default function Home() {
                 <div style={{ fontSize: '1.5rem', fontWeight: '300', color: '#e2e8f0', marginBottom: '0.5rem', letterSpacing: '-0.02em' }}>Hello, I am <span style={{ color: '#e63946', fontWeight: '700' }}>COR</span></div>
                 <div style={{ fontSize: '0.88rem', color: '#4a5568', lineHeight: '1.6' }}>Your cardiovascular perfusion assistant.<br/>Ask me anything about CPB, ECMO, or perfusion guidelines.</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '2rem', paddingBottom: '1rem' }}>
-                <img src="/COR-Tank.PNG" alt="COR-T" style={{ width: '110px', height: '110px', objectFit: 'contain', animation: 'bob 3.2s ease-in-out infinite' }} />
-                <img src="/COR-1.PNG" alt="COR" style={{ width: '130px', height: '130px', objectFit: 'contain', animation: 'bob 2.8s ease-in-out infinite 0.3s' }} />
-                <video src="/COR-Hovering.webm" autoPlay loop muted playsInline style={{ width: '100px', height: '100px', objectFit: 'contain', animation: 'bob 3.5s ease-in-out infinite 0.6s' }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingBottom: '1rem' }}>
+              <img src="/CORx3Dance.gif" autoPlay loop muted playsInline style={{ width: '500px', height: 'auto', objectFit: 'contain' }} />
               </div>
             </div>
           )}
@@ -460,7 +457,7 @@ export default function Home() {
               >
                 {listening
                   ? <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: 'white' }} />
-                  : <img src="/mic.png" alt="mic" style={{ width: '16px', height: '16px', objectFit: 'contain', opacity: 0.5 }} />
+                  : <img src="/microphone.icon.png" alt="mic" style={{ width: '32px', height: '32px', objectFit: 'contain', opacity: 0.5 }} />
                 }
               </button>
             </div>
