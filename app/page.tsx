@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { supabase } from './lib/supabase'
 
 const CATEGORIES = ['Protocol', 'Case Note', 'Equipment', 'Policy', 'Logbook']
@@ -39,6 +39,12 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const recognitionRef = useRef<any>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const userRef = useRef<any>(null)
+  const activePanelRef = useRef<string | null>(null)
+
+  // Keep refs in sync
+  useEffect(() => { userRef.current = user }, [user])
+  useEffect(() => { activePanelRef.current = activePanel }, [activePanel])
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -46,6 +52,7 @@ export default function Home() {
         window.location.href = '/login'
       } else {
         setUser(session.user)
+        userRef.current = session.user
         setAuthLoading(false)
       }
     })
@@ -63,6 +70,25 @@ export default function Home() {
   }, [])
 
   if (authLoading) return null
+
+  async function autoSaveHistory(currentMessages: {role: string, content: string, image?: string}[]) {
+    const currentUser = userRef.current
+    if (!currentUser?.id || currentMessages.length < 2) return
+    const firstUserMsg = currentMessages.find(m => m.role === 'user')
+    const title = firstUserMsg?.content?.slice(0, 60) || 'Conversation'
+    try {
+      await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id, title, messages: currentMessages })
+      })
+      if (activePanelRef.current === 'History') {
+        await fetchHistory()
+      }
+    } catch {
+      console.error('Auto-save failed')
+    }
+  }
 
   async function fetchPanel(category: string) {
     if (category === 'History') {
@@ -95,18 +121,7 @@ export default function Home() {
   async function saveToHistory() {
     if (messages.length === 0) return
     setSavingHistory(true)
-    const firstUserMsg = messages.find(m => m.role === 'user')
-    const title = firstUserMsg?.content?.slice(0, 60) || 'Conversation'
-    try {
-      await fetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id, title, messages })
-      })
-      if (activePanel === 'History') await fetchHistory()
-    } catch {
-      console.error('Failed to save history')
-    }
+    await autoSaveHistory(messages)
     setSavingHistory(false)
   }
 
@@ -181,10 +196,14 @@ export default function Home() {
     setInput('')
     setAttachedImage(null)
     setAttachedImageName('')
+
     const newUserMsg: any = { role: 'user', content: userMessage }
     if (imageToSend) newUserMsg.image = imageToSend
-    setMessages(prev => [...prev, newUserMsg])
+
+    const updatedMessages = [...messages, newUserMsg]
+    setMessages(updatedMessages)
     setLoading(true)
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -192,16 +211,30 @@ export default function Home() {
         body: JSON.stringify({ message: userMessage, messages: messages, userId: user?.id, image: imageToSend })
       })
       const data = await res.json()
+
+      let finalMessages: any[]
       if (data.savePreview) {
         setPendingSummary(data.summary)
         setSavePreview(true)
-        setMessages(prev => [...prev, { role: 'assistant', content: '📋 I\'ve prepared a summary of our exchange. Please select a category to save it to your institutional knowledge base.' }])
+        const assistantMsg = { role: 'assistant', content: '📋 I\'ve prepared a summary of our exchange. Please select a category to save it to your institutional knowledge base.' }
+        finalMessages = [...updatedMessages, assistantMsg]
+        setMessages(finalMessages)
       } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.answer }])
+        const assistantMsg = { role: 'assistant', content: data.answer }
+        finalMessages = [...updatedMessages, assistantMsg]
+        setMessages(finalMessages)
       }
+
+      // Auto-save to history after every response
+      await autoSaveHistory(finalMessages)
+
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Error getting response.' }])
+      const errorMsg = { role: 'assistant', content: 'Error getting response.' }
+      const finalMessages = [...updatedMessages, errorMsg]
+      setMessages(finalMessages)
+      await autoSaveHistory(finalMessages)
     }
+
     setLoading(false)
   }
 
@@ -325,8 +358,7 @@ export default function Home() {
               <span style={{ fontSize: '1rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>
                 {item.image
                   ? <img src={item.image} alt={item.label} style={{ width: '50px', height: '50px', objectFit: 'contain', verticalAlign: 'middle' }} />
-                  : item.emoji
-                }
+                  : item.emoji}
               </span>
               <span style={{ fontSize: '0.82rem', color: activePanel === item.key ? '#e63946' : '#94a3b8', fontWeight: activePanel === item.key ? '600' : '400' }}>{item.label}</span>
               {activePanel === item.key && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
@@ -351,11 +383,7 @@ export default function Home() {
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
               {activePanel === 'History' && messages.length > 0 && (
-                <button
-                  onClick={saveToHistory}
-                  disabled={savingHistory}
-                  style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(230,57,70,0.3)', background: 'rgba(230,57,70,0.1)', color: '#e63946', fontSize: '0.72rem', cursor: 'pointer' }}
-                >
+                <button onClick={saveToHistory} disabled={savingHistory} style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(230,57,70,0.3)', background: 'rgba(230,57,70,0.1)', color: '#e63946', fontSize: '0.72rem', cursor: 'pointer' }}>
                   {savingHistory ? '...' : '+ Save'}
                 </button>
               )}
@@ -372,7 +400,7 @@ export default function Home() {
                   <div style={{ textAlign: 'center', marginTop: '4rem' }}>
                     <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>🕐</div>
                     <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No saved conversations yet.</div>
-                    <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.4rem', opacity: 0.7 }}>Click "+ Save" to save the current chat.</div>
+                    <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.4rem', opacity: 0.7 }}>Conversations auto-save after each response.</div>
                   </div>
                 )}
                 {conversations.map((conv) => (
