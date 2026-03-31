@@ -272,8 +272,9 @@ export default function Home() {
       return
     }
     if (listening) {
+      const ref = recognitionRef.current
       recognitionRef.current = null
-      recognitionRef.current?.stop()
+      ref?.stop()
       setListening(false)
       return
     }
