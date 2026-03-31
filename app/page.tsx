@@ -272,7 +272,9 @@ export default function Home() {
       return
     }
     if (listening) {
+      recognitionRef.current = null
       recognitionRef.current?.stop()
+      setListening(false)
       return
     }
     const recognition = new SpeechRecognition()
@@ -281,13 +283,21 @@ export default function Home() {
     recognition.interimResults = true
     recognition.continuous = true
     recognition.onstart = () => setListening(true)
-    recognition.onend = () => setListening(false)
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) {
+        try { recognition.start() } catch {}
+      } else {
+        setListening(false)
+      }
+    }
     recognition.onresult = (event: any) => {
       const transcript = Array.from(event.results).map((r: any) => r[0].transcript).join('')
       setInput(transcript)
     }
     recognition.onerror = (event: any) => {
+      if (event.error === 'no-speech') return
       console.log('Speech error:', event.error)
+      recognitionRef.current = null
       setListening(false)
     }
     recognition.start()
@@ -539,6 +549,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-    </div>
+    </div>  
   )
 }
