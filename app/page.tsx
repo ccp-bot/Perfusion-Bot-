@@ -48,9 +48,13 @@ export default function Home() {
   const [groupName, setGroupName] = useState('')
   const [notifications, setNotifications] = useState<any[]>([])
   const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({})
+  const [uploading, setUploading] = useState(false)
+  const [manualEntry, setManualEntry] = useState('')
+  const [uploadStatus, setUploadStatus] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<any>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const userRef = useRef<any>(null)
@@ -356,6 +360,57 @@ export default function Home() {
     } catch {
       console.error('Failed to delete entry')
     }
+  }
+
+  async function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !activePanel || !user) return
+    setUploading(true)
+    setUploadStatus('')
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('category', activePanel)
+    formData.append('userId', user.id)
+    formData.append('userEmail', user.email)
+    formData.append('groupId', userGroupId || '')
+    formData.append('userRole', userRole || '')
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.error) {
+        setUploadStatus(data.error)
+      } else {
+        setUploadStatus(`Uploaded "${data.fileName}" (${data.chunks} sections)`)
+        fetchPanel(activePanel)
+      }
+    } catch { setUploadStatus('Upload failed') }
+    setUploading(false)
+    if (uploadInputRef.current) uploadInputRef.current.value = ''
+  }
+
+  async function saveManualEntry() {
+    if (!manualEntry.trim() || !activePanel || !user) return
+    setUploading(true)
+    setUploadStatus('')
+    const formData = new FormData()
+    formData.append('content', manualEntry.trim())
+    formData.append('category', activePanel)
+    formData.append('userId', user.id)
+    formData.append('userEmail', user.email)
+    formData.append('groupId', userGroupId || '')
+    formData.append('userRole', userRole || '')
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.error) {
+        setUploadStatus(data.error)
+      } else {
+        setUploadStatus('Entry saved')
+        setManualEntry('')
+        fetchPanel(activePanel)
+      }
+    } catch { setUploadStatus('Failed to save entry') }
+    setUploading(false)
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -776,19 +831,52 @@ export default function Home() {
 
             {activePanel !== 'History' && activePanel !== 'Admin' && !panelLoading && (
               <>
+                {/* Upload controls — Owner/Admin only */}
+                {(userRole === 'owner' || userRole === 'admin') && (
+                  <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                      <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" onChange={handleUploadFile} style={{ display: 'none' }} />
+                      <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>
+                        {uploading ? 'Uploading...' : 'Upload File (PDF, Word, Excel)'}
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input
+                        value={manualEntry}
+                        onChange={e => setManualEntry(e.target.value)}
+                        placeholder="Type a manual entry..."
+                        style={{ flex: 1, padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      <button onClick={saveManualEntry} disabled={uploading || !manualEntry.trim()} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: 'none', background: !manualEntry.trim() ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', cursor: !manualEntry.trim() ? 'not-allowed' : 'pointer', flexShrink: 0 }}>+</button>
+                    </div>
+                    {uploadStatus && <div style={{ fontSize: '0.7rem', color: uploadStatus.includes('fail') || uploadStatus.includes('error') || uploadStatus.includes('Only') ? '#e63946' : '#22c55e', marginTop: '0.4rem' }}>{uploadStatus}</div>}
+                  </div>
+                )}
+
                 {panelEntries.length === 0 && (
-                  <div style={{ textAlign: 'center', marginTop: '4rem' }}>
-                    <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>📭</div>
+                  <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                    <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128195;</div>
                     <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No {activePanel} entries yet.</div>
+                    {(userRole === 'owner' || userRole === 'admin') && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>}
                   </div>
                 )}
                 {panelEntries.map((entry) => (
                   <div key={entry.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.6rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>{new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                      <button onClick={() => deletePanelEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6 }}>🗑️</button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
+                      <div>
+                        <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                          {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {entry.uploaded_by && <span style={{ marginLeft: '0.4rem' }}>by {entry.uploaded_by}</span>}
+                        </div>
+                        {entry.source_file && entry.source_file !== 'Manual Entry' && (
+                          <div style={{ fontSize: '0.65rem', color: '#3b82f6', marginTop: '2px' }}>{entry.source_file}</div>
+                        )}
+                      </div>
+                      {(userRole === 'owner' || userRole === 'admin') && (
+                        <button onClick={() => deletePanelEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
+                      )}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content.length > 300 ? entry.content.slice(0, 300) + '...' : entry.content}</div>
                   </div>
                 ))}
               </>
