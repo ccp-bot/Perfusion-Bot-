@@ -46,6 +46,8 @@ export default function Home() {
   const [inviteError, setInviteError] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [groupName, setGroupName] = useState('')
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({})
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -89,6 +91,40 @@ export default function Home() {
     }
     fetchGroup()
   }, [user])
+
+  // Fetch notifications and poll every 30 seconds
+  useEffect(() => {
+    if (!user) return
+    async function fetchNotifications() {
+      try {
+        const res = await fetch(`/api/notifications?userId=${user.id}`)
+        const data = await res.json()
+        const notifs = data.notifications || []
+        setNotifications(notifs)
+        const counts: {[key: string]: number} = {}
+        notifs.filter((n: any) => !n.read).forEach((n: any) => {
+          counts[n.category] = (counts[n.category] || 0) + 1
+        })
+        setUnreadCounts(counts)
+      } catch { /* ignore */ }
+    }
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 30000)
+    return () => clearInterval(interval)
+  }, [user])
+
+  async function markNotificationsRead(category: string) {
+    if (!user || !unreadCounts[category]) return
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, category })
+      })
+      setUnreadCounts(prev => ({ ...prev, [category]: 0 }))
+      setNotifications(prev => prev.map(n => n.category === category ? { ...n, read: true } : n))
+    } catch { /* ignore */ }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -304,6 +340,9 @@ export default function Home() {
     }
     setActivePanel(key)
     fetchPanel(key)
+    if (key === 'Protocol' || key === 'Policy') {
+      markNotificationsRead(key)
+    }
   }
 
   async function deletePanelEntry(id: number) {
@@ -386,7 +425,7 @@ export default function Home() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: '', messages: [], saveMode: true, category: selectedCategory, summaryToSave: pendingSummary, userId: user?.id, groupId: userGroupId })
+        body: JSON.stringify({ message: '', messages: [], saveMode: true, category: selectedCategory, summaryToSave: pendingSummary, userId: user?.id, groupId: userGroupId, userEmail: user?.email })
       })
       const data = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', content: data.answer }])
@@ -540,8 +579,13 @@ export default function Home() {
                   ? <img src={item.image} alt={item.label} style={{ width: '50px', height: '50px', objectFit: 'contain', verticalAlign: 'middle' }} />
                   : item.emoji}
               </span>
-              <span style={{ fontSize: '0.82rem', color: activePanel === item.key ? '#e63946' : '#94a3b8', fontWeight: activePanel === item.key ? '600' : '400' }}>{item.label}</span>
-              {activePanel === item.key && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
+              <span style={{ fontSize: '0.82rem', color: activePanel === item.key ? '#e63946' : '#94a3b8', fontWeight: activePanel === item.key ? '600' : '400', position: 'relative' }}>
+                {item.label}
+                {unreadCounts[item.key] > 0 && (
+                  <span style={{ position: 'absolute', top: '-6px', right: '-16px', minWidth: '16px', height: '16px', borderRadius: '8px', background: '#e63946', color: 'white', fontSize: '0.6rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{unreadCounts[item.key]}</span>
+                )}
+              </span>
+              {activePanel === item.key && !unreadCounts[item.key] && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
             </button>
           ))}
           {(userRole === 'owner' || userRole === 'admin' || (!userRole && user?.email === SUPER_OWNER_EMAIL)) && (

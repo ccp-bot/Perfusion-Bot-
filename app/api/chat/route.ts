@@ -12,7 +12,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: NextRequest) {
-  const { message, messages, saveMode, category, summaryToSave, userId, groupId } = await req.json()
+  const { message, messages, saveMode, category, summaryToSave, userId, groupId, userEmail } = await req.json()
 
   // ── SAVE MODE ──────────────────────────────────────────────
   if (saveMode && summaryToSave && category) {
@@ -31,6 +31,25 @@ export async function POST(req: NextRequest) {
       group_id: groupId || null,
       created_at: new Date().toISOString(),
     })
+
+    // Notify group members for Protocol and Policy saves
+    if (groupId && (category === 'Protocol' || category === 'Policy')) {
+      const origin = req.headers.get('origin') || req.headers.get('host') || ''
+      const baseUrl = origin.startsWith('http') ? origin : `https://${origin}`
+      try {
+        await fetch(`${baseUrl}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            groupId,
+            category,
+            message: `New ${category} entry added: ${summaryToSave.slice(0, 80)}...`,
+            createdByEmail: userEmail,
+            createdByUserId: userId,
+          })
+        })
+      } catch { /* notification failure shouldn't block save */ }
+    }
 
     return NextResponse.json({ answer: `Saved to your institutional knowledge base under **${category}**.` })
   }
