@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 
 const CATEGORIES = ['Protocol', 'Case Note', 'Equipment', 'Policy', 'Logbook']
+const SUPER_OWNER_EMAIL = 'cliftonmarschel@gmail.com'
 
 const SIDEBAR_ITEMS = [
   { key: 'History', emoji: null, image: '/History.Icon.png', label: 'History' },
@@ -131,6 +132,10 @@ export default function Home() {
 
   async function createGroup() {
     if (!groupName.trim() || !user) return
+    if (user.email !== SUPER_OWNER_EMAIL) {
+      setInviteError('Only the platform owner can create groups.')
+      return
+    }
     try {
       const res = await fetch('/api/groups', {
         method: 'POST',
@@ -138,13 +143,18 @@ export default function Home() {
         body: JSON.stringify({ userId: user.id, email: user.email, name: groupName.trim() })
       })
       const data = await res.json()
+      if (data.error) {
+        setInviteError(data.error)
+        return
+      }
       if (data.group) {
         setUserRole('owner')
         setUserGroupId(data.group.id)
         setUserGroupName(data.group.name)
         setGroupName('')
+        setInviteError('')
       }
-    } catch { console.error('Failed to create group') }
+    } catch { setInviteError('Failed to create group. Check Supabase tables.') }
   }
 
   async function inviteMember() {
@@ -510,7 +520,7 @@ export default function Home() {
               {activePanel === item.key && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
             </button>
           ))}
-          {(userRole === 'owner' || userRole === 'admin' || !userRole) && (
+          {(userRole === 'owner' || userRole === 'admin' || (!userRole && user?.email === SUPER_OWNER_EMAIL)) && (
             <>
               <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>Management</div>
               <button
@@ -610,6 +620,7 @@ export default function Home() {
                       style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.82rem', outline: 'none', marginBottom: '0.5rem', boxSizing: 'border-box' }}
                     />
                     <button onClick={createGroup} style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer' }}>Create Group</button>
+                    {inviteError && <div style={{ color: '#e63946', fontSize: '0.72rem', marginTop: '0.4rem' }}>{inviteError}</div>}
                   </div>
                 )}
 

@@ -66,6 +66,11 @@ export async function POST(req: NextRequest) {
 
   if (!userId || !name) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
+  // Only the platform owner can create groups
+  if (email !== 'cliftonmarschel@gmail.com') {
+    return NextResponse.json({ error: 'Only the platform owner can create groups' }, { status: 403 })
+  }
+
   const { data: group, error: groupError } = await supabase
     .from('groups')
     .insert({ name, created_by: userId })
