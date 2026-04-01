@@ -304,7 +304,7 @@ export default function Home() {
       setInput(transcript)
     }
     recognition.onerror = (event: any) => {
-      if (event.error === 'no-speech' || event.error === 'aborted') return
+      if (event.error === 'no-speech' || event.error === 'aborted' || event.error === 'network') return
       console.log('Speech error:', event.error)
       stopped = true
       recognitionRef.current = null
