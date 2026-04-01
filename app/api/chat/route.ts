@@ -12,7 +12,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: NextRequest) {
-  const { message, messages, saveMode, category, summaryToSave, userId, groupId, userEmail } = await req.json()
+  const { message, messages, saveMode, category, summaryToSave, userId, groupId, userEmail, caseLogMode, caseLogData, templateFields } = await req.json()
 
   // ── SAVE MODE ──────────────────────────────────────────────
   if (saveMode && summaryToSave && category) {
@@ -52,6 +52,103 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ answer: `Saved to your institutional knowledge base under **${category}**.` })
+  }
+
+  // ── CASE LOG: FINALIZE ──────────────────────────────────────
+  // Called when all template fields are filled — save to Case Notes + Logbook
+  if (caseLogMode === 'finalize' && caseLogData && templateFields) {
+    // Build a structured summary
+    const lines = templateFields.map((field: string) => `**${field}:** ${caseLogData[field] || 'N/A'}`)
+    const summary = lines.join('\n')
+
+    const embeddingRes = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: summary,
+    })
+    const embedding = embeddingRes.data[0].embedding
+    const now = new Date().toISOString()
+
+    // Save to Case Notes (personal)
+    await supabase.from('documents').insert({
+      content: summary,
+      embedding,
+      institution_id: groupId || 'hospital_a',
+      category: 'Case Notes',
+      user_id: userId,
+      group_id: null,
+      source_file: 'Case Log',
+      uploaded_by: userEmail || null,
+      created_at: now,
+    })
+
+    // Save to Logbook (group-visible)
+    if (groupId) {
+      await supabase.from('documents').insert({
+        content: summary,
+        embedding,
+        institution_id: groupId,
+        category: 'Logbook',
+        user_id: userId,
+        group_id: groupId,
+        source_file: 'Case Log',
+        uploaded_by: userEmail || null,
+        created_at: now,
+      })
+    }
+
+    return NextResponse.json({
+      answer: `Case logged successfully.\n\n${summary}\n\nThis has been saved to your **Case Notes** and the group **Logbook**.`,
+      caseLogComplete: true,
+    })
+  }
+
+  // ── CASE LOG: ANALYZE CONVERSATION ────────────────────────
+  // Called when user types "log" — analyze what's been discussed and find missing fields
+  if (caseLogMode === 'analyze' && templateFields) {
+    const conversationText = messages
+      .map((m: any) => `${m.role === 'user' ? 'User' : 'COR'}: ${m.content}`)
+      .join('\n')
+
+    const analyzeResponse = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: `You are COR, a cardiovascular perfusion assistant helping log a case.
+
+The following template fields must be filled for a case log:
+${templateFields.map((f: string) => `- ${f}`).join('\n')}
+
+Here is the conversation so far:
+${conversationText || '(No prior conversation)'}
+
+The user wants to log a case. Analyze the conversation and extract any information that matches the template fields.
+
+Respond in this exact JSON format (no markdown, no code blocks, just raw JSON):
+{
+  "found": { "FieldName": "value", ... },
+  "missing": ["FieldName1", "FieldName2", ...]
+}
+
+Only include fields in "found" if you are confident the value was mentioned. Everything else goes in "missing".`
+      }]
+    })
+
+    const analyzeText = analyzeResponse.content[0].type === 'text' ? analyzeResponse.content[0].text : '{}'
+    try {
+      const parsed = JSON.parse(analyzeText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim())
+      return NextResponse.json({
+        caseLogAnalysis: true,
+        found: parsed.found || {},
+        missing: parsed.missing || templateFields,
+      })
+    } catch {
+      return NextResponse.json({
+        caseLogAnalysis: true,
+        found: {},
+        missing: templateFields,
+      })
+    }
   }
 
   // ── DETECT "SAVE THIS" ─────────────────────────────────────

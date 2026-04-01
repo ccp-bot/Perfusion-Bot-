@@ -55,6 +55,13 @@ export default function Home() {
   const [manualEntry, setManualEntry] = useState('')
   const [uploadStatus, setUploadStatus] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [caseLogging, setCaseLogging] = useState(false)
+  const [caseLogFields, setCaseLogFields] = useState<string[]>([])
+  const [caseLogData, setCaseLogData] = useState<{[key: string]: string}>({})
+  const [caseLogMissing, setCaseLogMissing] = useState<string[]>([])
+  const [caseLogCurrentField, setCaseLogCurrentField] = useState(0)
+  const [templateFields, setTemplateFields] = useState<string[]>([])
+  const [newTemplateField, setNewTemplateField] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -99,6 +106,20 @@ export default function Home() {
     }
     fetchGroup()
   }, [user])
+
+  // Fetch case log template when group is set
+  useEffect(() => {
+    if (!userGroupId) return
+    async function fetchTemplate() {
+      try {
+        const res = await fetch(`/api/templates?groupId=${userGroupId}`)
+        const data = await res.json()
+        setTemplateFields(data.fields || [])
+        setCaseLogFields(data.fields || [])
+      } catch { /* use defaults */ }
+    }
+    fetchTemplate()
+  }, [userGroupId])
 
   // Fetch notifications and poll every 30 seconds
   useEffect(() => {
@@ -433,6 +454,142 @@ export default function Home() {
     setUploading(false)
   }
 
+  async function startCaseLog() {
+    if (!user) return
+    setCaseLogging(true)
+    setCaseLogData({})
+    setCaseLogCurrentField(0)
+    setMessages(prev => [...prev, { role: 'user', content: 'log' }])
+    setLoading(true)
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'log',
+          messages,
+          userId: user.id,
+          groupId: userGroupId,
+          userEmail: user.email,
+          caseLogMode: 'analyze',
+          templateFields: caseLogFields,
+        })
+      })
+      const data = await res.json()
+      if (data.caseLogAnalysis) {
+        const found = data.found || {}
+        const missing = data.missing || caseLogFields
+        setCaseLogData(found)
+        setCaseLogMissing(missing)
+        setCaseLogCurrentField(0)
+
+        if (missing.length === 0) {
+          // All fields found in conversation — finalize
+          await finalizeCaseLog(found)
+        } else {
+          // Ask first missing question
+          const foundSummary = Object.keys(found).length > 0
+            ? `I found the following from our conversation:\n${Object.entries(found).map(([k, v]) => `- **${k}:** ${v}`).join('\n')}\n\nI still need a few more details.\n\n`
+            : ''
+          setMessages(prev => [...prev, { role: 'assistant', content: `${foundSummary}**${missing[0]}?**` }])
+        }
+      }
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Error starting case log.' }])
+      setCaseLogging(false)
+    }
+    setLoading(false)
+  }
+
+  async function handleCaseLogAnswer() {
+    if (!input.trim()) return
+    const answer = input.trim()
+    const field = caseLogMissing[caseLogCurrentField]
+    setInput('')
+
+    const updatedData = { ...caseLogData, [field]: answer }
+    setCaseLogData(updatedData)
+    setMessages(prev => [...prev, { role: 'user', content: answer }])
+
+    const nextIdx = caseLogCurrentField + 1
+    if (nextIdx >= caseLogMissing.length) {
+      // All questions answered — finalize
+      setLoading(true)
+      await finalizeCaseLog(updatedData)
+      setLoading(false)
+    } else {
+      setCaseLogCurrentField(nextIdx)
+      setMessages(prev => [...prev, { role: 'assistant', content: `**${caseLogMissing[nextIdx]}?**` }])
+    }
+  }
+
+  async function finalizeCaseLog(data: {[key: string]: string}) {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: '',
+          messages: [],
+          userId: user?.id,
+          groupId: userGroupId,
+          userEmail: user?.email,
+          caseLogMode: 'finalize',
+          caseLogData: data,
+          templateFields: caseLogFields,
+        })
+      })
+      const result = await res.json()
+      setMessages(prev => [...prev, { role: 'assistant', content: result.answer || 'Case logged.' }])
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Error saving case log.' }])
+    }
+    setCaseLogging(false)
+    setCaseLogCurrentField(0)
+    setCaseLogMissing([])
+  }
+
+  async function saveTemplate() {
+    if (!userGroupId || !user) return
+    try {
+      await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: userGroupId, fields: templateFields, userId: user.id, userRole })
+      })
+    } catch { console.error('Failed to save template') }
+  }
+
+  function addTemplateField() {
+    if (!newTemplateField.trim()) return
+    const updated = [...templateFields, newTemplateField.trim()]
+    setTemplateFields(updated)
+    setCaseLogFields(updated)
+    setNewTemplateField('')
+    // Auto-save
+    if (userGroupId && user) {
+      fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: userGroupId, fields: updated, userId: user.id, userRole })
+      }).catch(() => {})
+    }
+  }
+
+  function removeTemplateField(idx: number) {
+    const updated = templateFields.filter((_, i) => i !== idx)
+    setTemplateFields(updated)
+    setCaseLogFields(updated)
+    if (userGroupId && user) {
+      fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: userGroupId, fields: updated, userId: user.id, userRole })
+      }).catch(() => {})
+    }
+  }
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -446,6 +603,20 @@ export default function Home() {
 
   async function sendMessage() {
     if (!input.trim() && !attachedImage) return
+
+    // If in case logging mode, handle as answer to current question
+    if (caseLogging) {
+      await handleCaseLogAnswer()
+      return
+    }
+
+    // Detect "log" command
+    if (input.trim().toLowerCase() === 'log') {
+      setInput('')
+      await startCaseLog()
+      return
+    }
+
     const userMessage = input
     const imageToSend = attachedImage
     setInput('')
@@ -844,6 +1015,28 @@ export default function Home() {
                     {groupMembers.length === 0 && (
                       <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.8rem', marginTop: '1rem' }}>No members yet. Invite someone above.</div>
                     )}
+
+                    {/* Case Log Template Editor */}
+                    <div style={{ marginTop: '1.5rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Case Log Template</div>
+                      <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>These fields will be asked when a user types "log" to record a case.</div>
+                      {templateFields.map((field, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
+                          <div style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: '0.78rem', color: '#94a3b8' }}>{field}</div>
+                          <button onClick={() => removeTemplateField(idx)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>&#10005;</button>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
+                        <input
+                          value={newTemplateField}
+                          onChange={e => setNewTemplateField(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && addTemplateField()}
+                          placeholder="Add a field..."
+                          style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                        <button onClick={addTemplateField} style={{ padding: '0.4rem 0.7rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}>+</button>
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
@@ -991,7 +1184,7 @@ export default function Home() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                placeholder={listening ? 'Listening...' : 'Ask COR anything about perfusion...'}
+                placeholder={listening ? 'Listening...' : caseLogging ? `Answer: ${caseLogMissing[caseLogCurrentField] || ''}...` : 'Ask COR anything about perfusion...'}
                 style={{ width: '100%', padding: '0.75rem 3rem 0.75rem 1.1rem', borderRadius: '24px', border: `1px solid ${listening ? 'rgba(230,57,70,0.5)' : 'rgba(255,255,255,0.1)'}`, background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s ease' }}
               />
               <button onClick={startListening} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', width: '30px', height: '30px', borderRadius: '50%', background: listening ? '#e63946' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease', animation: listening ? 'micGlow 1.5s ease-in-out infinite' : 'none' }}>
