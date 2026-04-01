@@ -34,6 +34,12 @@ export default function LoginPage() {
         @keyframes bob { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
         @keyframes glow { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
         input::placeholder { color: #4a5568; }
+        @media (max-width: 768px) {
+          .login-layout { flex-direction: column !important; gap: 1rem !important; }
+          .login-cor { max-width: 200px !important; }
+          .login-form { width: 100% !important; padding: 0 1rem !important; box-sizing: border-box !important; }
+          .login-title { font-size: 1.5rem !important; }
+        }
       `}</style>
 
       {/* Background glow effects */}
@@ -41,21 +47,22 @@ export default function LoginPage() {
       <div style={{ position: 'absolute', bottom: '20%', right: '25%', width: '300px', height: '300px', background: 'radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
       {/* Main layout - COR on left, form on right */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0rem', width: '90%', maxWidth: '1000px', animation: 'fadeUp 0.6s ease' }}>
+      <div className="login-layout" style={{ display: 'flex', alignItems: 'center', gap: '0rem', width: '90%', maxWidth: '1000px', animation: 'fadeUp 0.6s ease' }}>
 
         {/* COR waving */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'visible' }}>
             <img
               src="/LittleCorWave.gif"
               alt="COR waving"
+              className="login-cor"
               style={{ width: '100%', maxWidth: '450px', animation: 'none', filter: 'drop-shadow(0 20px 40px rgba(0, 0, 0, 0.15))' }}
             />
            </div>
 
         {/* Login form */}
-        <div style={{ width: '360px', flexShrink: 0 }}>
+        <div className="login-form" style={{ width: '360px', flexShrink: 0 }}>
           <div style={{ marginBottom: '2rem' }}>
-            <div style={{ fontSize: '2rem', fontWeight: '700', color: '#ffffff', letterSpacing: '-0.03em', marginBottom: '0.25rem' }}>
+            <div className="login-title" style={{ fontSize: '2rem', fontWeight: '700', color: '#ffffff', letterSpacing: '-0.03em', marginBottom: '0.25rem' }}>
               Welcome to <span style={{ color: '#e63946' }}>COR</span>
             </div>
             <div style={{ fontSize: '0.85rem', color: '#4a5568' }}>Cardiovascular Perfusion AI Assistant</div>
