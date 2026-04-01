@@ -271,26 +271,31 @@ export default function Home() {
       alert('Speech recognition not supported. Use Chrome!')
       return
     }
-    if (listening) {
+    // Stop if already listening
+    if (recognitionRef.current) {
       const ref = recognitionRef.current
       recognitionRef.current = null
-      ref?.stop()
+      ref.onend = null
+      ref.onerror = null
+      ref.onresult = null
+      try { ref.stop() } catch {}
       setListening(false)
       return
     }
     const recognition = new SpeechRecognition()
-    recognitionRef.current = recognition
     recognition.lang = 'en-US'
     recognition.interimResults = true
     recognition.continuous = true
-    recognition.onstart = () => setListening(true)
+    let stopped = false
+    recognition.onstart = () => {
+      if (!stopped) setListening(true)
+    }
     recognition.onend = () => {
-      if (recognitionRef.current === recognition) {
-        try { recognition.start() } catch {
-          recognitionRef.current = null
-          setListening(false)
-        }
-      } else {
+      if (stopped) return
+      // Auto-restart on timeout
+      try { recognition.start() } catch {
+        stopped = true
+        recognitionRef.current = null
         setListening(false)
       }
     }
@@ -301,9 +306,11 @@ export default function Home() {
     recognition.onerror = (event: any) => {
       if (event.error === 'no-speech' || event.error === 'aborted') return
       console.log('Speech error:', event.error)
+      stopped = true
       recognitionRef.current = null
       setListening(false)
     }
+    recognitionRef.current = recognition
     recognition.start()
   }
 
