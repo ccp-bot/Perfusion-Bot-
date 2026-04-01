@@ -510,7 +510,7 @@ export default function Home() {
               {activePanel === item.key && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
             </button>
           ))}
-          {(userRole === 'owner' || userRole === 'admin') && (
+          {(userRole === 'owner' || userRole === 'admin' || !userRole) && (
             <>
               <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>Management</div>
               <button
