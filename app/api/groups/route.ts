@@ -1,0 +1,197 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+// GET /api/groups?userId=xxx — get user's groups, role, and members
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const userId = searchParams.get('userId')
+  const email = searchParams.get('email')
+
+  if (!userId) return NextResponse.json({ error: 'No user ID' }, { status: 400 })
+
+  // Check memberships by user_id first, then by email (for pending invites)
+  const { data: byId } = await supabase
+    .from('group_members')
+    .select('id, group_id, role, email')
+    .eq('user_id', userId)
+
+  let memberships = byId || []
+
+  // Claim any pending invites by email (user_id is null but email matches)
+  if (email) {
+    const { data: pending } = await supabase
+      .from('group_members')
+      .select('id, group_id, role, email')
+      .eq('email', email)
+      .is('user_id', null)
+
+    if (pending && pending.length > 0) {
+      for (const invite of pending) {
+        await supabase
+          .from('group_members')
+          .update({ user_id: userId })
+          .eq('id', invite.id)
+      }
+      memberships = [...memberships, ...pending]
+    }
+  }
+
+  // Get group details for each membership
+  const groupIds = memberships.map(m => m.group_id)
+  let groups: any[] = []
+  if (groupIds.length > 0) {
+    const { data } = await supabase
+      .from('groups')
+      .select('id, name, created_by, created_at')
+      .in('id', groupIds)
+    groups = data || []
+  }
+
+  const result = memberships.map(m => ({
+    ...m,
+    group: groups.find(g => g.id === m.group_id) || null
+  }))
+
+  return NextResponse.json({ memberships: result })
+}
+
+// POST /api/groups — create a new group
+export async function POST(req: NextRequest) {
+  const { userId, email, name } = await req.json()
+
+  if (!userId || !name) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+
+  const { data: group, error: groupError } = await supabase
+    .from('groups')
+    .insert({ name, created_by: userId })
+    .select()
+    .single()
+
+  if (groupError) return NextResponse.json({ error: groupError.message }, { status: 500 })
+
+  // Add creator as owner
+  const { error: memberError } = await supabase
+    .from('group_members')
+    .insert({ group_id: group.id, user_id: userId, email: email || null, role: 'owner' })
+
+  if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 })
+
+  return NextResponse.json({ group })
+}
+
+// PATCH /api/groups — invite member, change role, or rename group
+export async function PATCH(req: NextRequest) {
+  const { userId, action, groupId, targetEmail, newRole, newName } = await req.json()
+
+  if (!userId || !groupId) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+
+  // Verify requester role
+  const { data: requester } = await supabase
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .single()
+
+  if (!requester) return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 })
+
+  if (action === 'rename') {
+    if (requester.role !== 'owner') return NextResponse.json({ error: 'Only owners can rename groups' }, { status: 403 })
+    const { error } = await supabase.from('groups').update({ name: newName }).eq('id', groupId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  if (action === 'invite') {
+    if (requester.role === 'worker') return NextResponse.json({ error: 'Workers cannot invite members' }, { status: 403 })
+    if (!targetEmail) return NextResponse.json({ error: 'Email required' }, { status: 400 })
+
+    // Check if already a member by email
+    const { data: existing } = await supabase
+      .from('group_members')
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('email', targetEmail)
+      .single()
+
+    if (existing) return NextResponse.json({ error: 'User is already a member of this group' }, { status: 400 })
+
+    const role = newRole || 'worker'
+    if (role === 'admin' && requester.role !== 'owner') {
+      return NextResponse.json({ error: 'Only owners can add admins' }, { status: 403 })
+    }
+    if (role === 'owner') return NextResponse.json({ error: 'Cannot add another owner' }, { status: 403 })
+
+    // Insert with email, user_id will be claimed when they log in
+    const { error } = await supabase
+      .from('group_members')
+      .insert({ group_id: groupId, email: targetEmail, role, user_id: null })
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  if (action === 'change_role') {
+    if (requester.role !== 'owner') return NextResponse.json({ error: 'Only owners can change roles' }, { status: 403 })
+    if (!targetEmail || !newRole) return NextResponse.json({ error: 'Email and role required' }, { status: 400 })
+    if (newRole === 'owner') return NextResponse.json({ error: 'Cannot assign owner role' }, { status: 403 })
+
+    const { error } = await supabase
+      .from('group_members')
+      .update({ role: newRole })
+      .eq('group_id', groupId)
+      .eq('email', targetEmail)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+}
+
+// DELETE /api/groups — remove a member
+export async function DELETE(req: NextRequest) {
+  const { userId, groupId, targetEmail } = await req.json()
+
+  if (!userId || !groupId || !targetEmail) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+
+  // Verify requester
+  const { data: requester } = await supabase
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .single()
+
+  if (!requester || requester.role === 'worker') {
+    return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
+  }
+
+  // Check target's role
+  const { data: target } = await supabase
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('email', targetEmail)
+    .single()
+
+  if (!target) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
+  if (target.role === 'owner') return NextResponse.json({ error: 'Cannot remove the group owner' }, { status: 403 })
+  if (requester.role === 'admin' && target.role === 'admin') {
+    return NextResponse.json({ error: 'Admins cannot remove other admins' }, { status: 403 })
+  }
+
+  const { error } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('email', targetEmail)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}

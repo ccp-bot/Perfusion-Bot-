@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 
 const CATEGORIES = ['Protocol', 'Case Note', 'Equipment', 'Policy', 'Logbook']
@@ -35,6 +35,15 @@ export default function Home() {
   const [conversations, setConversations] = useState<any[]>([])
   const [savingHistory, setSavingHistory] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [userGroupId, setUserGroupId] = useState<string | null>(null)
+  const [userGroupName, setUserGroupName] = useState<string | null>(null)
+  const [groupMembers, setGroupMembers] = useState<any[]>([])
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('worker')
+  const [inviteError, setInviteError] = useState('')
+  const [inviteSuccess, setInviteSuccess] = useState('')
+  const [groupName, setGroupName] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -59,6 +68,24 @@ export default function Home() {
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  // Fetch group membership when user is set
+  useEffect(() => {
+    if (!user) return
+    async function fetchGroup() {
+      try {
+        const res = await fetch(`/api/groups?userId=${user.id}&email=${encodeURIComponent(user.email)}`)
+        const data = await res.json()
+        if (data.memberships && data.memberships.length > 0) {
+          const m = data.memberships[0]
+          setUserRole(m.role)
+          setUserGroupId(m.group_id)
+          setUserGroupName(m.group?.name || null)
+        }
+      } catch { /* no group yet */ }
+    }
+    fetchGroup()
+  }, [user])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -91,14 +118,93 @@ export default function Home() {
     }
   }
 
+  async function fetchGroupMembers() {
+    if (!userGroupId) return
+    try {
+      const res = await fetch(`/api/groups/members?groupId=${userGroupId}`)
+      const data = await res.json()
+      setGroupMembers(data.members || [])
+    } catch {
+      setGroupMembers([])
+    }
+  }
+
+  async function createGroup() {
+    if (!groupName.trim() || !user) return
+    try {
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, email: user.email, name: groupName.trim() })
+      })
+      const data = await res.json()
+      if (data.group) {
+        setUserRole('owner')
+        setUserGroupId(data.group.id)
+        setUserGroupName(data.group.name)
+        setGroupName('')
+      }
+    } catch { console.error('Failed to create group') }
+  }
+
+  async function inviteMember() {
+    if (!inviteEmail.trim() || !userGroupId || !user) return
+    setInviteError('')
+    setInviteSuccess('')
+    try {
+      const res = await fetch('/api/groups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, groupId: userGroupId, action: 'invite', targetEmail: inviteEmail.trim(), newRole: inviteRole })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setInviteSuccess(`Invited ${inviteEmail.trim()} as ${inviteRole}`)
+        setInviteEmail('')
+        fetchGroupMembers()
+      } else {
+        setInviteError(data.error || 'Failed to invite')
+      }
+    } catch { setInviteError('Network error') }
+  }
+
+  async function removeMember(email: string) {
+    if (!userGroupId || !user) return
+    try {
+      await fetch('/api/groups', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, groupId: userGroupId, targetEmail: email })
+      })
+      fetchGroupMembers()
+    } catch { console.error('Failed to remove member') }
+  }
+
+  async function changeRole(email: string, newRole: string) {
+    if (!userGroupId || !user) return
+    try {
+      await fetch('/api/groups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, groupId: userGroupId, action: 'change_role', targetEmail: email, newRole })
+      })
+      fetchGroupMembers()
+    } catch { console.error('Failed to change role') }
+  }
+
   async function fetchPanel(category: string) {
     if (category === 'History') {
       await fetchHistory()
       return
     }
+    if (category === 'Admin') {
+      await fetchGroupMembers()
+      return
+    }
     setPanelLoading(true)
     try {
-      const res = await fetch(`/api/logbook?userId=${user?.id}&category=${category}`)
+      const groupParam = userGroupId ? `&groupId=${userGroupId}` : ''
+      const res = await fetch(`/api/logbook?userId=${user?.id}&category=${category}${groupParam}`)
       const data = await res.json()
       setPanelEntries(data.entries || [])
     } catch {
@@ -171,7 +277,7 @@ export default function Home() {
       await fetch('/api/logbook', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ id, userId: user?.id, userRole })
       })
       setPanelEntries(prev => prev.filter(e => e.id !== id))
     } catch {
@@ -209,7 +315,7 @@ export default function Home() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage, messages: messages, userId: user?.id, image: imageToSend })
+        body: JSON.stringify({ message: userMessage, messages: messages, userId: user?.id, image: imageToSend, groupId: userGroupId })
       })
       const data = await res.json()
 
@@ -246,7 +352,7 @@ export default function Home() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: '', messages: [], saveMode: true, category: selectedCategory, summaryToSave: pendingSummary, userId: user?.id })
+        body: JSON.stringify({ message: '', messages: [], saveMode: true, category: selectedCategory, summaryToSave: pendingSummary, userId: user?.id, groupId: userGroupId })
       })
       const data = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', content: data.answer }])
@@ -404,8 +510,32 @@ export default function Home() {
               {activePanel === item.key && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
             </button>
           ))}
+          {(userRole === 'owner' || userRole === 'admin') && (
+            <>
+              <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>Management</div>
+              <button
+                onClick={() => { openPanel('Admin'); setSidebarOpen(false) }}
+                className={`sidebar-btn${activePanel === 'Admin' ? ' active' : ''}`}
+                style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
+              >
+                <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#9881;</span>
+                <span style={{ fontSize: '0.82rem', color: activePanel === 'Admin' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Admin' ? '600' : '400' }}>Admin</span>
+                {activePanel === 'Admin' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
+              </button>
+            </>
+          )}
         </div>
         <div style={{ padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          {userGroupName && (
+            <div style={{ fontSize: '0.6rem', color: '#e63946', marginBottom: '0.3rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {userGroupName}
+            </div>
+          )}
+          {userRole && (
+            <div style={{ fontSize: '0.6rem', color: '#4a5568', marginBottom: '0.3rem', textTransform: 'capitalize' }}>
+              {userRole}
+            </div>
+          )}
           <div style={{ fontSize: '0.65rem', color: '#4a5568', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
           <button onClick={signOut} style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#4a5568', fontSize: '0.72rem', cursor: 'pointer' }}>Sign out</button>
         </div>
@@ -418,7 +548,7 @@ export default function Home() {
             <div>
               <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : `${panelEntries.length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : `${panelEntries.length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -467,7 +597,86 @@ export default function Home() {
               </>
             )}
 
-            {activePanel !== 'History' && !panelLoading && (
+            {activePanel === 'Admin' && (
+              <div>
+                {/* Create group (if no group yet) */}
+                {!userGroupId && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.5rem', fontWeight: '500' }}>Create a Group</div>
+                    <input
+                      value={groupName}
+                      onChange={e => setGroupName(e.target.value)}
+                      placeholder="Group / Institution name"
+                      style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.82rem', outline: 'none', marginBottom: '0.5rem', boxSizing: 'border-box' }}
+                    />
+                    <button onClick={createGroup} style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer' }}>Create Group</button>
+                  </div>
+                )}
+
+                {/* Group info + invite (if group exists) */}
+                {userGroupId && (
+                  <>
+                    <div style={{ background: 'rgba(230,57,70,0.08)', border: '1px solid rgba(230,57,70,0.2)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: '600', color: '#ffffff', marginBottom: '0.2rem' }}>{userGroupName}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#4a5568', textTransform: 'capitalize' }}>Your role: {userRole}</div>
+                    </div>
+
+                    {/* Invite form — owners and admins only */}
+                    {(userRole === 'owner' || userRole === 'admin') && (
+                      <div style={{ marginBottom: '1rem' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Invite Member</div>
+                        <input
+                          value={inviteEmail}
+                          onChange={e => setInviteEmail(e.target.value)}
+                          placeholder="Email address"
+                          style={{ width: '100%', padding: '0.55rem 0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.82rem', outline: 'none', marginBottom: '0.4rem', boxSizing: 'border-box' }}
+                        />
+                        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                          {['worker', ...(userRole === 'owner' ? ['admin'] : [])].map(r => (
+                            <button key={r} onClick={() => setInviteRole(r)} style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${inviteRole === r ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: inviteRole === r ? '#e63946' : 'transparent', color: inviteRole === r ? '#ffffff' : '#94a3b8', fontSize: '0.75rem', cursor: 'pointer', textTransform: 'capitalize' }}>{r}</button>
+                          ))}
+                        </div>
+                        <button onClick={inviteMember} style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer' }}>Send Invite</button>
+                        {inviteError && <div style={{ color: '#e63946', fontSize: '0.72rem', marginTop: '0.4rem' }}>{inviteError}</div>}
+                        {inviteSuccess && <div style={{ color: '#22c55e', fontSize: '0.72rem', marginTop: '0.4rem' }}>{inviteSuccess}</div>}
+                      </div>
+                    )}
+
+                    {/* Members list */}
+                    <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Members</div>
+                    {groupMembers.map((member) => (
+                      <div key={member.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500' }}>{member.email || 'Unknown'}</div>
+                          <div style={{ fontSize: '0.68rem', color: member.role === 'owner' ? '#e63946' : member.role === 'admin' ? '#3b82f6' : '#4a5568', textTransform: 'capitalize', marginTop: '2px' }}>{member.role}</div>
+                        </div>
+                        {userRole === 'owner' && member.role !== 'owner' && (
+                          <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                            <select
+                              value={member.role}
+                              onChange={e => changeRole(member.email, e.target.value)}
+                              style={{ padding: '0.2rem 0.4rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0d1117', color: '#94a3b8', fontSize: '0.7rem', cursor: 'pointer' }}
+                            >
+                              <option value="worker">Worker</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                            <button onClick={() => removeMember(member.email)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>&#10005;</button>
+                          </div>
+                        )}
+                        {userRole === 'admin' && member.role === 'worker' && (
+                          <button onClick={() => removeMember(member.email)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>&#10005;</button>
+                        )}
+                      </div>
+                    ))}
+                    {groupMembers.length === 0 && (
+                      <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.8rem', marginTop: '1rem' }}>No members yet. Invite someone above.</div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {activePanel !== 'History' && activePanel !== 'Admin' && !panelLoading && (
               <>
                 {panelEntries.length === 0 && (
                   <div style={{ textAlign: 'center', marginTop: '4rem' }}>

@@ -12,10 +12,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: NextRequest) {
-  const { message, messages, saveMode, category, summaryToSave } = await req.json()
+  const { message, messages, saveMode, category, summaryToSave, userId, groupId } = await req.json()
 
   // ── SAVE MODE ──────────────────────────────────────────────
-  // Called when user confirms save with a category selected
   if (saveMode && summaryToSave && category) {
     const embeddingResponse = await openai.embeddings.create({
       model: 'text-embedding-3-small',
@@ -26,22 +25,23 @@ export async function POST(req: NextRequest) {
     await supabase.from('documents').insert({
       content: summaryToSave,
       embedding,
-      institution_id: 'hospital_a',
+      institution_id: groupId || 'hospital_a',
       category,
+      user_id: userId || null,
+      group_id: groupId || null,
       created_at: new Date().toISOString(),
     })
 
-    return NextResponse.json({ answer: `✅ Saved to your institutional knowledge base under **${category}**.` })
+    return NextResponse.json({ answer: `Saved to your institutional knowledge base under **${category}**.` })
   }
 
   // ── DETECT "SAVE THIS" ─────────────────────────────────────
-  // User typed "save this" — generate a summary to show them before confirming
   const saveCommands = ['save this', 'save', 'please save']
-const isSaveRequest = saveCommands.includes(message.trim().toLowerCase())
+  const isSaveRequest = saveCommands.includes(message.trim().toLowerCase())
 
   if (isSaveRequest) {
     const conversationText = messages
-      .slice(-6) // last 3 exchanges
+      .slice(-6)
       .map((m: any) => `${m.role === 'user' ? 'User' : 'COR'}: ${m.content}`)
       .join('\n')
 
@@ -67,10 +67,10 @@ Return only the summary, no preamble.`
       ? summaryResponse.content[0].text
       : 'Could not generate summary.'
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       answer: null,
       savePreview: true,
-      summary 
+      summary
     })
   }
 
@@ -81,15 +81,30 @@ Return only the summary, no preamble.`
   })
   const embedding = embeddingResponse.data[0].embedding
 
-  const { data: documents } = await supabase.rpc('match_documents', {
-    query_embedding: embedding,
-    match_threshold: 0.5,
-    match_count: 5,
-  })
+  // Search documents — filter by group if user belongs to one
+  let documents: any[] = []
+  if (groupId) {
+    // Search within group's documents
+    const { data } = await supabase.rpc('match_documents', {
+      query_embedding: embedding,
+      match_threshold: 0.5,
+      match_count: 5,
+    })
+    // Filter to group documents + global docs
+    documents = (data || []).filter((d: any) =>
+      d.group_id === groupId || d.institution_id === 'hospital_a'
+    )
+  } else {
+    const { data } = await supabase.rpc('match_documents', {
+      query_embedding: embedding,
+      match_threshold: 0.5,
+      match_count: 5,
+    })
+    documents = data || []
+  }
 
-  const context = documents?.map((d: any) => d.content).join('\n\n') || 'No relevant documents found.'
+  const context = documents.map((d: any) => d.content).join('\n\n') || 'No relevant documents found.'
 
-  // Build conversation history for memory
   const conversationHistory = messages.map((m: any) => ({
     role: m.role as 'user' | 'assistant',
     content: m.content
@@ -111,7 +126,7 @@ Your personality:
 Your formatting style:
 - Use bullet points and indentation to organize information clearly
 - No use of emojis or overly casual language - maintain a professional tone while being approachable
-- No use of # or other markdown headers in your responses, but do use bold for key terms and concepts 
+- No use of # or other markdown headers in your responses, but do use bold for key terms and concepts
 - Keep answers succinct - no unnecessary filler
 - Use headers when covering multiple topics
 - Bold key terms for easy scanning
