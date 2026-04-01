@@ -39,6 +39,7 @@ export default function Home() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userGroupId, setUserGroupId] = useState<string | null>(null)
   const [userGroupName, setUserGroupName] = useState<string | null>(null)
+  const [allGroups, setAllGroups] = useState<any[]>([])
   const [groupMembers, setGroupMembers] = useState<any[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('worker')
@@ -78,6 +79,7 @@ export default function Home() {
         const res = await fetch(`/api/groups?userId=${user.id}&email=${encodeURIComponent(user.email)}`)
         const data = await res.json()
         if (data.memberships && data.memberships.length > 0) {
+          setAllGroups(data.memberships)
           const m = data.memberships[0]
           setUserRole(m.role)
           setUserGroupId(m.group_id)
@@ -119,6 +121,24 @@ export default function Home() {
     }
   }
 
+  function switchGroup(membership: any) {
+    setUserRole(membership.role)
+    setUserGroupId(membership.group_id)
+    setUserGroupName(membership.group?.name || null)
+    setGroupMembers([])
+    setInviteError('')
+    setInviteSuccess('')
+    fetchGroupMembersFor(membership.group_id)
+  }
+
+  async function fetchGroupMembersFor(gId: string) {
+    try {
+      const res = await fetch(`/api/groups/members?groupId=${gId}`)
+      const data = await res.json()
+      setGroupMembers(data.members || [])
+    } catch { setGroupMembers([]) }
+  }
+
   async function fetchGroupMembers() {
     if (!userGroupId) return
     try {
@@ -153,6 +173,10 @@ export default function Home() {
         setUserGroupName(data.group.name)
         setGroupName('')
         setInviteError('')
+        // Refresh groups list
+        const gRes = await fetch(`/api/groups?userId=${user.id}&email=${encodeURIComponent(user.email)}`)
+        const gData = await gRes.json()
+        if (gData.memberships) setAllGroups(gData.memberships)
       }
     } catch { setInviteError('Failed to create group. Check Supabase tables.') }
   }
@@ -609,22 +633,41 @@ export default function Home() {
 
             {activePanel === 'Admin' && (
               <div>
-                {/* Create group (if no group yet) */}
-                {!userGroupId && (
+                {/* Group switcher — show all groups for super owner */}
+                {allGroups.length > 1 && (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Switch Group</div>
+                    {allGroups.map((g) => (
+                      <button
+                        key={g.group_id}
+                        onClick={() => switchGroup(g)}
+                        style={{ width: '100%', padding: '0.5rem 0.7rem', borderRadius: '8px', border: `1px solid ${g.group_id === userGroupId ? 'rgba(230,57,70,0.4)' : 'rgba(255,255,255,0.06)'}`, background: g.group_id === userGroupId ? 'rgba(230,57,70,0.1)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem', textAlign: 'left' }}
+                      >
+                        <span style={{ fontSize: '0.8rem', color: g.group_id === userGroupId ? '#e63946' : '#94a3b8', fontWeight: g.group_id === userGroupId ? '600' : '400' }}>{g.group?.name}</span>
+                        <span style={{ fontSize: '0.65rem', color: '#4a5568', textTransform: 'capitalize' }}>{g.role}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Create new group — always visible for super owner */}
+                {user?.email === SUPER_OWNER_EMAIL && (
                   <div style={{ marginBottom: '1rem' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.5rem', fontWeight: '500' }}>Create a Group</div>
-                    <input
-                      value={groupName}
-                      onChange={e => setGroupName(e.target.value)}
-                      placeholder="Group / Institution name"
-                      style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.82rem', outline: 'none', marginBottom: '0.5rem', boxSizing: 'border-box' }}
-                    />
-                    <button onClick={createGroup} style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.82rem', fontWeight: '500', cursor: 'pointer' }}>Create Group</button>
+                    <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Create New Group</div>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input
+                        value={groupName}
+                        onChange={e => setGroupName(e.target.value)}
+                        placeholder="Group / Institution name"
+                        style={{ flex: 1, padding: '0.5rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      <button onClick={createGroup} style={{ padding: '0.5rem 0.8rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer', flexShrink: 0 }}>+</button>
+                    </div>
                     {inviteError && <div style={{ color: '#e63946', fontSize: '0.72rem', marginTop: '0.4rem' }}>{inviteError}</div>}
                   </div>
                 )}
 
-                {/* Group info + invite (if group exists) */}
+                {/* Group info + invite (if group selected) */}
                 {userGroupId && (
                   <>
                     <div style={{ background: 'rgba(230,57,70,0.08)', border: '1px solid rgba(230,57,70,0.2)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.75rem' }}>
