@@ -6,9 +6,9 @@ import { supabase } from './lib/supabase'
 const CATEGORIES = ['Protocol', 'Case Note', 'Equipment', 'Policy', 'Logbook']
 
 const SIDEBAR_ITEMS = [
-  { key: 'History', emoji: null, image: '/History.icon.png', label: 'History' },
+  { key: 'History', emoji: null, image: '/History.Icon.png', label: 'History' },
   { key: 'Logbook', emoji: null, image: '/Logbook.icon.png', label: 'Logbook' },
-  { key: 'Protocol', emoji: null, image: '/Protocol.icon.png', label: 'Protocol' },
+  { key: 'Protocol', emoji: null, image: '/Protocol.Icon.png', label: 'Protocol' },
   { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
   { key: 'Policy', emoji: null, image: '/Policy.Icon.png', label: 'Policy' },
 ]
@@ -543,7 +543,7 @@ export default function Home() {
                 style={{ width: '100%', padding: '0.75rem 3rem 0.75rem 1.1rem', borderRadius: '24px', border: `1px solid ${listening ? 'rgba(230,57,70,0.5)' : 'rgba(255,255,255,0.1)'}`, background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s ease' }}
               />
               <button onClick={startListening} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', width: '30px', height: '30px', borderRadius: '50%', background: listening ? '#e63946' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease', animation: listening ? 'micGlow 1.5s ease-in-out infinite' : 'none' }}>
-                {listening ? <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: 'white' }} /> : <img src="/microphone.icon.png" alt="mic" style={{ width: '32px', height: '32px', objectFit: 'contain', opacity: 0.5 }} />}
+                {listening ? <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: 'white' }} /> : <img src="/Microphone.icon.png" alt="mic" style={{ width: '32px', height: '32px', objectFit: 'contain', opacity: 0.5 }} />}
               </button>
             </div>
             <button onClick={sendMessage} disabled={loading} style={{ width: '38px', height: '38px', borderRadius: '50%', background: loading ? 'rgba(255,255,255,0.06)' : '#e63946', color: 'white', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem' }}>➤</button>
