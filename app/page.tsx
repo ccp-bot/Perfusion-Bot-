@@ -51,6 +51,7 @@ export default function Home() {
   const [uploading, setUploading] = useState(false)
   const [manualEntry, setManualEntry] = useState('')
   const [uploadStatus, setUploadStatus] = useState('')
+  const [dragOver, setDragOver] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -362,9 +363,8 @@ export default function Home() {
     }
   }
 
-  async function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !activePanel || !user) return
+  async function uploadFile(file: File) {
+    if (!activePanel || !user) return
     setUploading(true)
     setUploadStatus('')
     const formData = new FormData()
@@ -386,6 +386,18 @@ export default function Home() {
     } catch { setUploadStatus('Upload failed') }
     setUploading(false)
     if (uploadInputRef.current) uploadInputRef.current.value = ''
+  }
+
+  function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) uploadFile(file)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) uploadFile(file)
   }
 
   async function saveManualEntry() {
@@ -833,11 +845,16 @@ export default function Home() {
               <>
                 {/* Upload controls — Owner/Admin only */}
                 {(userRole === 'owner' || userRole === 'admin') && (
-                  <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px' }}>
+                  <div
+                    onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={handleDrop}
+                    style={{ marginBottom: '1rem', padding: '0.75rem', background: dragOver ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.02)', border: `1px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? '#e63946' : 'rgba(255,255,255,0.06)'}`, borderRadius: '10px', transition: 'all 0.15s ease' }}
+                  >
                     <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
                       <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" onChange={handleUploadFile} style={{ display: 'none' }} />
-                      <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>
-                        {uploading ? 'Uploading...' : 'Upload File (PDF, Word, Excel)'}
+                      <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>
+                        {uploading ? 'Uploading...' : dragOver ? 'Drop file here' : 'Upload or drag file (PDF, Word, Excel)'}
                       </button>
                     </div>
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
