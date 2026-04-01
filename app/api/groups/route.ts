@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   if (groupIds.length > 0) {
     const { data } = await supabase
       .from('groups')
-      .select('id, name, created_by, created_at')
+      .select('id, name, owner_id, created_at')
       .in('id', groupIds)
     groups = data || []
   }
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   const { data: group, error: groupError } = await supabase
     .from('groups')
-    .insert({ name, created_by: userId })
+    .insert({ name, owner_id: userId })
     .select()
     .single()
 
