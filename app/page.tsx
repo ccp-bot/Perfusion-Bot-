@@ -286,7 +286,10 @@ export default function Home() {
     recognition.onstart = () => setListening(true)
     recognition.onend = () => {
       if (recognitionRef.current === recognition) {
-        try { recognition.start() } catch {}
+        try { recognition.start() } catch {
+          recognitionRef.current = null
+          setListening(false)
+        }
       } else {
         setListening(false)
       }
@@ -296,7 +299,7 @@ export default function Home() {
       setInput(transcript)
     }
     recognition.onerror = (event: any) => {
-      if (event.error === 'no-speech') return
+      if (event.error === 'no-speech' || event.error === 'aborted') return
       console.log('Speech error:', event.error)
       recognitionRef.current = null
       setListening(false)
