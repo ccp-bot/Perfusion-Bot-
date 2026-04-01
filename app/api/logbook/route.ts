@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('documents')
-    .select('id, content, category, created_at, user_id, group_id, source_file, uploaded_by')
+    .select('id, content, category, created_at, user_id, group_id')
     .order('created_at', { ascending: false })
 
   if (category) {
