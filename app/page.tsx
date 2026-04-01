@@ -363,41 +363,46 @@ export default function Home() {
     }
   }
 
-  async function uploadFile(file: File) {
-    if (!activePanel || !user) return
+  async function uploadFiles(files: File[]) {
+    if (!activePanel || !user || files.length === 0) return
     setUploading(true)
-    setUploadStatus('')
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('category', activePanel)
-    formData.append('userId', user.id)
-    formData.append('userEmail', user.email)
-    formData.append('groupId', userGroupId || '')
-    formData.append('userRole', userRole || '')
-    try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (data.error) {
-        setUploadStatus(data.error)
-      } else {
-        setUploadStatus(`Uploaded "${data.fileName}" (${data.chunks} sections)`)
-        fetchPanel(activePanel)
-      }
-    } catch { setUploadStatus('Upload failed') }
+    setUploadStatus(`Uploading 0/${files.length}...`)
+    let successCount = 0
+    let totalChunks = 0
+    for (let i = 0; i < files.length; i++) {
+      setUploadStatus(`Uploading ${i + 1}/${files.length}: ${files[i].name}`)
+      const formData = new FormData()
+      formData.append('file', files[i])
+      formData.append('category', activePanel)
+      formData.append('userId', user.id)
+      formData.append('userEmail', user.email)
+      formData.append('groupId', userGroupId || '')
+      formData.append('userRole', userRole || '')
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: formData })
+        const data = await res.json()
+        if (!data.error) {
+          successCount++
+          totalChunks += data.chunks || 0
+        }
+      } catch { /* continue with next file */ }
+    }
+    setUploadStatus(`Uploaded ${successCount}/${files.length} files (${totalChunks} sections)`)
+    fetchPanel(activePanel)
     setUploading(false)
     if (uploadInputRef.current) uploadInputRef.current.value = ''
   }
 
   function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) uploadFile(file)
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) uploadFiles(files)
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) uploadFile(file)
+    const files = Array.from(e.dataTransfer.files || [])
+    if (files.length > 0) uploadFiles(files)
   }
 
   async function saveManualEntry() {
@@ -852,7 +857,7 @@ export default function Home() {
                     style={{ marginBottom: '1rem', padding: '0.75rem', background: dragOver ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.02)', border: `1px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? '#e63946' : 'rgba(255,255,255,0.06)'}`, borderRadius: '10px', transition: 'all 0.15s ease' }}
                   >
                     <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
-                      <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" onChange={handleUploadFile} style={{ display: 'none' }} />
+                      <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" multiple onChange={handleUploadFile} style={{ display: 'none' }} />
                       <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>
                         {uploading ? 'Uploading...' : dragOver ? 'Drop file here' : 'Upload or drag file (PDF, Word, Excel)'}
                       </button>
