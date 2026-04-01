@@ -156,6 +156,16 @@ When answering:
 - When appropriate, note if guidelines differ between institutions or if evidence is evolving
 - Always prioritize patient safety in your reasoning
 
+IMPORTANT — Protocol and Policy Change Detection:
+When a user tells you about a change to a protocol, procedure, equipment preference, or institutional policy (e.g., "Dr. Smith switched to 24Fr cannula", "we no longer use heparin-bonded circuits", "new policy: all patients get TEE"), you MUST:
+1. Acknowledge the change
+2. Summarize it clearly
+3. End your response with a special tag on its own line:
+   [PROTOCOL_UPDATE: your concise summary of the change here] — if it's a protocol/procedure/equipment change
+   [POLICY_UPDATE: your concise summary of the change here] — if it's an institutional policy change
+
+Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).
+
 Context from knowledge base:
 ${context}`,
     messages: [
@@ -164,7 +174,53 @@ ${context}`,
     ]
   })
 
-  const answer = response.content[0].type === 'text' ? response.content[0].text : 'No response'
+  let answer = response.content[0].type === 'text' ? response.content[0].text : 'No response'
+
+  // Check for protocol/policy update tags and auto-save
+  const protocolMatch = answer.match(/\[PROTOCOL_UPDATE:\s*(.+?)\]/)
+  const policyMatch = answer.match(/\[POLICY_UPDATE:\s*(.+?)\]/)
+  const updateMatch = protocolMatch || policyMatch
+  const updateCategory = protocolMatch ? 'Protocol' : policyMatch ? 'Policy' : null
+
+  if (updateMatch && updateCategory && groupId) {
+    const updateSummary = updateMatch[1].trim()
+
+    // Save to knowledge base
+    const updateEmbedding = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: updateSummary,
+    })
+
+    await supabase.from('documents').insert({
+      content: updateSummary,
+      embedding: updateEmbedding.data[0].embedding,
+      institution_id: groupId,
+      category: updateCategory,
+      user_id: userId || null,
+      group_id: groupId,
+      created_at: new Date().toISOString(),
+    })
+
+    // Notify group members
+    const origin = req.headers.get('origin') || req.headers.get('host') || ''
+    const baseUrl = origin.startsWith('http') ? origin : `https://${origin}`
+    try {
+      await fetch(`${baseUrl}/api/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId,
+          category: updateCategory,
+          message: updateSummary,
+          createdByEmail: userEmail,
+          createdByUserId: userId,
+        })
+      })
+    } catch { /* notification failure shouldn't block response */ }
+
+    // Remove the tag from the visible response
+    answer = answer.replace(/\[(?:PROTOCOL|POLICY)_UPDATE:\s*.+?\]/, '').trim()
+  }
 
   return NextResponse.json({ answer })
 }
