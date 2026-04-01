@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 
-const CATEGORIES = ['Protocol', 'Case Note', 'Equipment', 'Policy', 'Logbook']
+const CATEGORIES = ['Protocol', 'Case Notes', 'Equipment', 'Policy', 'Logbook', 'Checklists', 'Charting']
 const SUPER_OWNER_EMAIL = 'cliftonmarschel@gmail.com'
 
 const SIDEBAR_ITEMS = [
@@ -12,6 +12,9 @@ const SIDEBAR_ITEMS = [
   { key: 'Protocol', emoji: null, image: '/Protocol.Icon.png', label: 'Protocol' },
   { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
   { key: 'Policy', emoji: null, image: '/Policy.Icon.png', label: 'Policy' },
+  { key: 'Checklists', emoji: '\u2611', image: null, label: 'Checklists' },
+  { key: 'Charting', emoji: '\u{1F4CA}', image: null, label: 'Charting' },
+  { key: 'Case Notes', emoji: '\u{1F4CB}', image: null, label: 'Case Notes' },
 ]
 
 export default function Home() {
