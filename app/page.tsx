@@ -1178,6 +1178,8 @@ export default function Home() {
                   const isExpanded = expandedEntries.has(entry.id)
                   const mrnMatch = entry.content?.match(/\*?\*?MRN:?\*?\*?\s*(.+?)(?:\n|$)/i)
                   const mrn = mrnMatch ? mrnMatch[1].trim() : null
+                  const dateMatch = entry.content?.match(/\*?\*?Surgery Date:?\*?\*?\s*(.+?)(?:\n|$)/i)
+                  const surgeryDate = dateMatch ? dateMatch[1].trim() : null
 
                   return (
                     <div
@@ -1197,7 +1199,7 @@ export default function Home() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isCollapsible && !isExpanded ? 0 : '0.4rem' }}>
                         <div>
                           <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
-                            {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {isCollapsible && surgeryDate ? surgeryDate : new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                             {entry.uploaded_by && <span style={{ marginLeft: '0.4rem' }}>by {entry.uploaded_by}</span>}
                           </div>
                           {isCollapsible && mrn && (
