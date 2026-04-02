@@ -624,6 +624,19 @@ export default function Home() {
       return
     }
 
+    // Detect export commands
+    const exportMatch = input.trim().toLowerCase().match(/^export\s*(logbook|case\s*notes|my\s*cases)?$/i)
+    if (exportMatch) {
+      const target = exportMatch[1]?.toLowerCase() || ''
+      const category = target.includes('case') || target.includes('my') ? 'Case Notes' : 'Logbook'
+      setInput('')
+      setMessages(prev => [...prev, { role: 'user', content: input.trim() }])
+      const params = new URLSearchParams({ userId: user?.id, category, groupId: userGroupId || '' })
+      window.open(`/api/export?${params.toString()}`, '_blank')
+      setMessages(prev => [...prev, { role: 'assistant', content: `Downloading ${category} as Excel. Check your downloads folder.` }])
+      return
+    }
+
     const userMessage = input
     const imageToSend = attachedImage
     setInput('')
@@ -918,6 +931,14 @@ export default function Home() {
               {activePanel === 'History' && messages.length > 0 && (
                 <button onClick={saveToHistory} disabled={savingHistory} style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(230,57,70,0.3)', background: 'rgba(230,57,70,0.1)', color: '#e63946', fontSize: '0.72rem', cursor: 'pointer' }}>
                   {savingHistory ? '...' : '+ Save'}
+                </button>
+              )}
+              {(activePanel === 'Logbook' || activePanel === 'Case Notes') && panelEntries.length > 0 && (
+                <button onClick={() => {
+                  const params = new URLSearchParams({ userId: user?.id, category: activePanel!, groupId: userGroupId || '' })
+                  window.open(`/api/export?${params.toString()}`, '_blank')
+                }} style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>
+                  Export
                 </button>
               )}
               <button onClick={() => setActivePanel(null)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '1rem', cursor: 'pointer', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
