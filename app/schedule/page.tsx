@@ -39,6 +39,9 @@ export default function SchedulePage() {
   const [timeOffRequests, setTimeOffRequests] = useState<any[]>([])
   const [newShiftName, setNewShiftName] = useState('')
   const [newShiftColor, setNewShiftColor] = useState('#3b82f6')
+  const [scheduleRules, setScheduleRules] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [generateStatus, setGenerateStatus] = useState('')
   const [selectedShift, setSelectedShift] = useState<string | null>(null)
   const [view, setView] = useState<'day' | 'week' | 'month'>('day')
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -370,6 +373,70 @@ export default function SchedulePage() {
                 </select>
                 <button onClick={addShiftType} style={{ padding: '0.35rem 0.5rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.75rem', cursor: 'pointer' }}>+</button>
               </div>
+            </div>
+          )}
+
+          {/* Auto-Generate Schedule */}
+          {isAdmin && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Auto-Generate Schedule</div>
+              <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Describe your scheduling rules. COR will generate 6 weeks of schedule.</div>
+              <textarea
+                value={scheduleRules}
+                onChange={e => setScheduleRules(e.target.value)}
+                placeholder={"Example rules:\n- 1 person on call per day\n- Rotate weekends evenly\n- No more than 3 consecutive call days\n- Everyone gets 2 days off per week"}
+                rows={6}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
+              />
+              <button
+                onClick={async () => {
+                  if (!scheduleRules.trim() || !userGroupId || generating) return
+                  setGenerating(true)
+                  setGenerateStatus('COR is building the schedule...')
+                  try {
+                    // Get approved time-off
+                    const toRes = await fetch(`/api/time-off?groupId=${userGroupId}`)
+                    const toData = await toRes.json()
+                    const approvedOff = (toData.requests || [])
+                      .filter((r: any) => r.status === 'approved')
+                      .map((r: any) => ({ name: profileMap[r.user_id] || r.user_email?.split('@')[0], date: r.date }))
+
+                    const memberList = members.map(m => ({
+                      name: profileMap[m.user_id] || (m.email || '').split('@')[0],
+                      userId: m.user_id,
+                      email: m.email,
+                    }))
+
+                    const res = await fetch('/api/schedule/generate', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        groupId: userGroupId,
+                        userRole,
+                        rules: scheduleRules,
+                        members: memberList,
+                        shiftTypes,
+                        timeOffDates: approvedOff,
+                        startDate: formatDate(new Date()),
+                        weeks: 6,
+                      })
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                      setGenerateStatus(`Done! ${data.entriesGenerated} entries created.`)
+                      fetchScheduleData()
+                    } else {
+                      setGenerateStatus(data.error || 'Failed to generate')
+                    }
+                  } catch { setGenerateStatus('Error generating schedule') }
+                  setGenerating(false)
+                }}
+                disabled={generating || !scheduleRules.trim()}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: generating || !scheduleRules.trim() ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', fontWeight: '500', cursor: generating || !scheduleRules.trim() ? 'not-allowed' : 'pointer', marginTop: '0.5rem' }}
+              >
+                {generating ? 'Generating...' : 'Generate 6-Week Schedule'}
+              </button>
+              {generateStatus && <div style={{ fontSize: '0.7rem', color: generateStatus.includes('Done') ? '#22c55e' : generateStatus.includes('COR') ? '#f59e0b' : '#e63946', marginTop: '0.4rem' }}>{generateStatus}</div>}
             </div>
           )}
 
