@@ -12,9 +12,9 @@ const SIDEBAR_ITEMS = [
   { key: 'Protocol', emoji: null, image: '/Protocol.Icon.png', label: 'Protocol' },
   { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
   { key: 'Policy', emoji: null, image: '/Policy.Icon.png', label: 'Policy' },
-  { key: 'Checklists', emoji: '\u2611', image: null, label: 'Checklists' },
-  { key: 'Charting', emoji: '\u{1F4CA}', image: null, label: 'Charting' },
-  { key: 'Case Notes', emoji: '\u{1F4CB}', image: null, label: 'Case Notes' },
+  { key: 'Checklists', emoji: null, image: '/Checkmark.Icon.png', label: 'Checklists' },
+  { key: 'Charting', emoji: null, image: '/Chart.Icon.png', label: 'Charting' },
+  { key: 'Case Notes', emoji: null, image: '/CaseNotes.Icon.png', label: 'Case Notes' },
 ]
 
 export default function Home() {
