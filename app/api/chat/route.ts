@@ -12,7 +12,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
 export async function POST(req: NextRequest) {
-  const { message, messages, saveMode, category, summaryToSave, userId, groupId, userEmail, caseLogMode, caseLogData, templateFields } = await req.json()
+  const { message, messages, saveMode, category, summaryToSave, userId, groupId, userEmail, caseLogMode, caseLogData, logbookFields, caseNotesFields } = await req.json()
 
   // ── SAVE MODE ──────────────────────────────────────────────
   if (saveMode && summaryToSave && category) {
@@ -55,36 +55,25 @@ export async function POST(req: NextRequest) {
   }
 
   // ── CASE LOG: FINALIZE ──────────────────────────────────────
-  // Called when all template fields are filled — save to Case Notes + Logbook
-  if (caseLogMode === 'finalize' && caseLogData && templateFields) {
-    // Build a structured summary
-    const lines = templateFields.map((field: string) => `**${field}:** ${caseLogData[field] || 'N/A'}`)
-    const summary = lines.join('\n')
+  // Called when all fields from both templates are filled
+  if (caseLogMode === 'finalize' && caseLogData && logbookFields && caseNotesFields) {
+    const lbLines = logbookFields.map((f: string) => `**${f}:** ${caseLogData[f] || 'N/A'}`)
+    const cnLines = caseNotesFields.map((f: string) => `**${f}:** ${caseLogData[f] || 'N/A'}`)
+    const logbookSummary = lbLines.join('\n')
+    const caseNotesSummary = cnLines.join('\n')
+    const fullSummary = `${logbookSummary}\n\n--- Personal Notes ---\n${caseNotesSummary}`
 
     const embeddingRes = await openai.embeddings.create({
       model: 'text-embedding-3-small',
-      input: summary,
+      input: fullSummary,
     })
     const embedding = embeddingRes.data[0].embedding
     const now = new Date().toISOString()
 
-    // Save to Case Notes (personal)
-    await supabase.from('documents').insert({
-      content: summary,
-      embedding,
-      institution_id: groupId || 'hospital_a',
-      category: 'Case Notes',
-      user_id: userId,
-      group_id: null,
-      source_file: 'Case Log',
-      uploaded_by: userEmail || null,
-      created_at: now,
-    })
-
-    // Save to Logbook (group-visible)
+    // Save to Logbook (group-visible) — only logbook fields
     if (groupId) {
       await supabase.from('documents').insert({
-        content: summary,
+        content: logbookSummary,
         embedding,
         institution_id: groupId,
         category: 'Logbook',
@@ -96,15 +85,28 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // Save to Case Notes (personal) — all fields including personal notes
+    await supabase.from('documents').insert({
+      content: fullSummary,
+      embedding,
+      institution_id: groupId || 'hospital_a',
+      category: 'Case Notes',
+      user_id: userId,
+      group_id: null,
+      source_file: 'Case Log',
+      uploaded_by: userEmail || null,
+      created_at: now,
+    })
+
     return NextResponse.json({
-      answer: `Case logged successfully.\n\n${summary}\n\nThis has been saved to your **Case Notes** and the group **Logbook**.`,
+      answer: `Case logged successfully.\n\n**Logbook Entry:**\n${logbookSummary}\n\n**Personal Case Notes:**\n${caseNotesSummary}\n\nSaved to your **Case Notes** and the group **Logbook**.`,
       caseLogComplete: true,
     })
   }
 
   // ── CASE LOG: ANALYZE CONVERSATION ────────────────────────
-  // Called when user types "log" — analyze what's been discussed and find missing fields
-  if (caseLogMode === 'analyze' && templateFields) {
+  if (caseLogMode === 'analyze' && logbookFields && caseNotesFields) {
+    const allFields = [...logbookFields, ...caseNotesFields]
     const conversationText = messages
       .map((m: any) => `${m.role === 'user' ? 'User' : 'COR'}: ${m.content}`)
       .join('\n')
@@ -116,13 +118,18 @@ export async function POST(req: NextRequest) {
         role: 'user',
         content: `You are COR, a cardiovascular perfusion assistant helping log a case.
 
-The following template fields must be filled for a case log:
-${templateFields.map((f: string) => `- ${f}`).join('\n')}
+The following fields must be filled. They come in two sections:
+
+LOGBOOK FIELDS (shared with the team):
+${logbookFields.map((f: string) => `- ${f}`).join('\n')}
+
+CASE NOTES FIELDS (personal to the user):
+${caseNotesFields.map((f: string) => `- ${f}`).join('\n')}
 
 Here is the conversation so far:
 ${conversationText || '(No prior conversation)'}
 
-The user wants to log a case. Analyze the conversation and extract any information that matches the template fields.
+The user wants to log a case. Analyze the conversation and extract any information that matches ANY of the fields above.
 
 Respond in this exact JSON format (no markdown, no code blocks, just raw JSON):
 {
@@ -140,13 +147,13 @@ Only include fields in "found" if you are confident the value was mentioned. Eve
       return NextResponse.json({
         caseLogAnalysis: true,
         found: parsed.found || {},
-        missing: parsed.missing || templateFields,
+        missing: parsed.missing || allFields,
       })
     } catch {
       return NextResponse.json({
         caseLogAnalysis: true,
         found: {},
-        missing: templateFields,
+        missing: allFields,
       })
     }
   }

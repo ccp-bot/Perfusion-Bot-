@@ -6,8 +6,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// Default template fields if none exist yet
-const DEFAULT_FIELDS = [
+const DEFAULT_LOGBOOK_FIELDS = [
   'MRN',
   'Surgeon',
   'Case Type',
@@ -17,36 +16,54 @@ const DEFAULT_FIELDS = [
   'Complications',
 ]
 
-// GET /api/templates?groupId=xxx — get the case log template for a group
+const DEFAULT_CASENOTES_FIELDS = [
+  'Personal Observations',
+  'What Went Well',
+  'What To Improve',
+  'Notes For Next Time',
+]
+
+// GET /api/templates?groupId=xxx — get both templates for a group
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const groupId = searchParams.get('groupId')
 
-  if (!groupId) return NextResponse.json({ fields: DEFAULT_FIELDS })
+  if (!groupId) {
+    return NextResponse.json({
+      logbookFields: DEFAULT_LOGBOOK_FIELDS,
+      caseNotesFields: DEFAULT_CASENOTES_FIELDS,
+    })
+  }
 
   const { data } = await supabase
     .from('case_templates')
-    .select('fields')
+    .select('template_type, fields')
     .eq('group_id', groupId)
-    .single()
 
-  return NextResponse.json({ fields: data?.fields || DEFAULT_FIELDS })
+  const templates = data || []
+  const logbook = templates.find(t => t.template_type === 'logbook')
+  const caseNotes = templates.find(t => t.template_type === 'case_notes')
+
+  return NextResponse.json({
+    logbookFields: logbook?.fields || DEFAULT_LOGBOOK_FIELDS,
+    caseNotesFields: caseNotes?.fields || DEFAULT_CASENOTES_FIELDS,
+  })
 }
 
-// POST /api/templates — create or update the case log template
+// POST /api/templates — create or update a template
 export async function POST(req: NextRequest) {
-  const { groupId, fields, userId, userRole } = await req.json()
+  const { groupId, fields, templateType, userId, userRole } = await req.json()
 
-  if (!groupId || !fields) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  if (!groupId || !fields || !templateType) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   if (userRole !== 'owner' && userRole !== 'admin') {
     return NextResponse.json({ error: 'Only owners and admins can edit templates' }, { status: 403 })
   }
 
-  // Upsert — update if exists, insert if not
   const { data: existing } = await supabase
     .from('case_templates')
     .select('id')
     .eq('group_id', groupId)
+    .eq('template_type', templateType)
     .single()
 
   if (existing) {
@@ -54,11 +71,12 @@ export async function POST(req: NextRequest) {
       .from('case_templates')
       .update({ fields, updated_by: userId })
       .eq('group_id', groupId)
+      .eq('template_type', templateType)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   } else {
     const { error } = await supabase
       .from('case_templates')
-      .insert({ group_id: groupId, fields, updated_by: userId })
+      .insert({ group_id: groupId, template_type: templateType, fields, updated_by: userId })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 

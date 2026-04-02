@@ -56,12 +56,13 @@ export default function Home() {
   const [uploadStatus, setUploadStatus] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [caseLogging, setCaseLogging] = useState(false)
-  const [caseLogFields, setCaseLogFields] = useState<string[]>([])
   const [caseLogData, setCaseLogData] = useState<{[key: string]: string}>({})
   const [caseLogMissing, setCaseLogMissing] = useState<string[]>([])
   const [caseLogCurrentField, setCaseLogCurrentField] = useState(0)
-  const [templateFields, setTemplateFields] = useState<string[]>([])
-  const [newTemplateField, setNewTemplateField] = useState('')
+  const [logbookFields, setLogbookFields] = useState<string[]>([])
+  const [caseNotesFields, setCaseNotesFields] = useState<string[]>([])
+  const [newLogbookField, setNewLogbookField] = useState('')
+  const [newCaseNotesField, setNewCaseNotesField] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -114,8 +115,8 @@ export default function Home() {
       try {
         const res = await fetch(`/api/templates?groupId=${userGroupId}`)
         const data = await res.json()
-        setTemplateFields(data.fields || [])
-        setCaseLogFields(data.fields || [])
+        setLogbookFields(data.logbookFields || [])
+        setCaseNotesFields(data.caseNotesFields || [])
       } catch { /* use defaults */ }
     }
     fetchTemplate()
@@ -473,13 +474,14 @@ export default function Home() {
           groupId: userGroupId,
           userEmail: user.email,
           caseLogMode: 'analyze',
-          templateFields: caseLogFields,
+          logbookFields,
+          caseNotesFields,
         })
       })
       const data = await res.json()
       if (data.caseLogAnalysis) {
         const found = data.found || {}
-        const missing = data.missing || caseLogFields
+        const missing = data.missing || [...logbookFields, ...caseNotesFields]
         setCaseLogData(found)
         setCaseLogMissing(missing)
         setCaseLogCurrentField(0)
@@ -537,7 +539,8 @@ export default function Home() {
           userEmail: user?.email,
           caseLogMode: 'finalize',
           caseLogData: data,
-          templateFields: caseLogFields,
+          logbookFields,
+          caseNotesFields,
         })
       })
       const result = await res.json()
@@ -550,44 +553,41 @@ export default function Home() {
     setCaseLogMissing([])
   }
 
-  async function saveTemplate() {
+  function saveTemplateFields(type: string, fields: string[]) {
     if (!userGroupId || !user) return
-    try {
-      await fetch('/api/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId: userGroupId, fields: templateFields, userId: user.id, userRole })
-      })
-    } catch { console.error('Failed to save template') }
+    fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId: userGroupId, fields, templateType: type, userId: user.id, userRole })
+    }).catch(() => {})
   }
 
-  function addTemplateField() {
-    if (!newTemplateField.trim()) return
-    const updated = [...templateFields, newTemplateField.trim()]
-    setTemplateFields(updated)
-    setCaseLogFields(updated)
-    setNewTemplateField('')
-    // Auto-save
-    if (userGroupId && user) {
-      fetch('/api/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId: userGroupId, fields: updated, userId: user.id, userRole })
-      }).catch(() => {})
-    }
+  function addLogbookField() {
+    if (!newLogbookField.trim()) return
+    const updated = [...logbookFields, newLogbookField.trim()]
+    setLogbookFields(updated)
+    setNewLogbookField('')
+    saveTemplateFields('logbook', updated)
   }
 
-  function removeTemplateField(idx: number) {
-    const updated = templateFields.filter((_, i) => i !== idx)
-    setTemplateFields(updated)
-    setCaseLogFields(updated)
-    if (userGroupId && user) {
-      fetch('/api/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId: userGroupId, fields: updated, userId: user.id, userRole })
-      }).catch(() => {})
-    }
+  function removeLogbookField(idx: number) {
+    const updated = logbookFields.filter((_: string, i: number) => i !== idx)
+    setLogbookFields(updated)
+    saveTemplateFields('logbook', updated)
+  }
+
+  function addCaseNotesField() {
+    if (!newCaseNotesField.trim()) return
+    const updated = [...caseNotesFields, newCaseNotesField.trim()]
+    setCaseNotesFields(updated)
+    setNewCaseNotesField('')
+    saveTemplateFields('case_notes', updated)
+  }
+
+  function removeCaseNotesField(idx: number) {
+    const updated = caseNotesFields.filter((_: string, i: number) => i !== idx)
+    setCaseNotesFields(updated)
+    saveTemplateFields('case_notes', updated)
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1016,25 +1016,47 @@ export default function Home() {
                       <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.8rem', marginTop: '1rem' }}>No members yet. Invite someone above.</div>
                     )}
 
-                    {/* Case Log Template Editor */}
+                    {/* Logbook Template Editor */}
                     <div style={{ marginTop: '1.5rem' }}>
-                      <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Case Log Template</div>
-                      <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>These fields will be asked when a user types "log" to record a case.</div>
-                      {templateFields.map((field, idx) => (
+                      <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Logbook Template</div>
+                      <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Shared with the group when a case is logged.</div>
+                      {logbookFields.map((field: string, idx: number) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
                           <div style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: '0.78rem', color: '#94a3b8' }}>{field}</div>
-                          <button onClick={() => removeTemplateField(idx)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>&#10005;</button>
+                          <button onClick={() => removeLogbookField(idx)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>&#10005;</button>
                         </div>
                       ))}
                       <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
                         <input
-                          value={newTemplateField}
-                          onChange={e => setNewTemplateField(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && addTemplateField()}
-                          placeholder="Add a field..."
+                          value={newLogbookField}
+                          onChange={e => setNewLogbookField(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && addLogbookField()}
+                          placeholder="Add a logbook field..."
                           style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
                         />
-                        <button onClick={addTemplateField} style={{ padding: '0.4rem 0.7rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}>+</button>
+                        <button onClick={addLogbookField} style={{ padding: '0.4rem 0.7rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}>+</button>
+                      </div>
+                    </div>
+
+                    {/* Case Notes Template Editor */}
+                    <div style={{ marginTop: '1rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Case Notes Template</div>
+                      <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Personal to the user — not shared with the group.</div>
+                      {caseNotesFields.map((field: string, idx: number) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
+                          <div style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: '0.78rem', color: '#94a3b8' }}>{field}</div>
+                          <button onClick={() => removeCaseNotesField(idx)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>&#10005;</button>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
+                        <input
+                          value={newCaseNotesField}
+                          onChange={e => setNewCaseNotesField(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && addCaseNotesField()}
+                          placeholder="Add a case notes field..."
+                          style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                        <button onClick={addCaseNotesField} style={{ padding: '0.4rem 0.7rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}>+</button>
                       </div>
                     </div>
                   </>
