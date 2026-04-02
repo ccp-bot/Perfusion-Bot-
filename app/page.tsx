@@ -56,6 +56,8 @@ export default function Home() {
   const [uploadStatus, setUploadStatus] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set())
+  const [checklistFiles, setChecklistFiles] = useState<any[]>([])
+  const [checklistUploading, setChecklistUploading] = useState(false)
   const [caseLogging, setCaseLogging] = useState(false)
   const [caseLogData, setCaseLogData] = useState<{[key: string]: string}>({})
   const [caseLogMissing, setCaseLogMissing] = useState<string[]>([])
@@ -308,6 +310,10 @@ export default function Home() {
       await fetchGroupMembers()
       return
     }
+    if (category === 'Checklists') {
+      await fetchChecklists()
+      return
+    }
     setPanelLoading(true)
     try {
       const groupParam = userGroupId ? `&groupId=${userGroupId}` : ''
@@ -318,6 +324,45 @@ export default function Home() {
       setPanelEntries([])
     }
     setPanelLoading(false)
+  }
+
+  async function fetchChecklists() {
+    if (!userGroupId) return
+    setPanelLoading(true)
+    try {
+      const res = await fetch(`/api/checklists?groupId=${userGroupId}`)
+      const data = await res.json()
+      setChecklistFiles(data.files || [])
+    } catch { setChecklistFiles([]) }
+    setPanelLoading(false)
+  }
+
+  async function uploadChecklist(file: File) {
+    if (!userGroupId || !user) return
+    setChecklistUploading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('groupId', userGroupId)
+    formData.append('userId', user.id)
+    formData.append('userEmail', user.email)
+    formData.append('userRole', userRole || '')
+    try {
+      const res = await fetch('/api/checklists', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.success) fetchChecklists()
+    } catch {}
+    setChecklistUploading(false)
+  }
+
+  async function deleteChecklist(id: number) {
+    try {
+      await fetch('/api/checklists', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, userRole })
+      })
+      setChecklistFiles(prev => prev.filter(f => f.id !== id))
+    } catch {}
   }
 
   async function fetchHistory() {
@@ -924,7 +969,7 @@ export default function Home() {
             <div>
               <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : `${panelEntries.length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : `${panelEntries.length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -1158,7 +1203,73 @@ export default function Home() {
               </div>
             )}
 
-            {activePanel !== 'History' && activePanel !== 'Admin' && !panelLoading && (
+            {activePanel === 'Checklists' && !panelLoading && (
+              <>
+                {/* Upload — Owner/Admin only */}
+                {(userRole === 'owner' || userRole === 'admin') && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg"
+                      multiple
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files || [])
+                        for (const f of files) await uploadChecklist(f)
+                        e.target.value = ''
+                      }}
+                      style={{ display: 'none' }}
+                      id="checklist-upload"
+                    />
+                    <label
+                      htmlFor="checklist-upload"
+                      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={async (e) => {
+                        e.preventDefault()
+                        setDragOver(false)
+                        const files = Array.from(e.dataTransfer.files || [])
+                        for (const f of files) await uploadChecklist(f)
+                      }}
+                      style={{ display: 'block', padding: '0.75rem', borderRadius: '10px', border: `1px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? '#e63946' : 'rgba(255,255,255,0.06)'}`, background: dragOver ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.02)', textAlign: 'center', cursor: 'pointer', fontSize: '0.78rem', color: '#94a3b8', transition: 'all 0.15s ease' }}
+                    >
+                      {checklistUploading ? 'Uploading...' : 'Upload or drag files (PDF, Word, Excel, Images)'}
+                    </label>
+                  </div>
+                )}
+
+                {checklistFiles.length === 0 && (
+                  <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                    <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128203;</div>
+                    <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No checklists uploaded yet.</div>
+                  </div>
+                )}
+                {checklistFiles.map((file) => {
+                  const ext = file.file_name?.split('.').pop()?.toLowerCase() || ''
+                  const icon = ext === 'pdf' ? '&#128196;' : ext === 'xlsx' || ext === 'xls' || ext === 'csv' ? '&#128202;' : ext === 'png' || ext === 'jpg' || ext === 'jpeg' ? '&#128247;' : '&#128196;'
+                  return (
+                    <div key={file.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.75rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <span style={{ fontSize: '1.2rem' }} dangerouslySetInnerHTML={{ __html: icon }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.file_name}</div>
+                        <div style={{ fontSize: '0.65rem', color: '#4a5568', marginTop: '2px' }}>
+                          {new Date(file.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {file.uploaded_by && <span> by {file.uploaded_by}</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => window.open(`/api/checklists/download?id=${file.id}`, '_blank')}
+                        style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.7rem', cursor: 'pointer', flexShrink: 0 }}
+                      >Open</button>
+                      {(userRole === 'owner' || userRole === 'admin') && (
+                        <button onClick={() => deleteChecklist(file.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            )}
+
+            {activePanel !== 'History' && activePanel !== 'Admin' && activePanel !== 'Checklists' && !panelLoading && (
               <>
                 {/* Upload controls — Owner/Admin only */}
                 {(userRole === 'owner' || userRole === 'admin') && (
