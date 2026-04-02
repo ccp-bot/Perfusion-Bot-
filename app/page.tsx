@@ -64,6 +64,7 @@ export default function Home() {
   const [caseNotesFields, setCaseNotesFields] = useState<string[]>([])
   const [newLogbookField, setNewLogbookField] = useState('')
   const [newCaseNotesField, setNewCaseNotesField] = useState('')
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -596,24 +597,6 @@ export default function Home() {
     saveTemplateFields('case_notes', updated)
   }
 
-  function moveLogbookField(idx: number, dir: -1 | 1) {
-    const newIdx = idx + dir
-    if (newIdx < 0 || newIdx >= logbookFields.length) return
-    const updated = [...logbookFields]
-    ;[updated[idx], updated[newIdx]] = [updated[newIdx], updated[idx]]
-    setLogbookFields(updated)
-    saveTemplateFields('logbook', updated)
-  }
-
-  function moveCaseNotesField(idx: number, dir: -1 | 1) {
-    const newIdx = idx + dir
-    if (newIdx < 0 || newIdx >= caseNotesFields.length) return
-    const updated = [...caseNotesFields]
-    ;[updated[idx], updated[newIdx]] = [updated[newIdx], updated[idx]]
-    setCaseNotesFields(updated)
-    saveTemplateFields('case_notes', updated)
-  }
-
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -1077,11 +1060,24 @@ export default function Home() {
                       <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Logbook Template</div>
                       <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Shared with the group when a case is logged.</div>
                       {logbookFields.map((field: string, idx: number) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                            <button onClick={() => moveLogbookField(idx, -1)} disabled={idx === 0} style={{ background: 'transparent', border: 'none', color: idx === 0 ? '#2d3748' : '#4a5568', fontSize: '0.55rem', cursor: idx === 0 ? 'default' : 'pointer', padding: '0 2px', lineHeight: 1 }}>&#9650;</button>
-                            <button onClick={() => moveLogbookField(idx, 1)} disabled={idx === logbookFields.length - 1} style={{ background: 'transparent', border: 'none', color: idx === logbookFields.length - 1 ? '#2d3748' : '#4a5568', fontSize: '0.55rem', cursor: idx === logbookFields.length - 1 ? 'default' : 'pointer', padding: '0 2px', lineHeight: 1 }}>&#9660;</button>
-                          </div>
+                        <div
+                          key={field}
+                          draggable
+                          onDragStart={() => setDragIdx(idx)}
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={() => {
+                            if (dragIdx === null || dragIdx === idx) return
+                            const updated = [...logbookFields]
+                            const [moved] = updated.splice(dragIdx, 1)
+                            updated.splice(idx, 0, moved)
+                            setLogbookFields(updated)
+                            saveTemplateFields('logbook', updated)
+                            setDragIdx(null)
+                          }}
+                          onDragEnd={() => setDragIdx(null)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem', cursor: 'grab' }}
+                        >
+                          <span style={{ color: '#4a5568', fontSize: '0.7rem', padding: '0 2px', userSelect: 'none' }}>&#9776;</span>
                           <div style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: '0.78rem', color: '#94a3b8' }}>{field}</div>
                           <button onClick={() => removeLogbookField(idx)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>&#10005;</button>
                         </div>
@@ -1103,11 +1099,24 @@ export default function Home() {
                       <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Case Notes Template</div>
                       <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Personal to the user — not shared with the group.</div>
                       {caseNotesFields.map((field: string, idx: number) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                            <button onClick={() => moveCaseNotesField(idx, -1)} disabled={idx === 0} style={{ background: 'transparent', border: 'none', color: idx === 0 ? '#2d3748' : '#4a5568', fontSize: '0.55rem', cursor: idx === 0 ? 'default' : 'pointer', padding: '0 2px', lineHeight: 1 }}>&#9650;</button>
-                            <button onClick={() => moveCaseNotesField(idx, 1)} disabled={idx === caseNotesFields.length - 1} style={{ background: 'transparent', border: 'none', color: idx === caseNotesFields.length - 1 ? '#2d3748' : '#4a5568', fontSize: '0.55rem', cursor: idx === caseNotesFields.length - 1 ? 'default' : 'pointer', padding: '0 2px', lineHeight: 1 }}>&#9660;</button>
-                          </div>
+                        <div
+                          key={field}
+                          draggable
+                          onDragStart={() => setDragIdx(idx)}
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={() => {
+                            if (dragIdx === null || dragIdx === idx) return
+                            const updated = [...caseNotesFields]
+                            const [moved] = updated.splice(dragIdx, 1)
+                            updated.splice(idx, 0, moved)
+                            setCaseNotesFields(updated)
+                            saveTemplateFields('case_notes', updated)
+                            setDragIdx(null)
+                          }}
+                          onDragEnd={() => setDragIdx(null)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem', cursor: 'grab' }}
+                        >
+                          <span style={{ color: '#4a5568', fontSize: '0.7rem', padding: '0 2px', userSelect: 'none' }}>&#9776;</span>
                           <div style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: '0.78rem', color: '#94a3b8' }}>{field}</div>
                           <button onClick={() => removeCaseNotesField(idx)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>&#10005;</button>
                         </div>
