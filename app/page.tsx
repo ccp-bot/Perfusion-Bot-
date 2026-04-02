@@ -15,6 +15,7 @@ const SIDEBAR_ITEMS = [
   { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
   { key: 'Checklists', emoji: null, image: '/Checkmark.Icon.png', label: 'Checklists' },
   { key: 'Charting', emoji: null, image: '/Chart.Icon.png', label: 'Charting' },
+  { key: 'Schedule', emoji: null, image: '/Schedule.Icon.png', label: 'Schedule' },
 ]
 
 export default function Home() {
