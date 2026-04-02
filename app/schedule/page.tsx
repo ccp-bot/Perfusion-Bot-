@@ -28,6 +28,7 @@ export default function SchedulePage() {
   const [userGroupId, setUserGroupId] = useState<string | null>(null)
   const [userGroupName, setUserGroupName] = useState<string | null>(null)
   const [members, setMembers] = useState<any[]>([])
+  const [profileMap, setProfileMap] = useState<{[key: string]: string}>({})
   const [shiftTypes, setShiftTypes] = useState<any[]>([])
   const [entries, setEntries] = useState<any[]>([])
   const [weekStart, setWeekStart] = useState(getMonday(new Date()))
@@ -81,6 +82,15 @@ export default function SchedulePage() {
     const sRes = await fetch(`/api/schedule?groupId=${userGroupId}&weekStart=${formatDate(weekStart)}`)
     const sData = await sRes.json()
     setEntries(sData.entries || [])
+
+    // Fetch profiles
+    const pRes = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId: userGroupId })
+    })
+    const pData = await pRes.json()
+    setProfileMap(pData.profiles || {})
 
     // Fetch time-off requests
     const toRes = await fetch(`/api/time-off?groupId=${userGroupId}&pending=true`)
@@ -231,7 +241,7 @@ export default function SchedulePage() {
               {members.map(member => (
                 <tr key={member.user_id || member.email}>
                   <td style={{ padding: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem' }}>
-                    {(member.email || '').split('@')[0]}
+                    {profileMap[member.user_id] || (member.email || '').split('@')[0]}
                   </td>
                   {days.map(d => {
                     const dateStr = formatDate(d)
@@ -308,7 +318,7 @@ export default function SchedulePage() {
               <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Time-Off Requests</div>
               {timeOffRequests.map(req => (
                 <div key={req.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.6rem', marginBottom: '0.5rem' }}>
-                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: '500' }}>{req.user_email?.split('@')[0]}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: '500' }}>{(req.user_id && profileMap[req.user_id]) || req.user_email?.split('@')[0]}</div>
                   <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '2px' }}>{new Date(req.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
                   {req.reason && <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '3px' }}>{req.reason}</div>}
                   <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.4rem' }}>

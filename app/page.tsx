@@ -36,6 +36,9 @@ export default function Home() {
   const [pendingSummary, setPendingSummary] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [saving, setSaving] = useState(false)
+  const [displayName, setDisplayName] = useState<string | null>(null)
+  const [showNamePrompt, setShowNamePrompt] = useState(false)
+  const [nameInput, setNameInput] = useState('')
   const [user, setUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [activePanel, setActivePanel] = useState<string | null>(null)
@@ -115,6 +118,34 @@ export default function Home() {
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  // Fetch profile when user is set
+  useEffect(() => {
+    if (!user) return
+    async function fetchProfile() {
+      try {
+        const res = await fetch(`/api/profile?userId=${user.id}`)
+        const data = await res.json()
+        if (data.profile?.display_name) {
+          setDisplayName(data.profile.display_name)
+        } else {
+          setShowNamePrompt(true)
+        }
+      } catch { setShowNamePrompt(true) }
+    }
+    fetchProfile()
+  }, [user])
+
+  async function saveDisplayName() {
+    if (!nameInput.trim() || !user) return
+    await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, email: user.email, displayName: nameInput.trim() })
+    })
+    setDisplayName(nameInput.trim())
+    setShowNamePrompt(false)
+  }
 
   // Fetch group membership when user is set
   useEffect(() => {
@@ -1238,7 +1269,8 @@ export default function Home() {
               {userRole}
             </div>
           )}
-          <div style={{ fontSize: '0.65rem', color: '#4a5568', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
+          <div style={{ fontSize: '0.75rem', color: '#e2e8f0', marginBottom: '0.2rem', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName || user?.email?.split('@')[0]}</div>
+          <div style={{ fontSize: '0.6rem', color: '#4a5568', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
           <button onClick={signOut} style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#4a5568', fontSize: '0.72rem', cursor: 'pointer' }}>Sign out</button>
         </div>
       </div>
@@ -1792,6 +1824,25 @@ export default function Home() {
                 <button onClick={cancelSave} style={{ padding: '0.55rem 1.1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: '0.82rem', cursor: 'pointer' }}>Cancel</button>
                 <button onClick={confirmSave} disabled={!selectedCategory || saving} style={{ padding: '0.55rem 1.1rem', borderRadius: '8px', border: 'none', background: !selectedCategory || saving ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.82rem', fontWeight: '500', cursor: !selectedCategory || saving ? 'not-allowed' : 'pointer' }}>{saving ? 'Saving...' : 'Save'}</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Name prompt modal */}
+        {showNamePrompt && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 60, backdropFilter: 'blur(4px)' }}>
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.75rem', width: '90%', maxWidth: '400px', animation: 'modalIn 0.2s ease' }}>
+              <div style={{ fontWeight: '600', fontSize: '0.95rem', color: '#ffffff', marginBottom: '0.4rem' }}>Welcome to COR</div>
+              <div style={{ fontSize: '0.78rem', color: '#4a5568', marginBottom: '1rem' }}>Enter your name so your team can identify you on schedules and case logs.</div>
+              <input
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveDisplayName()}
+                placeholder="Your full name"
+                autoFocus
+                style={{ width: '100%', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', marginBottom: '1rem', boxSizing: 'border-box' }}
+              />
+              <button onClick={saveDisplayName} disabled={!nameInput.trim()} style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: 'none', background: !nameInput.trim() ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.88rem', fontWeight: '600', cursor: !nameInput.trim() ? 'not-allowed' : 'pointer' }}>Continue</button>
             </div>
           </div>
         )}
