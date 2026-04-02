@@ -21,6 +21,11 @@ function getDateLabel(d: Date): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+function getFullDateLabel(d: Date): string {
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+
 export default function SchedulePage() {
   const [user, setUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -31,11 +36,12 @@ export default function SchedulePage() {
   const [profileMap, setProfileMap] = useState<{[key: string]: string}>({})
   const [shiftTypes, setShiftTypes] = useState<any[]>([])
   const [entries, setEntries] = useState<any[]>([])
-  const [weekStart, setWeekStart] = useState(getMonday(new Date()))
   const [timeOffRequests, setTimeOffRequests] = useState<any[]>([])
   const [newShiftName, setNewShiftName] = useState('')
   const [newShiftColor, setNewShiftColor] = useState('#3b82f6')
   const [selectedShift, setSelectedShift] = useState<string | null>(null)
+  const [view, setView] = useState<'day' | 'week' | 'month'>('day')
+  const [currentDate, setCurrentDate] = useState(new Date())
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
@@ -48,7 +54,6 @@ export default function SchedulePage() {
   useEffect(() => {
     if (!user) return
     async function init() {
-      // Fetch group
       const gRes = await fetch(`/api/groups?userId=${user.id}&email=${encodeURIComponent(user.email)}`)
       const gData = await gRes.json()
       if (gData.memberships?.length > 0) {
@@ -64,26 +69,47 @@ export default function SchedulePage() {
   useEffect(() => {
     if (!userGroupId) return
     fetchScheduleData()
-  }, [userGroupId, weekStart])
+  }, [userGroupId, currentDate, view])
 
   async function fetchScheduleData() {
     if (!userGroupId) return
-    // Fetch members
+
     const mRes = await fetch(`/api/groups/members?groupId=${userGroupId}`)
     const mData = await mRes.json()
     setMembers(mData.members || [])
 
-    // Fetch shift types
     const stRes = await fetch(`/api/schedule?groupId=${userGroupId}&shiftTypes=true`)
     const stData = await stRes.json()
     setShiftTypes(stData.shiftTypes || [])
 
-    // Fetch schedule entries
-    const sRes = await fetch(`/api/schedule?groupId=${userGroupId}&weekStart=${formatDate(weekStart)}`)
-    const sData = await sRes.json()
-    setEntries(sData.entries || [])
+    // Determine date range based on view
+    let start: string
+    if (view === 'day') {
+      start = formatDate(currentDate)
+    } else if (view === 'week') {
+      start = formatDate(getMonday(currentDate))
+    } else {
+      start = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
+    }
 
-    // Fetch profiles
+    if (view === 'month') {
+      const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+      const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 7)
+      let allEntries: any[] = []
+      let ws = getMonday(monthStart)
+      while (ws < monthEnd) {
+        const r = await fetch(`/api/schedule?groupId=${userGroupId}&weekStart=${formatDate(ws)}`)
+        const d = await r.json()
+        allEntries = [...allEntries, ...(d.entries || [])]
+        ws = new Date(ws)
+        ws.setDate(ws.getDate() + 7)
+      }
+      setEntries(allEntries)
+    } else {
+      const sData = await (await fetch(`/api/schedule?groupId=${userGroupId}&weekStart=${start}`)).json()
+      setEntries(sData.entries || [])
+    }
+
     const pRes = await fetch('/api/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -92,7 +118,6 @@ export default function SchedulePage() {
     const pData = await pRes.json()
     setProfileMap(pData.profiles || {})
 
-    // Fetch time-off requests
     const toRes = await fetch(`/api/time-off?groupId=${userGroupId}&pending=true`)
     const toData = await toRes.json()
     setTimeOffRequests(toData.requests || [])
@@ -105,7 +130,6 @@ export default function SchedulePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ groupId: userGroupId, userId, userEmail, date, shiftType, userRole })
     })
-    // Update local state
     if (shiftType) {
       setEntries(prev => {
         const filtered = prev.filter(e => !(e.user_id === userId && e.date === date))
@@ -145,24 +169,12 @@ export default function SchedulePage() {
     setTimeOffRequests(prev => prev.filter(r => r.id !== id))
   }
 
-  function prevWeek() {
-    const d = new Date(weekStart)
-    d.setDate(d.getDate() - 7)
-    setWeekStart(d)
-  }
-
-  function nextWeek() {
-    const d = new Date(weekStart)
-    d.setDate(d.getDate() + 7)
-    setWeekStart(d)
-  }
-
-  // Build 7 days from weekStart
-  const days: Date[] = []
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart)
-    d.setDate(d.getDate() + i)
-    days.push(d)
+  function navigate(dir: -1 | 1) {
+    const d = new Date(currentDate)
+    if (view === 'day') d.setDate(d.getDate() + dir)
+    else if (view === 'week') d.setDate(d.getDate() + dir * 7)
+    else d.setMonth(d.getMonth() + dir)
+    setCurrentDate(d)
   }
 
   function getEntry(userId: string, date: string) {
@@ -170,19 +182,42 @@ export default function SchedulePage() {
   }
 
   function getShiftColor(name: string): string {
-    const st = shiftTypes.find(s => s.name === name)
-    return st?.color || '#4a5568'
+    return shiftTypes.find(s => s.name === name)?.color || '#4a5568'
+  }
+
+  function getEntriesForDate(date: string) {
+    return entries.filter(e => e.date === date)
   }
 
   if (authLoading) return null
 
   const isAdmin = userRole === 'owner' || userRole === 'admin'
   const colors = ['#3b82f6', '#22c55e', '#e63946', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#4a5568']
+  const todayStr = formatDate(new Date())
+
+  // Build days for current view
+  let viewDays: Date[] = []
+  if (view === 'day') {
+    viewDays = [currentDate]
+  } else if (view === 'week') {
+    const mon = getMonday(currentDate)
+    for (let i = 0; i < 7; i++) { const d = new Date(mon); d.setDate(d.getDate() + i); viewDays.push(d) }
+  } else {
+    const firstOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    const startDay = getMonday(firstOfMonth)
+    for (let i = 0; i < 42; i++) { const d = new Date(startDay); d.setDate(d.getDate() + i); viewDays.push(d) }
+  }
+
+  // Header label
+  let headerLabel = ''
+  if (view === 'day') headerLabel = getFullDateLabel(currentDate)
+  else if (view === 'week') headerLabel = `${getDateLabel(viewDays[0])} - ${getDateLabel(viewDays[6])}`
+  else headerLabel = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   return (
     <div style={{ minHeight: '100vh', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button onClick={() => window.location.href = '/'} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}>&larr;</button>
           <div>
@@ -190,95 +225,134 @@ export default function SchedulePage() {
             <div style={{ fontSize: '0.7rem', color: '#e63946', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{userGroupName}</div>
           </div>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {/* View tabs */}
+          {(['day', 'week', 'month'] as const).map(v => (
+            <button key={v} onClick={() => { setView(v); setCurrentDate(new Date()) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: `1px solid ${view === v ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: view === v ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.04)', color: view === v ? '#e63946' : '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', textTransform: 'capitalize', fontWeight: view === v ? '600' : '400' }}>{v}</button>
+          ))}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <button onClick={prevWeek} style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&larr; Prev</button>
-          <div style={{ fontSize: '0.85rem', fontWeight: '500', minWidth: '140px', textAlign: 'center' }}>
-            {getDateLabel(days[0])} - {getDateLabel(days[6])}
-          </div>
-          <button onClick={nextWeek} style={{ padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>Next &rarr;</button>
+          <button onClick={() => navigate(-1)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&larr;</button>
+          <div style={{ fontSize: '0.85rem', fontWeight: '500', minWidth: '160px', textAlign: 'center' }}>{headerLabel}</div>
+          <button onClick={() => navigate(1)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&rarr;</button>
+          <button onClick={() => setCurrentDate(new Date())} style={{ padding: '0.35rem 0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Today</button>
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', padding: '1rem 1.5rem' }}>
-        {/* Main calendar grid */}
+        {/* Main content */}
         <div style={{ flex: 1, overflowX: 'auto' }}>
           {/* Shift type selector for admins */}
           {isAdmin && (
             <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', color: '#4a5568', marginRight: '0.3rem' }}>Assign:</span>
               {shiftTypes.map(st => (
-                <button
-                  key={st.id}
-                  onClick={() => setSelectedShift(selectedShift === st.name ? null : st.name)}
-                  style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${selectedShift === st.name ? st.color : 'rgba(255,255,255,0.1)'}`, background: selectedShift === st.name ? st.color : 'transparent', color: selectedShift === st.name ? 'white' : st.color, fontSize: '0.75rem', cursor: 'pointer', transition: 'all 0.15s ease' }}
-                >
-                  {st.name}
-                </button>
+                <button key={st.id} onClick={() => setSelectedShift(selectedShift === st.name ? null : st.name)} style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${selectedShift === st.name ? st.color : 'rgba(255,255,255,0.1)'}`, background: selectedShift === st.name ? st.color : 'transparent', color: selectedShift === st.name ? 'white' : st.color, fontSize: '0.75rem', cursor: 'pointer', transition: 'all 0.15s ease' }}>{st.name}</button>
               ))}
-              <button
-                onClick={() => setSelectedShift(selectedShift === '__clear__' ? null : '__clear__')}
-                style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${selectedShift === '__clear__' ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: selectedShift === '__clear__' ? 'rgba(230,57,70,0.2)' : 'transparent', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}
-              >
-                Clear
-              </button>
+              <button onClick={() => setSelectedShift(selectedShift === '__clear__' ? null : '__clear__')} style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${selectedShift === '__clear__' ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: selectedShift === '__clear__' ? 'rgba(230,57,70,0.2)' : 'transparent', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Clear</button>
             </div>
           )}
 
-          {/* Grid */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.06)', color: '#4a5568', fontWeight: '500', width: '140px' }}>Team Member</th>
-                {days.map(d => (
-                  <th key={formatDate(d)} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', color: '#4a5568', fontWeight: '500' }}>
-                    <div>{getDayName(d)}</div>
-                    <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>{getDateLabel(d)}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {members.map(member => (
-                <tr key={member.user_id || member.email}>
-                  <td style={{ padding: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem' }}>
-                    {profileMap[member.user_id] || (member.email || '').split('@')[0]}
-                  </td>
-                  {days.map(d => {
-                    const dateStr = formatDate(d)
-                    const entry = getEntry(member.user_id, dateStr)
-                    const shiftName = entry?.shift_type || ''
-                    const color = shiftName ? getShiftColor(shiftName) : 'transparent'
+          {/* DAY VIEW */}
+          {view === 'day' && (
+            <div>
+              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>On Duty Today</div>
+              {members.map(member => {
+                const entry = getEntry(member.user_id, formatDate(currentDate))
+                const name = profileMap[member.user_id] || (member.email || '').split('@')[0]
+                const shiftName = entry?.shift_type || ''
+                const color = shiftName ? getShiftColor(shiftName) : ''
+                return (
+                  <div
+                    key={member.user_id || member.email}
+                    onClick={() => {
+                      if (!isAdmin || !selectedShift) return
+                      setScheduleEntry(member.user_id, member.email, formatDate(currentDate), selectedShift === '__clear__' ? null : selectedShift)
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', marginBottom: '0.5rem', cursor: isAdmin && selectedShift ? 'pointer' : 'default' }}
+                  >
+                    <div style={{ fontSize: '0.88rem', color: '#e2e8f0', fontWeight: '500' }}>{name}</div>
+                    {shiftName ? (
+                      <div style={{ padding: '0.3rem 0.75rem', borderRadius: '16px', background: color + '22', color, fontSize: '0.78rem', fontWeight: '500' }}>{shiftName}</div>
+                    ) : (
+                      <div style={{ fontSize: '0.75rem', color: '#4a5568' }}>Not scheduled</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
-                    return (
-                      <td
-                        key={dateStr}
-                        onClick={() => {
-                          if (!isAdmin || !selectedShift) return
-                          if (selectedShift === '__clear__') {
-                            setScheduleEntry(member.user_id, member.email, dateStr, null)
-                          } else {
-                            setScheduleEntry(member.user_id, member.email, dateStr, selectedShift)
-                          }
-                        }}
-                        style={{ padding: '0.4rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: isAdmin && selectedShift ? 'pointer' : 'default' }}
-                      >
-                        {shiftName && (
-                          <div style={{ padding: '0.25rem 0.4rem', borderRadius: '6px', background: color + '22', color, fontSize: '0.7rem', fontWeight: '500' }}>
-                            {shiftName}
-                          </div>
-                        )}
-                      </td>
-                    )
-                  })}
+          {/* WEEK VIEW */}
+          {view === 'week' && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.06)', color: '#4a5568', fontWeight: '500', width: '140px' }}>Team</th>
+                  {viewDays.map(d => (
+                    <th key={formatDate(d)} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', color: formatDate(d) === todayStr ? '#e63946' : '#4a5568', fontWeight: '500' }}>
+                      <div>{getDayName(d)}</div>
+                      <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>{getDateLabel(d)}</div>
+                    </th>
+                  ))}
                 </tr>
+              </thead>
+              <tbody>
+                {members.map(member => (
+                  <tr key={member.user_id || member.email}>
+                    <td style={{ padding: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem' }}>
+                      {profileMap[member.user_id] || (member.email || '').split('@')[0]}
+                    </td>
+                    {viewDays.map(d => {
+                      const dateStr = formatDate(d)
+                      const entry = getEntry(member.user_id, dateStr)
+                      const shiftName = entry?.shift_type || ''
+                      const color = shiftName ? getShiftColor(shiftName) : 'transparent'
+                      return (
+                        <td key={dateStr} onClick={() => { if (!isAdmin || !selectedShift) return; setScheduleEntry(member.user_id, member.email, dateStr, selectedShift === '__clear__' ? null : selectedShift) }} style={{ padding: '0.4rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: isAdmin && selectedShift ? 'pointer' : 'default', background: dateStr === todayStr ? 'rgba(230,57,70,0.04)' : 'transparent' }}>
+                          {shiftName && <div style={{ padding: '0.25rem 0.3rem', borderRadius: '6px', background: color + '22', color, fontSize: '0.68rem', fontWeight: '500' }}>{shiftName}</div>}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {/* MONTH VIEW */}
+          {view === 'month' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', overflow: 'hidden' }}>
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                <div key={d} style={{ padding: '0.4rem', textAlign: 'center', fontSize: '0.7rem', color: '#4a5568', fontWeight: '500', background: '#0d1117' }}>{d}</div>
               ))}
-            </tbody>
-          </table>
+              {viewDays.map(d => {
+                const dateStr = formatDate(d)
+                const isCurrentMonth = d.getMonth() === currentDate.getMonth()
+                const isToday = dateStr === todayStr
+                const dayEntries = getEntriesForDate(dateStr)
+                return (
+                  <div key={dateStr} style={{ minHeight: '70px', padding: '0.3rem', background: isToday ? 'rgba(230,57,70,0.06)' : '#080b12', opacity: isCurrentMonth ? 1 : 0.3 }}>
+                    <div style={{ fontSize: '0.7rem', color: isToday ? '#e63946' : '#4a5568', fontWeight: isToday ? '600' : '400', marginBottom: '0.2rem' }}>{d.getDate()}</div>
+                    {dayEntries.slice(0, 3).map((e: any, i: number) => {
+                      const color = getShiftColor(e.shift_type)
+                      const name = profileMap[e.user_id] || (e.user_email || '').split('@')[0]
+                      return (
+                        <div key={i} style={{ fontSize: '0.55rem', padding: '1px 3px', borderRadius: '3px', background: color + '22', color, marginBottom: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {name.split(' ')[0]}
+                        </div>
+                      )
+                    })}
+                    {dayEntries.length > 3 && <div style={{ fontSize: '0.5rem', color: '#4a5568' }}>+{dayEntries.length - 3}</div>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Sidebar — shift types + time off requests */}
+        {/* Sidebar */}
         <div style={{ width: '240px', flexShrink: 0 }}>
-          {/* Shift Types Manager */}
           {isAdmin && (
             <div style={{ marginBottom: '1.5rem' }}>
               <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Shift Types</div>
@@ -299,7 +373,6 @@ export default function SchedulePage() {
             </div>
           )}
 
-          {/* Legend */}
           {!isAdmin && shiftTypes.length > 0 && (
             <div style={{ marginBottom: '1.5rem' }}>
               <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Legend</div>
@@ -312,7 +385,6 @@ export default function SchedulePage() {
             </div>
           )}
 
-          {/* Time-Off Requests */}
           {isAdmin && timeOffRequests.length > 0 && (
             <div>
               <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Time-Off Requests</div>
