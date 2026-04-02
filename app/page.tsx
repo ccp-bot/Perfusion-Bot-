@@ -58,6 +58,11 @@ export default function Home() {
   const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set())
   const [checklistFiles, setChecklistFiles] = useState<any[]>([])
   const [checklistUploading, setChecklistUploading] = useState(false)
+  const [inventoryItems, setInventoryItems] = useState<any[]>([])
+  const [inventoryAdding, setInventoryAdding] = useState(false)
+  const [newItemName, setNewItemName] = useState('')
+  const [newItemQty, setNewItemQty] = useState('')
+  const [identifyingItem, setIdentifyingItem] = useState(false)
   const [caseLogging, setCaseLogging] = useState(false)
   const [caseLogData, setCaseLogData] = useState<{[key: string]: string}>({})
   const [caseLogMissing, setCaseLogMissing] = useState<string[]>([])
@@ -314,6 +319,10 @@ export default function Home() {
       await fetchChecklists()
       return
     }
+    if (category === 'Equipment') {
+      await fetchInventory()
+      return
+    }
     setPanelLoading(true)
     try {
       const groupParam = userGroupId ? `&groupId=${userGroupId}` : ''
@@ -363,6 +372,64 @@ export default function Home() {
       })
       setChecklistFiles(prev => prev.filter(f => f.id !== id))
     } catch {}
+  }
+
+  async function fetchInventory() {
+    if (!userGroupId) return
+    setPanelLoading(true)
+    try {
+      const res = await fetch(`/api/inventory?groupId=${userGroupId}`)
+      const data = await res.json()
+      setInventoryItems(data.items || [])
+    } catch { setInventoryItems([]) }
+    setPanelLoading(false)
+  }
+
+  async function addInventoryItem() {
+    if (!newItemName.trim() || !userGroupId || !user) return
+    setInventoryAdding(true)
+    try {
+      await fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: userGroupId, itemName: newItemName.trim(), quantity: parseInt(newItemQty) || 0, userId: user.id, userRole })
+      })
+      setNewItemName('')
+      setNewItemQty('')
+      fetchInventory()
+    } catch {}
+    setInventoryAdding(false)
+  }
+
+  async function updateItemQuantity(id: number, quantity: number) {
+    if (!user) return
+    await fetch('/api/inventory', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, quantity, userId: user.id })
+    })
+    setInventoryItems(prev => prev.map(i => i.id === id ? { ...i, quantity } : i))
+  }
+
+  async function deleteInventoryItem(id: number) {
+    await fetch('/api/inventory', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, userRole })
+    })
+    setInventoryItems(prev => prev.filter(i => i.id !== id))
+  }
+
+  async function identifyFromPhoto(file: File) {
+    setIdentifyingItem(true)
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+      const res = await fetch('/api/inventory/identify', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.itemName) setNewItemName(data.itemName)
+    } catch {}
+    setIdentifyingItem(false)
   }
 
   async function fetchHistory() {
@@ -969,7 +1036,7 @@ export default function Home() {
             <div>
               <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : `${panelEntries.length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -1203,6 +1270,66 @@ export default function Home() {
               </div>
             )}
 
+            {activePanel === 'Equipment' && !panelLoading && (
+              <>
+                {/* Add item — photo or manual */}
+                {(userRole === 'owner' || userRole === 'admin') && (
+                  <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="item-photo"
+                        style={{ display: 'none' }}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) identifyFromPhoto(f); e.target.value = '' }}
+                      />
+                      <label htmlFor="item-photo" style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer', textAlign: 'center' }}>
+                        {identifyingItem ? 'Identifying...' : 'Snap photo to identify item'}
+                      </label>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input
+                        value={newItemName}
+                        onChange={e => setNewItemName(e.target.value)}
+                        placeholder="Item name"
+                        style={{ flex: 1, padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      <input
+                        value={newItemQty}
+                        onChange={e => setNewItemQty(e.target.value)}
+                        placeholder="Qty"
+                        type="number"
+                        style={{ width: '60px', padding: '0.45rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', textAlign: 'center' }}
+                      />
+                      <button onClick={addInventoryItem} disabled={inventoryAdding || !newItemName.trim()} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: 'none', background: !newItemName.trim() ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', cursor: !newItemName.trim() ? 'not-allowed' : 'pointer', flexShrink: 0 }}>+</button>
+                    </div>
+                  </div>
+                )}
+
+                {inventoryItems.length === 0 && (
+                  <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                    <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128230;</div>
+                    <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No inventory items yet.</div>
+                  </div>
+                )}
+                {inventoryItems.map((item) => (
+                  <div key={item.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.item_name}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
+                      <button onClick={() => updateItemQuantity(item.id, Math.max(0, (item.quantity || 0) - 1))} style={{ width: '24px', height: '24px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+                      <div style={{ width: '36px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600', color: item.quantity <= 2 ? '#e63946' : item.quantity <= 5 ? '#f59e0b' : '#22c55e' }}>{item.quantity}</div>
+                      <button onClick={() => updateItemQuantity(item.id, (item.quantity || 0) + 1)} style={{ width: '24px', height: '24px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                    </div>
+                    {(userRole === 'owner' || userRole === 'admin') && (
+                      <button onClick={() => deleteInventoryItem(item.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+
             {activePanel === 'Checklists' && !panelLoading && (
               <>
                 {/* Upload — Owner/Admin only */}
@@ -1269,7 +1396,7 @@ export default function Home() {
               </>
             )}
 
-            {activePanel !== 'History' && activePanel !== 'Admin' && activePanel !== 'Checklists' && !panelLoading && (
+            {activePanel !== 'History' && activePanel !== 'Admin' && activePanel !== 'Checklists' && activePanel !== 'Equipment' && !panelLoading && (
               <>
                 {/* Upload controls — Owner/Admin only */}
                 {(userRole === 'owner' || userRole === 'admin') && (
