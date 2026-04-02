@@ -6,6 +6,13 @@ import { supabase } from './lib/supabase'
 const CATEGORIES = ['Protocol', 'Case Notes', 'Equipment', 'Policy', 'Logbook', 'Checklists', 'Charting']
 const SUPER_OWNER_EMAIL = 'cliftonmarschel@gmail.com'
 
+function formatDate(d: Date): string { return d.toISOString().split('T')[0] }
+function getMonday(d: Date): Date {
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  return new Date(d.getFullYear(), d.getMonth(), diff)
+}
+
 const SIDEBAR_ITEMS = [
   { key: 'History', emoji: null, image: '/History.Icon.png', label: 'History' },
   { key: 'Logbook', emoji: null, image: '/Logbook.icon.png', label: 'Logbook' },
@@ -876,6 +883,83 @@ export default function Home() {
       return
     }
 
+    // Detect time-off requests (e.g., "I need Friday off", "request off April 15")
+    const timeOffMatch = input.trim().match(/(?:need|request|want|take)\s+(?:off|day off|time off).*?(\w+\s+\d{1,2}(?:,?\s*\d{4})?|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|next\s+\w+))/i)
+    if (timeOffMatch && userGroupId) {
+      const dateText = timeOffMatch[1]
+      const userMsg = input.trim()
+      setInput('')
+      setMessages(prev => [...prev, { role: 'user', content: userMsg }])
+      // Try to parse the date
+      let requestDate: Date | null = null
+      const lower = dateText.toLowerCase()
+      if (lower === 'tomorrow') {
+        requestDate = new Date()
+        requestDate.setDate(requestDate.getDate() + 1)
+      } else {
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+        const dayIdx = dayNames.indexOf(lower)
+        if (dayIdx >= 0) {
+          requestDate = new Date()
+          const today = requestDate.getDay()
+          const diff = (dayIdx - today + 7) % 7 || 7
+          requestDate.setDate(requestDate.getDate() + diff)
+        } else {
+          requestDate = new Date(dateText)
+        }
+      }
+      if (requestDate && !isNaN(requestDate.getTime())) {
+        const dateStr = formatDate(requestDate)
+        await fetch('/api/time-off', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupId: userGroupId, userId: user.id, userEmail: user.email, date: dateStr, reason: userMsg })
+        })
+        setMessages(prev => [...prev, { role: 'assistant', content: `Time-off request submitted for ${requestDate!.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}. Your admin will review it.` }])
+        return
+      }
+    }
+
+    // Detect schedule queries (e.g., "who's on call Saturday", "who is working tomorrow")
+    const scheduleQuery = input.trim().match(/(?:who.?s|who is)\s+(?:on call|on|working|off|scheduled)\s+(?:on\s+)?(.+)/i)
+    if (scheduleQuery && userGroupId) {
+      const dateText = scheduleQuery[1].trim()
+      const userMsg = input.trim()
+      setInput('')
+      setMessages(prev => [...prev, { role: 'user', content: userMsg }])
+      // Parse date
+      let queryDate: Date | null = null
+      const lower = dateText.toLowerCase()
+      if (lower === 'today') queryDate = new Date()
+      else if (lower === 'tomorrow') { queryDate = new Date(); queryDate.setDate(queryDate.getDate() + 1) }
+      else {
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+        const dayIdx = dayNames.indexOf(lower)
+        if (dayIdx >= 0) {
+          queryDate = new Date()
+          const today = queryDate.getDay()
+          const diff = (dayIdx - today + 7) % 7 || 7
+          queryDate.setDate(queryDate.getDate() + diff)
+        } else {
+          queryDate = new Date(dateText)
+        }
+      }
+      if (queryDate && !isNaN(queryDate.getTime())) {
+        const dateStr = formatDate(queryDate)
+        const monday = getMonday(queryDate)
+        const res = await fetch(`/api/schedule?groupId=${userGroupId}&weekStart=${formatDate(monday)}`)
+        const data = await res.json()
+        const dayEntries = (data.entries || []).filter((e: any) => e.date === dateStr)
+        if (dayEntries.length === 0) {
+          setMessages(prev => [...prev, { role: 'assistant', content: `No one is scheduled for ${queryDate!.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} yet.` }])
+        } else {
+          const lines = dayEntries.map((e: any) => `${(e.user_email || '').split('@')[0]} - ${e.shift_type}`)
+          setMessages(prev => [...prev, { role: 'assistant', content: `Schedule for ${queryDate!.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}:\n${lines.join('\n')}` }])
+        }
+        return
+      }
+    }
+
     const userMessage = input
     const imageToSend = attachedImage
     setInput('')
@@ -1107,7 +1191,7 @@ export default function Home() {
           {SIDEBAR_ITEMS.map(item => (
             <button
               key={item.key}
-              onClick={() => { openPanel(item.key); setSidebarOpen(false) }}
+              onClick={() => { if (item.key === 'Schedule') { window.location.href = '/schedule'; return } openPanel(item.key); setSidebarOpen(false) }}
               className={`sidebar-btn${activePanel === item.key ? ' active' : ''}`}
               style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
             >
