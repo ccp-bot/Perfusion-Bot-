@@ -63,6 +63,13 @@ export default function Home() {
   const [newItemName, setNewItemName] = useState('')
   const [newItemQty, setNewItemQty] = useState('')
   const [identifyingItem, setIdentifyingItem] = useState(false)
+  const [caseEquipMap, setCaseEquipMap] = useState<{[caseType: string]: {itemName: string, quantity: number}[]}>({})
+  const [caseTypes] = useState(['AVR', 'MVR', 'CABG', 'Type-A', 'Peds'])
+  const [editingCaseType, setEditingCaseType] = useState<string | null>(null)
+  const [newEquipItem, setNewEquipItem] = useState('')
+  const [newEquipQty, setNewEquipQty] = useState('1')
+  const [caseLogExtraMode, setCaseLogExtraMode] = useState(false)
+  const [caseLogExtraItems, setCaseLogExtraItems] = useState<{itemName: string, quantity: number}[]>([])
   const [caseLogging, setCaseLogging] = useState(false)
   const [caseLogData, setCaseLogData] = useState<{[key: string]: string}>({})
   const [caseLogMissing, setCaseLogMissing] = useState<string[]>([])
@@ -132,6 +139,18 @@ export default function Home() {
       } catch { /* use defaults */ }
     }
     fetchTemplate()
+    async function fetchCaseEquipment() {
+      try {
+        const res = await fetch(`/api/case-equipment?groupId=${userGroupId}`)
+        const data = await res.json()
+        const map: {[k: string]: {itemName: string, quantity: number}[]} = {}
+        for (const m of (data.mappings || [])) {
+          map[m.case_type] = m.items || []
+        }
+        setCaseEquipMap(map)
+      } catch {}
+    }
+    fetchCaseEquipment()
   }, [userGroupId])
 
   // Fetch notifications and poll every 30 seconds
@@ -432,6 +451,67 @@ export default function Home() {
     setIdentifyingItem(false)
   }
 
+  function addEquipToCase(caseType: string) {
+    if (!newEquipItem.trim()) return
+    const current = caseEquipMap[caseType] || []
+    const updated = [...current, { itemName: newEquipItem.trim(), quantity: parseInt(newEquipQty) || 1 }]
+    setCaseEquipMap(prev => ({ ...prev, [caseType]: updated }))
+    setNewEquipItem('')
+    setNewEquipQty('1')
+    saveCaseEquipment(caseType, updated)
+  }
+
+  function removeEquipFromCase(caseType: string, idx: number) {
+    const current = caseEquipMap[caseType] || []
+    const updated = current.filter((_: any, i: number) => i !== idx)
+    setCaseEquipMap(prev => ({ ...prev, [caseType]: updated }))
+    saveCaseEquipment(caseType, updated)
+  }
+
+  async function saveCaseEquipment(caseType: string, items: {itemName: string, quantity: number}[]) {
+    if (!userGroupId || !user) return
+    await fetch('/api/case-equipment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId: userGroupId, caseType, items, userId: user.id, userRole })
+    }).catch(() => {})
+  }
+
+  async function deductEquipmentForCase(caseType: string) {
+    const items = caseEquipMap[caseType] || []
+    if (items.length === 0 || !userGroupId) return
+    for (const item of items) {
+      // Find matching inventory item and reduce quantity
+      const match = inventoryItems.find((inv: any) => inv.item_name.toLowerCase() === item.itemName.toLowerCase())
+      if (match) {
+        const newQty = Math.max(0, (match.quantity || 0) - item.quantity)
+        await fetch('/api/inventory', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: match.id, quantity: newQty, userId: user?.id })
+        })
+      }
+    }
+    // Refresh inventory
+    fetchInventory()
+  }
+
+  async function deductExtraItems(extras: {itemName: string, quantity: number}[]) {
+    if (!userGroupId) return
+    for (const item of extras) {
+      const match = inventoryItems.find((inv: any) => inv.item_name.toLowerCase() === item.itemName.toLowerCase())
+      if (match) {
+        const newQty = Math.max(0, (match.quantity || 0) - item.quantity)
+        await fetch('/api/inventory', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: match.id, quantity: newQty, userId: user?.id })
+        })
+      }
+    }
+    fetchInventory()
+  }
+
   async function fetchHistory() {
     setPanelLoading(true)
     try {
@@ -664,6 +744,20 @@ export default function Home() {
       })
       const result = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', content: result.answer || 'Case logged.' }])
+
+      // Auto-deduct equipment based on case type
+      const caseType = data['Case Type'] || data['case type'] || ''
+      const matchedType = caseTypes.find(ct => ct.toLowerCase() === caseType.toLowerCase())
+      if (matchedType && caseEquipMap[matchedType]?.length > 0) {
+        await deductEquipmentForCase(matchedType)
+        const deductedItems = caseEquipMap[matchedType].map(i => `${i.itemName} x${i.quantity}`).join(', ')
+        setMessages(prev => [...prev, { role: 'assistant', content: `Equipment auto-deducted from inventory: ${deductedItems}\n\nDid you use any extra items not in the standard set? Type the item name and quantity, or type "done" to finish.` }])
+        setCaseLogExtraMode(true)
+        setCaseLogging(false)
+        setCaseLogCurrentField(0)
+        setCaseLogMissing([])
+        return
+      }
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Error saving case log.' }])
     }
@@ -722,6 +816,38 @@ export default function Home() {
 
   async function sendMessage() {
     if (!input.trim() && !attachedImage) return
+
+    // If in extra equipment mode after case log
+    if (caseLogExtraMode) {
+      const text = input.trim().toLowerCase()
+      if (text === 'done' || text === 'no' || text === 'none') {
+        setInput('')
+        setMessages(prev => [...prev, { role: 'user', content: input.trim() }, { role: 'assistant', content: 'Got it. Inventory is up to date.' }])
+        setCaseLogExtraMode(false)
+        setCaseLogExtraItems([])
+        return
+      }
+      // Parse "item name qty" or "item name x qty"
+      const match = input.trim().match(/^(.+?)\s+[x]?\s*(\d+)$/i)
+      if (match) {
+        const itemName = match[1].trim()
+        const qty = parseInt(match[2]) || 1
+        setInput('')
+        setMessages(prev => [...prev, { role: 'user', content: input.trim() }])
+        await deductExtraItems([{ itemName, quantity: qty }])
+        setCaseLogExtraItems(prev => [...prev, { itemName, quantity: qty }])
+        setMessages(prev => [...prev, { role: 'assistant', content: `Deducted ${itemName} x${qty} from inventory. Any more? Type item and quantity, or "done" to finish.` }])
+      } else {
+        // Assume quantity 1
+        const itemName = input.trim()
+        setInput('')
+        setMessages(prev => [...prev, { role: 'user', content: itemName }])
+        await deductExtraItems([{ itemName, quantity: 1 }])
+        setCaseLogExtraItems(prev => [...prev, { itemName, quantity: 1 }])
+        setMessages(prev => [...prev, { role: 'assistant', content: `Deducted ${itemName} x1 from inventory. Any more? Type item and quantity, or "done" to finish.` }])
+      }
+      return
+    }
 
     // If in case logging mode, handle as answer to current question
     if (caseLogging) {
@@ -994,6 +1120,9 @@ export default function Home() {
                 {unreadCounts[item.key] > 0 && (
                   <span style={{ position: 'absolute', top: '-6px', right: '-16px', minWidth: '16px', height: '16px', borderRadius: '8px', background: '#e63946', color: 'white', fontSize: '0.6rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{unreadCounts[item.key]}</span>
                 )}
+                {item.key === 'Equipment' && inventoryItems.filter((inv: any) => inv.quantity <= 2).length > 0 && (
+                  <span style={{ position: 'absolute', top: '-6px', right: '-16px', minWidth: '16px', height: '16px', borderRadius: '8px', background: '#f59e0b', color: 'white', fontSize: '0.6rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{inventoryItems.filter((inv: any) => inv.quantity <= 2).length}</span>
+                )}
               </span>
               {activePanel === item.key && !unreadCounts[item.key] && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
             </button>
@@ -1264,6 +1393,39 @@ export default function Home() {
                         />
                         <button onClick={addCaseNotesField} style={{ padding: '0.4rem 0.7rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}>+</button>
                       </div>
+                    </div>
+
+                    {/* Case Type Equipment Mapping */}
+                    <div style={{ marginTop: '1.5rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Equipment Per Case Type</div>
+                      <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Define default equipment used for each case type. Auto-deducted from inventory when a case is logged.</div>
+                      {caseTypes.map((ct: string) => (
+                        <div key={ct} style={{ marginBottom: '0.75rem' }}>
+                          <button
+                            onClick={() => setEditingCaseType(editingCaseType === ct ? null : ct)}
+                            style={{ width: '100%', padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: editingCaseType === ct ? 'rgba(230,57,70,0.1)' : 'rgba(255,255,255,0.03)', color: editingCaseType === ct ? '#e63946' : '#94a3b8', fontSize: '0.8rem', fontWeight: '500', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}
+                          >
+                            <span>{ct}</span>
+                            <span style={{ fontSize: '0.68rem', opacity: 0.7 }}>{(caseEquipMap[ct] || []).length} items {editingCaseType === ct ? '▲' : '▼'}</span>
+                          </button>
+                          {editingCaseType === ct && (
+                            <div style={{ padding: '0.5rem', borderLeft: '2px solid rgba(230,57,70,0.3)', marginLeft: '0.5rem', marginTop: '0.3rem' }}>
+                              {(caseEquipMap[ct] || []).map((item: any, idx: number) => (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.25rem' }}>
+                                  <div style={{ flex: 1, fontSize: '0.75rem', color: '#94a3b8' }}>{item.itemName}</div>
+                                  <div style={{ fontSize: '0.72rem', color: '#4a5568', width: '30px', textAlign: 'center' }}>x{item.quantity}</div>
+                                  <button onClick={() => removeEquipFromCase(ct, idx)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.65rem', cursor: 'pointer', opacity: 0.6 }}>&#10005;</button>
+                                </div>
+                              ))}
+                              <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem' }}>
+                                <input value={newEquipItem} onChange={e => setNewEquipItem(e.target.value)} placeholder="Item name" style={{ flex: 1, padding: '0.35rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.72rem', outline: 'none', boxSizing: 'border-box' }} />
+                                <input value={newEquipQty} onChange={e => setNewEquipQty(e.target.value)} type="number" style={{ width: '40px', padding: '0.35rem 0.3rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.72rem', outline: 'none', textAlign: 'center' }} />
+                                <button onClick={() => addEquipToCase(ct)} style={{ padding: '0.35rem 0.5rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.72rem', cursor: 'pointer' }}>+</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </>
                 )}
@@ -1565,7 +1727,7 @@ export default function Home() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                placeholder={listening ? 'Recording... click mic to stop' : caseLogging ? `Answer: ${caseLogMissing[caseLogCurrentField] || ''}...` : 'Ask COR anything about perfusion...'}
+                placeholder={listening ? 'Recording... click mic to stop' : caseLogExtraMode ? 'Item name + qty (e.g. "Cell Saver tubing 2") or "done"' : caseLogging ? `Answer: ${caseLogMissing[caseLogCurrentField] || ''}...` : 'Ask COR anything about perfusion...'}
                 rows={1}
                 style={{ width: '100%', padding: '0.75rem 3rem 0.75rem 1.1rem', borderRadius: '18px', border: `1px solid ${listening ? 'rgba(230,57,70,0.5)' : 'rgba(255,255,255,0.1)'}`, background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s ease', resize: 'none', overflow: 'hidden', minHeight: '42px', maxHeight: '120px', fontFamily: 'inherit', lineHeight: '1.4' }}
                 ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px' } }}
