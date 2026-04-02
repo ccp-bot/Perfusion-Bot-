@@ -9,12 +9,12 @@ const SUPER_OWNER_EMAIL = 'cliftonmarschel@gmail.com'
 const SIDEBAR_ITEMS = [
   { key: 'History', emoji: null, image: '/History.Icon.png', label: 'History' },
   { key: 'Logbook', emoji: null, image: '/Logbook.icon.png', label: 'Logbook' },
+  { key: 'Case Notes', emoji: null, image: '/CaseNotes.Icon.png', label: 'Case Notes' },
   { key: 'Protocol', emoji: null, image: '/Protocol.Icon.png', label: 'Protocol' },
-  { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
   { key: 'Policy', emoji: null, image: '/Policy.Icon.png', label: 'Policy' },
+  { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
   { key: 'Checklists', emoji: null, image: '/Checkmark.Icon.png', label: 'Checklists' },
   { key: 'Charting', emoji: null, image: '/Chart.Icon.png', label: 'Charting' },
-  { key: 'Case Notes', emoji: null, image: '/CaseNotes.Icon.png', label: 'Case Notes' },
 ]
 
 export default function Home() {
