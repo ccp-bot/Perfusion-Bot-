@@ -177,16 +177,18 @@ export default function Home() {
     const firstUserMsg = currentMessages.find(m => m.role === 'user')
     const title = firstUserMsg?.content?.slice(0, 60) || 'Conversation'
     try {
-      await fetch('/api/history', {
+      const res = await fetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id, title, messages: currentMessages })
       })
+      const data = await res.json()
+      if (data.error) console.error('Auto-save error:', data.error)
       if (activePanelRef.current === 'History') {
         await fetchHistory()
       }
-    } catch {
-      console.error('Auto-save failed')
+    } catch (err) {
+      console.error('Auto-save failed:', err)
     }
   }
 
@@ -1169,9 +1171,6 @@ export default function Home() {
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}>
             <div style={{ position: 'absolute', bottom: '80px', left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, #e63946, transparent)', animation: 'pulseBar 1.2s ease-in-out infinite' }} />
             <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#e63946', fontSize: '0.75rem', fontWeight: '500', letterSpacing: '0.15em', textTransform: 'uppercase', opacity: 0.6, animation: 'fadeInOut 1.5s ease-in-out infinite' }}>searching knowledge base</div>
-            <img className="thinking-bots" src="/COR-Bot.PNG" alt="COR" style={{ position: 'absolute', top: '42%', width: '120px', height: '120px', objectFit: 'contain', animation: 'runAcross 10s linear infinite', filter: 'drop-shadow(0 0 8px #e63946)' }} />
-            <img className="thinking-bots" src="/COR-Tank.PNG" alt="COR-T" style={{ position: 'absolute', bottom: '100px', width: '140px', height: '140px', objectFit: 'contain', animation: 'runAcross 14s linear infinite 2s', filter: 'drop-shadow(0 0 8px #3b82f6)' }} />
-            <img className="thinking-bots" src="/COR-Hovering-GIF.gif" alt="COR-H" style={{ position: 'absolute', top: '12%', width: '110px', height: '110px', objectFit: 'contain', animation: 'flyAcross 8s linear infinite 1s', mixBlendMode: 'screen' as any, filter: 'drop-shadow(0 0 12px #22c55e)' }} />
           </div>
         )}
 
