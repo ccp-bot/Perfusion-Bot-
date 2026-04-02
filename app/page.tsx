@@ -67,7 +67,8 @@ export default function Home() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
-  const recognitionRef = useRef<any>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const userRef = useRef<any>(null)
   const activePanelRef = useRef<string | null>(null)
@@ -691,53 +692,50 @@ export default function Home() {
     setMessages(prev => [...prev, { role: 'assistant', content: '↩️ No problem, nothing was saved.' }])
   }
 
-  function startListening() {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      alert('Speech recognition not supported. Use Chrome!')
+  async function startListening() {
+    // Stop recording if already listening
+    if (mediaRecorderRef.current && listening) {
+      mediaRecorderRef.current.stop()
       return
     }
-    // Stop if already listening
-    if (recognitionRef.current) {
-      const ref = recognitionRef.current
-      recognitionRef.current = null
-      ref.onend = null
-      ref.onerror = null
-      ref.onresult = null
-      try { ref.stop() } catch {}
-      setListening(false)
-      return
-    }
-    const recognition = new SpeechRecognition()
-    recognition.lang = 'en-US'
-    recognition.interimResults = true
-    recognition.continuous = true
-    let stopped = false
-    recognition.onstart = () => {
-      if (!stopped) setListening(true)
-    }
-    recognition.onend = () => {
-      if (stopped) return
-      // Auto-restart on timeout
-      try { recognition.start() } catch {
-        stopped = true
-        recognitionRef.current = null
-        setListening(false)
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
       }
+
+      mediaRecorder.onstop = async () => {
+        // Stop all tracks to release mic
+        stream.getTracks().forEach(t => t.stop())
+        setListening(false)
+        mediaRecorderRef.current = null
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        if (audioBlob.size < 1000) return // too short, ignore
+
+        // Show transcribing state
+        setInput('Transcribing...')
+        try {
+          const formData = new FormData()
+          formData.append('audio', audioBlob, 'recording.webm')
+          const res = await fetch('/api/transcribe', { method: 'POST', body: formData })
+          const data = await res.json()
+          setInput(data.text || '')
+        } catch {
+          setInput('')
+        }
+      }
+
+      mediaRecorder.start()
+      setListening(true)
+    } catch {
+      alert('Microphone access denied. Please allow microphone access in your browser settings.')
     }
-    recognition.onresult = (event: any) => {
-      const transcript = Array.from(event.results).map((r: any) => r[0].transcript).join('')
-      setInput(transcript)
-    }
-    recognition.onerror = (event: any) => {
-      if (event.error === 'no-speech' || event.error === 'aborted' || event.error === 'network') return
-      console.log('Speech error:', event.error)
-      stopped = true
-      recognitionRef.current = null
-      setListening(false)
-    }
-    recognitionRef.current = recognition
-    recognition.start()
   }
 
   async function signOut() {
