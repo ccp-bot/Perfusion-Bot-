@@ -69,6 +69,8 @@ export default function Home() {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  const inputBeforeRecordRef = useRef('')
+  const liveRecognitionRef = useRef<any>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const userRef = useRef<any>(null)
   const activePanelRef = useRef<string | null>(null)
@@ -696,6 +698,11 @@ export default function Home() {
     // Stop recording if already listening
     if (mediaRecorderRef.current && listening) {
       mediaRecorderRef.current.stop()
+      // Stop live preview
+      if (liveRecognitionRef.current) {
+        try { liveRecognitionRef.current.stop() } catch {}
+        liveRecognitionRef.current = null
+      }
       return
     }
 
@@ -704,35 +711,63 @@ export default function Home() {
       const mediaRecorder = new MediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
+      // Save existing input text to append to later
+      inputBeforeRecordRef.current = input
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data)
       }
 
       mediaRecorder.onstop = async () => {
-        // Stop all tracks to release mic
         stream.getTracks().forEach(t => t.stop())
         setListening(false)
         mediaRecorderRef.current = null
+        // Stop live preview
+        if (liveRecognitionRef.current) {
+          try { liveRecognitionRef.current.stop() } catch {}
+          liveRecognitionRef.current = null
+        }
 
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
         if (audioBlob.size < 1000) return // too short, ignore
 
-        // Show transcribing state
-        setInput('Transcribing...')
+        const prefix = inputBeforeRecordRef.current
+        setInput((prefix ? prefix + ' ' : '') + 'Transcribing...')
         try {
           const formData = new FormData()
           formData.append('audio', audioBlob, 'recording.webm')
           const res = await fetch('/api/transcribe', { method: 'POST', body: formData })
           const data = await res.json()
-          setInput(data.text || '')
+          const newText = data.text || ''
+          setInput(prefix ? (prefix + ' ' + newText).trim() : newText)
         } catch {
-          setInput('')
+          // Restore original input on error
+          setInput(prefix)
         }
       }
 
       mediaRecorder.start()
       setListening(true)
+
+      // Try live preview with browser Speech API (best-effort)
+      try {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        if (SpeechRecognition) {
+          const recognition = new SpeechRecognition()
+          recognition.lang = 'en-US'
+          recognition.interimResults = true
+          recognition.continuous = true
+          const savedInput = input
+          recognition.onresult = (event: any) => {
+            const transcript = Array.from(event.results).map((r: any) => r[0].transcript).join('')
+            setInput((savedInput ? savedInput + ' ' : '') + transcript)
+          }
+          recognition.onerror = () => {} // silently ignore — Whisper is the real transcription
+          recognition.onend = () => { liveRecognitionRef.current = null }
+          recognition.start()
+          liveRecognitionRef.current = recognition
+        }
+      } catch { /* live preview not available, that's fine */ }
     } catch {
       alert('Microphone access denied. Please allow microphone access in your browser settings.')
     }
