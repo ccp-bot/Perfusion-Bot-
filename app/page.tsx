@@ -55,6 +55,7 @@ export default function Home() {
   const [manualEntry, setManualEntry] = useState('')
   const [uploadStatus, setUploadStatus] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set())
   const [caseLogging, setCaseLogging] = useState(false)
   const [caseLogData, setCaseLogData] = useState<{[key: string]: string}>({})
   const [caseLogMissing, setCaseLogMissing] = useState<string[]>([])
@@ -1137,25 +1138,53 @@ export default function Home() {
                     {(userRole === 'owner' || userRole === 'admin') && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>}
                   </div>
                 )}
-                {panelEntries.map((entry) => (
-                  <div key={entry.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.6rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
-                      <div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
-                          {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {entry.uploaded_by && <span style={{ marginLeft: '0.4rem' }}>by {entry.uploaded_by}</span>}
+                {panelEntries.map((entry) => {
+                  const isCollapsible = activePanel === 'Case Notes' || activePanel === 'Logbook'
+                  const isExpanded = expandedEntries.has(entry.id)
+                  const mrnMatch = entry.content?.match(/\*?\*?MRN:?\*?\*?\s*(.+?)(?:\n|$)/i)
+                  const mrn = mrnMatch ? mrnMatch[1].trim() : null
+
+                  return (
+                    <div
+                      key={entry.id}
+                      onClick={() => {
+                        if (isCollapsible) {
+                          setExpandedEntries(prev => {
+                            const next = new Set(prev)
+                            if (next.has(entry.id)) next.delete(entry.id)
+                            else next.add(entry.id)
+                            return next
+                          })
+                        }
+                      }}
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.6rem', cursor: isCollapsible ? 'pointer' : 'default', transition: 'all 0.15s ease' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isCollapsible && !isExpanded ? 0 : '0.4rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                            {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {entry.uploaded_by && <span style={{ marginLeft: '0.4rem' }}>by {entry.uploaded_by}</span>}
+                          </div>
+                          {isCollapsible && mrn && (
+                            <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500', marginTop: '2px' }}>MRN: {mrn}</div>
+                          )}
+                          {!isCollapsible && entry.source_file && entry.source_file !== 'Manual Entry' && (
+                            <div style={{ fontSize: '0.65rem', color: '#3b82f6', marginTop: '2px' }}>{entry.source_file}</div>
+                          )}
                         </div>
-                        {entry.source_file && entry.source_file !== 'Manual Entry' && (
-                          <div style={{ fontSize: '0.65rem', color: '#3b82f6', marginTop: '2px' }}>{entry.source_file}</div>
-                        )}
+                        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                          {isCollapsible && <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>{isExpanded ? '▲' : '▼'}</span>}
+                          {(userRole === 'owner' || userRole === 'admin') && (
+                            <button onClick={(e) => { e.stopPropagation(); deletePanelEntry(entry.id) }} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
+                          )}
+                        </div>
                       </div>
-                      {(userRole === 'owner' || userRole === 'admin') && (
-                        <button onClick={() => deletePanelEntry(entry.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
+                      {(!isCollapsible || isExpanded) && (
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content.length > 300 && !isExpanded ? entry.content.slice(0, 300) + '...' : entry.content}</div>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content.length > 300 ? entry.content.slice(0, 300) + '...' : entry.content}</div>
-                  </div>
-                ))}
+                  )
+                })}
               </>
             )}
           </div>
