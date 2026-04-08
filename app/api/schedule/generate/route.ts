@@ -81,6 +81,16 @@ export async function POST(req: NextRequest) {
     allDates.push(day.toISOString().split('T')[0])
   }
 
+  // Clear all existing schedule entries for this date range before generating
+  const firstDate = allDates[0]
+  const lastDate = allDates[allDates.length - 1]
+  await supabase
+    .from('schedules')
+    .delete()
+    .eq('group_id', groupId)
+    .gte('date', firstDate)
+    .lte('date', lastDate)
+
   // Track assignments: date -> set of assigned user names (to prevent double-booking)
   const dayAssignments: { [date: string]: Set<string> } = {}
   for (const date of allDates) {
@@ -167,34 +177,36 @@ export async function POST(req: NextRequest) {
 
   // Save to database
   let totalSaved = 0
-  for (const entry of scheduleEntries) {
-    const m = memberMap[entry.member]
-    if (!m) continue
-
-    const { data: existing } = await supabase
-      .from('schedules')
-      .select('id')
-      .eq('group_id', groupId)
-      .eq('user_id', m.userId)
-      .eq('date', entry.date)
-      .single()
-
-    if (existing) {
-      await supabase.from('schedules').update({ shift_type: entry.shift }).eq('id', existing.id)
-    } else {
-      await supabase.from('schedules').insert({
+  const toInsert = scheduleEntries
+    .filter(entry => memberMap[entry.member])
+    .map(entry => {
+      const m = memberMap[entry.member]
+      return {
         group_id: groupId,
         user_id: m.userId,
         user_email: m.email,
         date: entry.date,
         shift_type: entry.shift,
-      })
+      }
+    })
+
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from('schedules').insert(toInsert)
+    if (error) {
+      return NextResponse.json({ error: 'Failed to save: ' + error.message }, { status: 500 })
     }
-    totalSaved++
+    totalSaved = toInsert.length
   }
 
   if (totalSaved === 0) {
-    return NextResponse.json({ error: 'No entries generated. Check shift configs and eligible members.' }, { status: 500 })
+    return NextResponse.json({
+      error: 'No entries generated. Check shift configs and eligible members.',
+      debug: {
+        shiftConfigs: shiftConfigs.map(c => ({ name: c.name, eligible: c.eligible, perDay: c.perDay, rotation: parseRotation(c.rules) })),
+        memberMapKeys: Object.keys(memberMap),
+        dateRange: `${firstDate} to ${lastDate}`,
+      }
+    }, { status: 500 })
   }
 
   return NextResponse.json({ success: true, entriesGenerated: totalSaved })
