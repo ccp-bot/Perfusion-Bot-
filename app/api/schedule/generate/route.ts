@@ -43,7 +43,12 @@ export async function POST(req: NextRequest) {
   }
 
   const numWeeks = weeks || 6
-  const start = new Date((startDate || new Date().toISOString().split('T')[0]) + 'T12:00:00')
+  // Always start from Monday of the given week so weekly rotations align Mon-Sun
+  const rawStart = new Date((startDate || new Date().toISOString().split('T')[0]) + 'T12:00:00')
+  const dayOfWeek = rawStart.getDay()
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const start = new Date(rawStart)
+  start.setDate(start.getDate() + mondayOffset)
 
   // Build member lookup
   const memberMap: { [name: string]: Member } = {}
@@ -81,7 +86,7 @@ export async function POST(req: NextRequest) {
     allDates.push(day.toISOString().split('T')[0])
   }
 
-  // Clear all existing schedule entries for this date range before generating
+  // Clear ALL existing schedule entries for this group from the start date onward
   const firstDate = allDates[0]
   const lastDate = allDates[allDates.length - 1]
   await supabase
@@ -89,7 +94,6 @@ export async function POST(req: NextRequest) {
     .delete()
     .eq('group_id', groupId)
     .gte('date', firstDate)
-    .lte('date', lastDate)
 
   // Track assignments: date -> set of assigned user names (to prevent double-booking)
   const dayAssignments: { [date: string]: Set<string> } = {}
@@ -189,6 +193,15 @@ export async function POST(req: NextRequest) {
         shift_type: entry.shift,
       }
     })
+
+  // Log what we're about to insert for debugging
+  console.log('Schedule generation summary:', {
+    shiftConfigs: shiftConfigs.map(c => ({ name: c.name, eligible: c.eligible, perDay: c.perDay, rotation: parseRotation(c.rules) })),
+    memberMapKeys: Object.keys(memberMap),
+    totalEntries: toInsert.length,
+    dateRange: `${firstDate} to ${lastDate}`,
+    sampleEntries: toInsert.slice(0, 10).map(e => `${e.date}: ${e.user_email} -> ${e.shift_type}`),
+  })
 
   if (toInsert.length > 0) {
     const { error } = await supabase.from('schedules').insert(toInsert)
