@@ -1759,12 +1759,65 @@ export default function Home() {
                         <>
                           <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content.length > 300 && !isExpanded ? entry.content.slice(0, 300) + '...' : entry.content}</div>
                           {activePanel === 'Case Notes' && isExpanded && entry.user_id === user?.id && (
-                            <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.4rem' }} onClick={e => e.stopPropagation()}>
-                              <input
-                                value={addingNote[entry.id] || ''}
-                                onChange={e => setAddingNote(prev => ({ ...prev, [entry.id]: e.target.value }))}
-                                onKeyDown={async e => {
-                                  if (e.key === 'Enter' && addingNote[entry.id]?.trim()) {
+                            <div
+                              style={{ marginTop: '0.6rem' }}
+                              onClick={e => e.stopPropagation()}
+                              onDragOver={e => e.preventDefault()}
+                              onDrop={async (e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                const file = e.dataTransfer.files?.[0]
+                                if (!file) return
+                                const isAudio = file.type.startsWith('audio/') || /\.(mp3|m4a|wav|ogg|webm|mp4|mpeg)$/i.test(file.name)
+                                if (!isAudio) return
+                                setAddingNote(prev => ({ ...prev, [entry.id]: 'Transcribing audio...' }))
+                                try {
+                                  const formData = new FormData()
+                                  formData.append('audio', file, file.name)
+                                  const tRes = await fetch('/api/transcribe', { method: 'POST', body: formData })
+                                  const tData = await tRes.json()
+                                  const noteText = tData.text || ''
+                                  if (noteText) {
+                                    const res = await fetch('/api/logbook', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: entry.id, note: noteText, userId: user.id })
+                                    })
+                                    const data = await res.json()
+                                    if (data.success) {
+                                      setPanelEntries(prev => prev.map(e => e.id === entry.id ? { ...e, content: data.content } : e))
+                                    }
+                                  }
+                                  setAddingNote(prev => ({ ...prev, [entry.id]: '' }))
+                                } catch {
+                                  setAddingNote(prev => ({ ...prev, [entry.id]: '' }))
+                                }
+                              }}
+                            >
+                              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                <input
+                                  value={addingNote[entry.id] || ''}
+                                  onChange={e => setAddingNote(prev => ({ ...prev, [entry.id]: e.target.value }))}
+                                  onKeyDown={async e => {
+                                    if (e.key === 'Enter' && addingNote[entry.id]?.trim() && addingNote[entry.id] !== 'Transcribing audio...') {
+                                      const res = await fetch('/api/logbook', {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ id: entry.id, note: addingNote[entry.id].trim(), userId: user.id })
+                                      })
+                                      const data = await res.json()
+                                      if (data.success) {
+                                        setPanelEntries(prev => prev.map(e => e.id === entry.id ? { ...e, content: data.content } : e))
+                                        setAddingNote(prev => ({ ...prev, [entry.id]: '' }))
+                                      }
+                                    }
+                                  }}
+                                  placeholder="Add note or drop audio file..."
+                                  style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}
+                                />
+                                <button
+                                  onClick={async () => {
+                                    if (!addingNote[entry.id]?.trim() || addingNote[entry.id] === 'Transcribing audio...') return
                                     const res = await fetch('/api/logbook', {
                                       method: 'PATCH',
                                       headers: { 'Content-Type': 'application/json' },
@@ -1775,27 +1828,10 @@ export default function Home() {
                                       setPanelEntries(prev => prev.map(e => e.id === entry.id ? { ...e, content: data.content } : e))
                                       setAddingNote(prev => ({ ...prev, [entry.id]: '' }))
                                     }
-                                  }
-                                }}
-                                placeholder="Add a note..."
-                                style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}
-                              />
-                              <button
-                                onClick={async () => {
-                                  if (!addingNote[entry.id]?.trim()) return
-                                  const res = await fetch('/api/logbook', {
-                                    method: 'PATCH',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ id: entry.id, note: addingNote[entry.id].trim(), userId: user.id })
-                                  })
-                                  const data = await res.json()
-                                  if (data.success) {
-                                    setPanelEntries(prev => prev.map(e => e.id === entry.id ? { ...e, content: data.content } : e))
-                                    setAddingNote(prev => ({ ...prev, [entry.id]: '' }))
-                                  }
-                                }}
-                                style={{ padding: '0.4rem 0.7rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}
-                              >+</button>
+                                  }}
+                                  style={{ padding: '0.4rem 0.7rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}
+                                >+</button>
+                              </div>
                             </div>
                           )}
                         </>
