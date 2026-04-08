@@ -8,7 +8,6 @@ const supabase = createClient(
 )
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
-// POST /api/schedule/generate — auto-generate schedule using Claude
 export async function POST(req: NextRequest) {
   const { groupId, userRole, rules, members, shiftTypes, timeOffDates, startDate, weeks } = await req.json()
 
@@ -20,100 +19,106 @@ export async function POST(req: NextRequest) {
   }
 
   const numWeeks = weeks || 6
-  const start = startDate || new Date().toISOString().split('T')[0]
-
-  // Build list of dates
-  const dates: string[] = []
-  const d = new Date(start)
-  for (let i = 0; i < numWeeks * 7; i++) {
-    dates.push(d.toISOString().split('T')[0])
-    d.setDate(d.getDate() + 1)
-  }
+  const start = new Date(startDate || new Date().toISOString().split('T')[0])
 
   const memberNames = members.map((m: any) => m.name || m.email).join(', ')
   const shiftTypeNames = shiftTypes.map((s: any) => s.name).join(', ')
   const timeOffList = (timeOffDates || []).map((t: any) => `${t.name}: ${t.date}`).join('\n') || 'None'
 
-  const prompt = `You are a scheduling assistant for a cardiovascular perfusion team.
+  // Build member map for saving
+  const memberMap: {[name: string]: {userId: string, email: string}} = {}
+  for (const m of members) {
+    const name = (m.name || m.email).toLowerCase()
+    memberMap[name] = { userId: m.userId, email: m.email }
+  }
 
-TEAM MEMBERS: ${memberNames}
+  let totalSaved = 0
 
-SHIFT TYPES: ${shiftTypeNames}
+  // Generate one week at a time to avoid token limits
+  for (let w = 0; w < numWeeks; w++) {
+    const weekStart = new Date(start)
+    weekStart.setDate(weekStart.getDate() + w * 7)
+    const dates: string[] = []
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(weekStart)
+      day.setDate(day.getDate() + d)
+      dates.push(day.toISOString().split('T')[0])
+    }
 
-SCHEDULING RULES (set by the admin — follow these exactly):
+    const prompt = `You are a scheduling assistant. Generate a 1-week perfusion schedule.
+
+TEAM: ${memberNames}
+SHIFTS: ${shiftTypeNames}
+DATES: ${dates.join(', ')}
+
+RULES:
 ${rules}
 
-APPROVED TIME-OFF (these people MUST be off on these dates):
+TIME-OFF:
 ${timeOffList}
 
-DATE RANGE: ${dates[0]} to ${dates[dates.length - 1]} (${numWeeks} weeks)
+${w > 0 ? 'Continue the rotation fairly from previous weeks.' : ''}
 
-Generate a complete schedule for every day in the date range. Assign each team member a shift type for each day. Follow the admin's rules precisely. Distribute shifts fairly.
+Return ONLY a JSON array. No markdown, no text, no code blocks. Just raw JSON.
+Format: [{"date":"YYYY-MM-DD","member":"Name","shift":"Shift Type"}]
+Every member must have exactly one entry per day.`
 
-Respond with ONLY a JSON array, no markdown, no code blocks, no explanation. Each entry should be:
-{"date": "YYYY-MM-DD", "member": "exact member name", "shift": "exact shift type name"}
-
-Example format:
-[{"date":"2026-04-06","member":"John Smith","shift":"On Call"},{"date":"2026-04-06","member":"Sarah Jones","shift":"Off"}]
-
-Generate entries for EVERY member for EVERY day.`
-
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      messages: [{ role: 'user', content: prompt }]
-    })
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
-    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-
-    let schedule: any[]
     try {
-      schedule = JSON.parse(cleaned)
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse schedule. Try again.' }, { status: 500 })
-    }
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8000,
+        messages: [{ role: 'user', content: prompt }]
+      })
 
-    // Map member names back to user IDs and emails
-    const memberMap: {[name: string]: {userId: string, email: string}} = {}
-    for (const m of members) {
-      const name = m.name || m.email
-      memberMap[name.toLowerCase()] = { userId: m.userId, email: m.email }
-    }
+      const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
+      // Clean up any markdown or extra text
+      let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      // Try to extract JSON array if there's extra text
+      const arrayMatch = cleaned.match(/\[[\s\S]*\]/)
+      if (arrayMatch) cleaned = arrayMatch[0]
 
-    // Save to database
-    let saved = 0
-    for (const entry of schedule) {
-      const key = (entry.member || '').toLowerCase()
-      const m = memberMap[key]
-      if (!m) continue
-
-      // Upsert
-      const { data: existing } = await supabase
-        .from('schedules')
-        .select('id')
-        .eq('group_id', groupId)
-        .eq('user_id', m.userId)
-        .eq('date', entry.date)
-        .single()
-
-      if (existing) {
-        await supabase.from('schedules').update({ shift_type: entry.shift }).eq('id', existing.id)
-      } else {
-        await supabase.from('schedules').insert({
-          group_id: groupId,
-          user_id: m.userId,
-          user_email: m.email,
-          date: entry.date,
-          shift_type: entry.shift,
-        })
+      let schedule: any[]
+      try {
+        schedule = JSON.parse(cleaned)
+      } catch {
+        continue // Skip this week if parse fails, try next
       }
-      saved++
-    }
 
-    return NextResponse.json({ success: true, entriesGenerated: saved })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Generation failed' }, { status: 500 })
+      // Save to database
+      for (const entry of schedule) {
+        const key = (entry.member || '').toLowerCase()
+        const m = memberMap[key]
+        if (!m) continue
+
+        const { data: existing } = await supabase
+          .from('schedules')
+          .select('id')
+          .eq('group_id', groupId)
+          .eq('user_id', m.userId)
+          .eq('date', entry.date)
+          .single()
+
+        if (existing) {
+          await supabase.from('schedules').update({ shift_type: entry.shift }).eq('id', existing.id)
+        } else {
+          await supabase.from('schedules').insert({
+            group_id: groupId,
+            user_id: m.userId,
+            user_email: m.email,
+            date: entry.date,
+            shift_type: entry.shift,
+          })
+        }
+        totalSaved++
+      }
+    } catch {
+      continue // Skip week on error, try next
+    }
   }
+
+  if (totalSaved === 0) {
+    return NextResponse.json({ error: 'Failed to generate schedule. Check your rules and try again.' }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true, entriesGenerated: totalSaved })
 }
