@@ -328,7 +328,7 @@ export default function Home() {
       const res = await fetch('/api/groups', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, groupId: userGroupId, action: 'invite', targetEmail: inviteEmail.trim(), newRole: inviteRole })
+        body: JSON.stringify({ userId: user.id, groupId: userGroupId, action: 'invite', targetEmail: inviteEmail.trim(), newRole: inviteRole, userEmail: user.email })
       })
       const data = await res.json()
       if (data.success) {
@@ -347,7 +347,7 @@ export default function Home() {
       await fetch('/api/groups', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, groupId: userGroupId, targetEmail: email })
+        body: JSON.stringify({ userId: user.id, groupId: userGroupId, targetEmail: email, userEmail: user.email })
       })
       fetchGroupMembers()
     } catch { console.error('Failed to remove member') }
@@ -359,7 +359,7 @@ export default function Home() {
       await fetch('/api/groups', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, groupId: userGroupId, action: 'change_role', targetEmail: email, newRole })
+        body: JSON.stringify({ userId: user.id, groupId: userGroupId, action: 'change_role', targetEmail: email, newRole, userEmail: user.email })
       })
       fetchGroupMembers()
     } catch { console.error('Failed to change role') }
