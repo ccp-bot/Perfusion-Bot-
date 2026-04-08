@@ -39,9 +39,10 @@ export default function SchedulePage() {
   const [timeOffRequests, setTimeOffRequests] = useState<any[]>([])
   const [newShiftName, setNewShiftName] = useState('')
   const [newShiftColor, setNewShiftColor] = useState('#3b82f6')
-  const [scheduleRules, setScheduleRules] = useState('')
   const [generating, setGenerating] = useState(false)
   const [generateStatus, setGenerateStatus] = useState('')
+  const [shiftConfigs, setShiftConfigs] = useState<{[shiftName: string]: { eligible: string[], perDay: number, rules: string }}>({})
+  const [generalRules, setGeneralRules] = useState('')
   const [selectedShift, setSelectedShift] = useState<string | null>(null)
   const [view, setView] = useState<'day' | 'week' | 'month'>('day')
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -379,22 +380,74 @@ export default function SchedulePage() {
           {/* Auto-Generate Schedule */}
           {isAdmin && (
             <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Auto-Generate Schedule</div>
-              <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Describe your scheduling rules. COR will generate 6 weeks of schedule.</div>
+              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Configure Shifts</div>
+              <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Set eligible members and rules for each shift type.</div>
+
+              {shiftTypes.map(st => {
+                const config = shiftConfigs[st.name] || { eligible: [], perDay: 1, rules: '' }
+                return (
+                  <div key={st.id} style={{ marginBottom: '0.75rem', padding: '0.6rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '3px', background: st.color }} />
+                      <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: '500', flex: 1 }}>{st.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>#/day:</span>
+                        <input
+                          type="number"
+                          value={config.perDay}
+                          onChange={e => setShiftConfigs(prev => ({ ...prev, [st.name]: { ...config, perDay: parseInt(e.target.value) || 1 } }))}
+                          style={{ width: '35px', padding: '0.2rem', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.7rem', outline: 'none', textAlign: 'center' }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#4a5568', marginBottom: '0.3rem' }}>Eligible:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.4rem' }}>
+                      {members.map(m => {
+                        const name = profileMap[m.user_id] || (m.email || '').split('@')[0]
+                        const isSelected = config.eligible.includes(name)
+                        return (
+                          <button
+                            key={m.user_id || m.email}
+                            onClick={() => {
+                              const updated = isSelected
+                                ? config.eligible.filter((n: string) => n !== name)
+                                : [...config.eligible, name]
+                              setShiftConfigs(prev => ({ ...prev, [st.name]: { ...config, eligible: updated } }))
+                            }}
+                            style={{ padding: '0.2rem 0.45rem', borderRadius: '12px', border: `1px solid ${isSelected ? st.color : 'rgba(255,255,255,0.08)'}`, background: isSelected ? st.color + '22' : 'transparent', color: isSelected ? st.color : '#4a5568', fontSize: '0.65rem', cursor: 'pointer' }}
+                          >{name}</button>
+                        )
+                      })}
+                    </div>
+                    <input
+                      value={config.rules}
+                      onChange={e => setShiftConfigs(prev => ({ ...prev, [st.name]: { ...config, rules: e.target.value } }))}
+                      placeholder="Rules for this shift..."
+                      style={{ width: '100%', padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.7rem', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                )
+              })}
+
+              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '0.75rem', marginBottom: '0.4rem' }}>General Rules</div>
               <textarea
-                value={scheduleRules}
-                onChange={e => setScheduleRules(e.target.value)}
-                placeholder={"Example rules:\n- 1 person on call per day\n- Rotate weekends evenly\n- No more than 3 consecutive call days\n- Everyone gets 2 days off per week"}
-                rows={6}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
+                value={generalRules}
+                onChange={e => setGeneralRules(e.target.value)}
+                placeholder={"e.g., No more than 3 consecutive call days\nRotate weekends evenly\nEveryone gets 2 days off per week"}
+                rows={3}
+                style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.72rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
               />
+
               <button
                 onClick={async () => {
-                  if (!scheduleRules.trim() || !userGroupId || generating) return
+                  if (!userGroupId || generating) return
+                  // Validate at least one shift has eligible members
+                  const hasConfig = Object.values(shiftConfigs).some((c: any) => c.eligible.length > 0)
+                  if (!hasConfig) { setGenerateStatus('Select eligible members for at least one shift.'); return }
+
                   setGenerating(true)
                   setGenerateStatus('COR is building the schedule...')
                   try {
-                    // Get approved time-off
                     const toRes = await fetch(`/api/time-off?groupId=${userGroupId}`)
                     const toData = await toRes.json()
                     const approvedOff = (toData.requests || [])
@@ -407,13 +460,24 @@ export default function SchedulePage() {
                       email: m.email,
                     }))
 
+                    // Build structured rules from configs
+                    const shiftRules = Object.entries(shiftConfigs)
+                      .filter(([_, c]) => (c as any).eligible.length > 0)
+                      .map(([name, c]: [string, any]) => {
+                        let rule = `${name}: ${c.perDay} person(s) per day. Eligible: ${c.eligible.join(', ')}.`
+                        if (c.rules) rule += ` Rules: ${c.rules}`
+                        return rule
+                      }).join('\n')
+
+                    const fullRules = `SHIFT ASSIGNMENTS:\n${shiftRules}\n\nGENERAL RULES:\n${generalRules || 'Distribute shifts fairly.'}\n\nEveryone not assigned a specific shift for a day should be assigned "Off" or left unscheduled.`
+
                     const res = await fetch('/api/schedule/generate', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         groupId: userGroupId,
                         userRole,
-                        rules: scheduleRules,
+                        rules: fullRules,
                         members: memberList,
                         shiftTypes,
                         timeOffDates: approvedOff,
@@ -431,8 +495,8 @@ export default function SchedulePage() {
                   } catch { setGenerateStatus('Error generating schedule') }
                   setGenerating(false)
                 }}
-                disabled={generating || !scheduleRules.trim()}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: generating || !scheduleRules.trim() ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', fontWeight: '500', cursor: generating || !scheduleRules.trim() ? 'not-allowed' : 'pointer', marginTop: '0.5rem' }}
+                disabled={generating}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: generating ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', fontWeight: '500', cursor: generating ? 'not-allowed' : 'pointer', marginTop: '0.5rem' }}
               >
                 {generating ? 'Generating...' : 'Generate 6-Week Schedule'}
               </button>
