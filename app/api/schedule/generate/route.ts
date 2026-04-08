@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   // Load shift configs from the shiftTypes passed in (they should have eligible, per_day, rules from DB)
   // Also fetch from DB to get full config
   const { data: dbShiftTypes } = await supabase
-    .from('schedule_shift_types')
+    .from('shift_types')
     .select('*')
     .eq('group_id', groupId)
     .order('sort_order', { ascending: true })
