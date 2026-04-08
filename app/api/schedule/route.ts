@@ -22,7 +22,14 @@ export async function GET(req: NextRequest) {
       .select('*')
       .eq('group_id', groupId)
       .order('sort_order', { ascending: true })
-    return NextResponse.json({ shiftTypes: data || [] })
+
+    const { data: groupData } = await supabase
+      .from('groups')
+      .select('schedule_rules')
+      .eq('id', groupId)
+      .single()
+
+    return NextResponse.json({ shiftTypes: data || [], generalRules: groupData?.schedule_rules || '' })
   }
 
   if (!weekStart) return NextResponse.json({ error: 'Missing weekStart' }, { status: 400 })
@@ -63,8 +70,30 @@ export async function POST(req: NextRequest) {
 
   if (action === 'delete_shift_type') {
     if (userRole !== 'owner' && userRole !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    const { error } = await supabase.from('shift_types').delete().eq('id', shiftTypeName) // reusing field as id
+    const { error } = await supabase.from('shift_types').delete().eq('id', shiftTypeName)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  if (action === 'save_shift_configs') {
+    if (userRole !== 'owner' && userRole !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    // shiftTypeName is reused to pass configs object: { [shiftName]: { eligible, perDay, rules } }
+    // shiftTypeColor is reused to pass generalRules string
+    const configs = shiftTypeName as any
+    const generalRules = shiftTypeColor as string
+
+    // Update each shift type with its config
+    for (const [name, config] of Object.entries(configs as {[k: string]: any})) {
+      await supabase
+        .from('shift_types')
+        .update({ eligible: config.eligible, per_day: config.perDay, rules: config.rules })
+        .eq('group_id', groupId)
+        .eq('name', name)
+    }
+
+    // Save general rules on the group
+    await supabase.from('groups').update({ schedule_rules: generalRules }).eq('id', groupId)
+
     return NextResponse.json({ success: true })
   }
 

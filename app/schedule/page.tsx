@@ -85,6 +85,18 @@ export default function SchedulePage() {
     const stRes = await fetch(`/api/schedule?groupId=${userGroupId}&shiftTypes=true`)
     const stData = await stRes.json()
     setShiftTypes(stData.shiftTypes || [])
+    setGeneralRules(stData.generalRules || '')
+
+    // Load saved shift configs
+    const loadedConfigs: {[k: string]: { eligible: string[], perDay: number, rules: string }} = {}
+    for (const st of (stData.shiftTypes || [])) {
+      loadedConfigs[st.name] = {
+        eligible: st.eligible || [],
+        perDay: st.per_day || 1,
+        rules: st.rules || '',
+      }
+    }
+    setShiftConfigs(loadedConfigs)
 
     // Determine date range based on view
     let start: string
@@ -142,6 +154,21 @@ export default function SchedulePage() {
     } else {
       setEntries(prev => prev.filter(e => !(e.user_id === userId && e.date === date)))
     }
+  }
+
+  async function saveShiftConfigs(configs: any, rules: string) {
+    if (!userGroupId) return
+    await fetch('/api/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        groupId: userGroupId,
+        action: 'save_shift_configs',
+        userRole,
+        shiftTypeName: configs,
+        shiftTypeColor: rules,
+      })
+    })
   }
 
   async function addShiftType() {
@@ -439,8 +466,15 @@ export default function SchedulePage() {
               />
 
               <button
+                onClick={() => saveShiftConfigs(shiftConfigs, generalRules)}
+                style={{ width: '100%', padding: '0.4rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer', marginTop: '0.5rem', marginBottom: '0.5rem' }}
+              >Save Configuration</button>
+
+              <button
                 onClick={async () => {
                   if (!userGroupId || generating) return
+                  // Save configs first
+                  await saveShiftConfigs(shiftConfigs, generalRules)
                   // Validate at least one shift has eligible members
                   const hasConfig = Object.values(shiftConfigs).some((c: any) => c.eligible.length > 0)
                   if (!hasConfig) { setGenerateStatus('Select eligible members for at least one shift.'); return }
