@@ -501,24 +501,12 @@ export default function SchedulePage() {
                       email: m.email,
                     }))
 
-                    // Build structured rules from configs
-                    const shiftRules = Object.entries(shiftConfigs)
-                      .filter(([_, c]) => (c as any).eligible.length > 0)
-                      .map(([name, c]: [string, any]) => {
-                        let rule = `${name}: ${c.perDay} person(s) per day. Eligible: ${c.eligible.join(', ')}.`
-                        if (c.rules) rule += ` Rules: ${c.rules}`
-                        return rule
-                      }).join('\n')
-
-                    const fullRules = `SHIFT ASSIGNMENTS:\n${shiftRules}\n\nGENERAL RULES:\n${generalRules || 'Distribute shifts fairly.'}\n\nEveryone not assigned a specific shift for a day should be assigned "Off" or left unscheduled.`
-
                     const res = await fetch('/api/schedule/generate', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         groupId: userGroupId,
                         userRole,
-                        rules: fullRules,
                         members: memberList,
                         shiftTypes,
                         timeOffDates: approvedOff,
