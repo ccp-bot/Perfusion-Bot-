@@ -83,5 +83,17 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ profiles: map })
+  // Also build email -> displayName map (reliable even when user_id is null)
+  const emailMap: {[email: string]: string} = {}
+  for (const m of members) {
+    if (!m.email) continue
+    // Try to find display name from profiles via user_id
+    if (m.user_id && map[m.user_id]) {
+      emailMap[m.email] = map[m.user_id]
+    } else {
+      emailMap[m.email] = (m.email || '').split('@')[0]
+    }
+  }
+
+  return NextResponse.json({ profiles: map, emailProfiles: emailMap })
 }

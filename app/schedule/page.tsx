@@ -34,6 +34,7 @@ export default function SchedulePage() {
   const [userGroupName, setUserGroupName] = useState<string | null>(null)
   const [members, setMembers] = useState<any[]>([])
   const [profileMap, setProfileMap] = useState<{[key: string]: string}>({})
+  const [emailProfileMap, setEmailProfileMap] = useState<{[email: string]: string}>({})
   const [shiftTypes, setShiftTypes] = useState<any[]>([])
   const [entries, setEntries] = useState<any[]>([])
   const [timeOffRequests, setTimeOffRequests] = useState<any[]>([])
@@ -133,6 +134,7 @@ export default function SchedulePage() {
     })
     const pData = await pRes.json()
     setProfileMap(pData.profiles || {})
+    setEmailProfileMap(pData.emailProfiles || {})
 
     const toRes = await fetch(`/api/time-off?groupId=${userGroupId}&pending=true`)
     const toData = await toRes.json()
@@ -148,11 +150,11 @@ export default function SchedulePage() {
     })
     if (shiftType) {
       setEntries(prev => {
-        const filtered = prev.filter(e => !(e.user_id === userId && e.date === date))
+        const filtered = prev.filter(e => !(e.user_email === userEmail && e.date === date))
         return [...filtered, { user_id: userId, user_email: userEmail, date, shift_type: shiftType, group_id: userGroupId }]
       })
     } else {
-      setEntries(prev => prev.filter(e => !(e.user_id === userId && e.date === date)))
+      setEntries(prev => prev.filter(e => !(e.user_email === userEmail && e.date === date)))
     }
   }
 
@@ -206,6 +208,10 @@ export default function SchedulePage() {
     else if (view === 'week') d.setDate(d.getDate() + dir * 7)
     else d.setMonth(d.getMonth() + dir)
     setCurrentDate(d)
+  }
+
+  function getMemberName(member: any): string {
+    return emailProfileMap[member.email] || profileMap[member.user_id] || (member.email || '').split('@')[0]
   }
 
   function getEntry(userId: string, date: string, email?: string) {
@@ -298,7 +304,7 @@ export default function SchedulePage() {
               <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>On Duty Today</div>
               {members.map(member => {
                 const entry = getEntry(member.user_id, formatDate(currentDate), member.email)
-                const name = profileMap[member.user_id] || (member.email || '').split('@')[0]
+                const name = getMemberName(member)
                 const shiftName = entry?.shift_type || ''
                 const color = shiftName ? getShiftColor(shiftName) : ''
                 return (
@@ -340,7 +346,7 @@ export default function SchedulePage() {
                 {members.map(member => (
                   <tr key={member.user_id || member.email}>
                     <td style={{ padding: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem' }}>
-                      {profileMap[member.user_id] || (member.email || '').split('@')[0]}
+                      {getMemberName(member)}
                     </td>
                     {viewDays.map(d => {
                       const dateStr = formatDate(d)
@@ -375,7 +381,7 @@ export default function SchedulePage() {
                     <div style={{ fontSize: '0.7rem', color: isToday ? '#e63946' : '#4a5568', fontWeight: isToday ? '600' : '400', marginBottom: '0.2rem' }}>{d.getDate()}</div>
                     {dayEntries.slice(0, 3).map((e: any, i: number) => {
                       const color = getShiftColor(e.shift_type)
-                      const name = profileMap[e.user_id] || (e.user_email || '').split('@')[0]
+                      const name = emailProfileMap[e.user_email] || profileMap[e.user_id] || (e.user_email || '').split('@')[0]
                       return (
                         <div key={i} style={{ fontSize: '0.55rem', padding: '1px 3px', borderRadius: '3px', background: color + '22', color, marginBottom: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {name.split(' ')[0]}
@@ -438,7 +444,7 @@ export default function SchedulePage() {
                     <div style={{ fontSize: '0.65rem', color: '#4a5568', marginBottom: '0.3rem' }}>Eligible:</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.4rem' }}>
                       {members.map(m => {
-                        const name = profileMap[m.user_id] || (m.email || '').split('@')[0]
+                        const name = getMemberName(m)
                         const isSelected = config.eligible.includes(name)
                         return (
                           <button
@@ -501,10 +507,10 @@ export default function SchedulePage() {
                     const toData = await toRes.json()
                     const approvedOff = (toData.requests || [])
                       .filter((r: any) => r.status === 'approved')
-                      .map((r: any) => ({ name: profileMap[r.user_id] || r.user_email?.split('@')[0], date: r.date }))
+                      .map((r: any) => ({ name: emailProfileMap[r.user_email] || profileMap[r.user_id] || r.user_email?.split('@')[0], date: r.date }))
 
                     const memberList = members.map(m => ({
-                      name: profileMap[m.user_id] || (m.email || '').split('@')[0],
+                      name: getMemberName(m),
                       userId: m.user_id,
                       email: m.email,
                     }))
@@ -558,7 +564,7 @@ export default function SchedulePage() {
               <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Time-Off Requests</div>
               {timeOffRequests.map(req => (
                 <div key={req.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.6rem', marginBottom: '0.5rem' }}>
-                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: '500' }}>{(req.user_id && profileMap[req.user_id]) || req.user_email?.split('@')[0]}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: '500' }}>{emailProfileMap[req.user_email] || (req.user_id && profileMap[req.user_id]) || req.user_email?.split('@')[0]}</div>
                   <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '2px' }}>{new Date(req.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
                   {req.reason && <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '3px' }}>{req.reason}</div>}
                   <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.4rem' }}>
