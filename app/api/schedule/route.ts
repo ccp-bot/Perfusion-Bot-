@@ -99,16 +99,19 @@ export async function POST(req: NextRequest) {
 
   // Set schedule entry
   if (userRole !== 'owner' && userRole !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-  if (!userId || !date) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  if ((!userId && !userEmail) || !date) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-  // Upsert — update if exists for this user+date, insert if not
-  const { data: existing } = await supabase
+  // Upsert — match by email (user_id may be NULL)
+  const query = supabase
     .from('schedules')
     .select('id')
     .eq('group_id', groupId)
-    .eq('user_id', userId)
     .eq('date', date)
-    .single()
+
+  if (userEmail) query.eq('user_email', userEmail)
+  else query.eq('user_id', userId)
+
+  const { data: existing } = await query.single()
 
   if (existing) {
     if (!shiftType) {

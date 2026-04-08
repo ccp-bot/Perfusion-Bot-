@@ -208,8 +208,8 @@ export default function SchedulePage() {
     setCurrentDate(d)
   }
 
-  function getEntry(userId: string, date: string) {
-    return entries.find(e => e.user_id === userId && e.date === date)
+  function getEntry(userId: string, date: string, email?: string) {
+    return entries.find(e => e.date === date && (e.user_id === userId || (email && e.user_email === email)))
   }
 
   function getShiftColor(name: string): string {
@@ -289,7 +289,7 @@ export default function SchedulePage() {
             <div>
               <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>On Duty Today</div>
               {members.map(member => {
-                const entry = getEntry(member.user_id, formatDate(currentDate))
+                const entry = getEntry(member.user_id, formatDate(currentDate), member.email)
                 const name = profileMap[member.user_id] || (member.email || '').split('@')[0]
                 const shiftName = entry?.shift_type || ''
                 const color = shiftName ? getShiftColor(shiftName) : ''
@@ -336,7 +336,7 @@ export default function SchedulePage() {
                     </td>
                     {viewDays.map(d => {
                       const dateStr = formatDate(d)
-                      const entry = getEntry(member.user_id, dateStr)
+                      const entry = getEntry(member.user_id, dateStr, member.email)
                       const shiftName = entry?.shift_type || ''
                       const color = shiftName ? getShiftColor(shiftName) : 'transparent'
                       return (

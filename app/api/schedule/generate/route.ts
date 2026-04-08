@@ -41,16 +41,14 @@ export async function POST(req: NextRequest) {
   const rawStart = new Date((startDate || new Date().toISOString().split('T')[0]) + 'T12:00:00')
   const start = getMondayOf(rawStart)
 
-  // Build member lookup by lowercase name AND by userId
-  const membersByName: { [name: string]: { userId: string, email: string } } = {}
-  const membersById: { [userId: string]: { name: string, email: string } } = {}
-  const allMemberIds: string[] = []
+  // Build member lookup by lowercase display name -> email
+  const membersByName: { [name: string]: { email: string } } = {}
+  const allEmails: string[] = []
 
   for (const m of members) {
     const name = (m.name || m.email).toLowerCase()
-    membersByName[name] = { userId: m.userId, email: m.email }
-    membersById[m.userId] = { name, email: m.email }
-    allMemberIds.push(m.userId)
+    membersByName[name] = { email: m.email }
+    allEmails.push(m.email)
   }
 
   // Build time-off lookup
@@ -102,7 +100,6 @@ export async function POST(req: NextRequest) {
       for (let w = 0; w < numWeeks; w++) {
         const weekDates = allDates.slice(w * 7, (w + 1) * 7)
 
-        // Pick one person for this week
         const assigned: string[] = []
         let attempts = 0
         while (assigned.length < config.perDay && attempts < config.eligible.length) {
@@ -110,9 +107,7 @@ export async function POST(req: NextRequest) {
           rotIndex++
           attempts++
 
-          // Check time-off for any day this week
           if (weekDates.some(d => timeOffSet.has(`${candidate}:${d}`))) continue
-          // Check not already assigned a different weekly shift this week
           const alreadyBooked = weekDates.some(d => dayAssigned[d]?.has(candidate))
           if (alreadyBooked) continue
 
@@ -128,7 +123,6 @@ export async function POST(req: NextRequest) {
         }
       }
     } else {
-      // Daily rotation
       for (const date of allDates) {
         if (isWeekdayOnly && isWeekend(date)) continue
 
@@ -153,56 +147,46 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Now write to DB: for EVERY member on EVERY date, upsert or delete
-  let totalSaved = 0
-  let totalDeleted = 0
+  // First: delete ALL existing schedule entries for this group in this date range
+  // Use email-based deletion since user_id may be NULL
+  for (const email of allEmails) {
+    await supabase
+      .from('schedules')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('user_email', email)
+      .gte('date', allDates[0])
+      .lte('date', allDates[allDates.length - 1])
+  }
 
+  // Now insert fresh entries — one per member per date where they have a shift
+  const toInsert: any[] = []
   for (const date of allDates) {
     for (const m of members) {
       const name = (m.name || m.email).toLowerCase()
-      const assignedShift = memberAssignment[date][name] || null
+      const assignedShift = memberAssignment[date][name]
+      if (!assignedShift) continue
 
-      // Check if entry already exists
-      const { data: existing } = await supabase
-        .from('schedules')
-        .select('id, shift_type')
-        .eq('group_id', groupId)
-        .eq('user_id', m.userId)
-        .eq('date', date)
-
-      if (assignedShift) {
-        if (existing && existing.length > 0) {
-          // Delete all but keep one, then update it
-          const keepId = existing[0].id
-          if (existing.length > 1) {
-            const extraIds = existing.slice(1).map((e: any) => e.id)
-            await supabase.from('schedules').delete().in('id', extraIds)
-          }
-          if (existing[0].shift_type !== assignedShift) {
-            await supabase.from('schedules').update({ shift_type: assignedShift }).eq('id', keepId)
-          }
-        } else {
-          await supabase.from('schedules').insert({
-            group_id: groupId,
-            user_id: m.userId,
-            user_email: m.email,
-            date,
-            shift_type: assignedShift,
-          })
-        }
-        totalSaved++
-      } else {
-        // No shift — delete any existing entries for this member+date
-        if (existing && existing.length > 0) {
-          const ids = existing.map((e: any) => e.id)
-          await supabase.from('schedules').delete().in('id', ids)
-          totalDeleted += ids.length
-        }
-      }
+      toInsert.push({
+        group_id: groupId,
+        user_id: m.userId || null,
+        user_email: m.email,
+        date,
+        shift_type: assignedShift,
+      })
     }
   }
 
-  console.log(`Schedule generated: ${totalSaved} assigned, ${totalDeleted} cleared, ${allDates.length} days, ${shiftConfigs.length} shifts`)
+  // Batch insert in chunks of 100
+  let totalSaved = 0
+  for (let i = 0; i < toInsert.length; i += 100) {
+    const chunk = toInsert.slice(i, i + 100)
+    const { error } = await supabase.from('schedules').insert(chunk)
+    if (error) {
+      return NextResponse.json({ error: 'Failed to save: ' + error.message }, { status: 500 })
+    }
+    totalSaved += chunk.length
+  }
 
   if (totalSaved === 0) {
     return NextResponse.json({
@@ -214,5 +198,5 @@ export async function POST(req: NextRequest) {
     }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, entriesGenerated: totalSaved, entriesCleared: totalDeleted })
+  return NextResponse.json({ success: true, entriesGenerated: totalSaved })
 }
