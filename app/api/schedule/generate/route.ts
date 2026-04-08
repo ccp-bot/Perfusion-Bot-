@@ -45,23 +45,36 @@ export async function POST(req: NextRequest) {
       dates.push(day.toISOString().split('T')[0])
     }
 
+    // Label each date as weekday or weekend
+    const datesLabeled = dates.map(d => {
+      const day = new Date(d).getDay()
+      return `${d} (${day === 0 || day === 6 ? 'WEEKEND' : 'WEEKDAY'})`
+    }).join(', ')
+
     const prompt = `You are a scheduling assistant. Generate a 1-week perfusion schedule.
 
-TEAM: ${memberNames}
-SHIFTS: ${shiftTypeNames}
-DATES: ${dates.join(', ')}
+TEAM MEMBERS: ${memberNames}
+AVAILABLE SHIFT TYPES: ${shiftTypeNames}
+DATES: ${datesLabeled}
 
 RULES:
 ${rules}
 
-TIME-OFF:
+TIME-OFF (these people MUST NOT be scheduled on these dates):
 ${timeOffList}
 
-${w > 0 ? 'Continue the rotation fairly from previous weeks.' : ''}
+CRITICAL INSTRUCTIONS:
+- Each person can only be assigned ONE shift per day
+- No person should be assigned to two shifts on the same day
+- Only assign shifts from the AVAILABLE SHIFT TYPES list above
+- Use the EXACT shift type names as listed above
+- People not assigned a shift should be given "Off"
+- Rotate fairly so the same person isn't always on the same shift
+${w > 0 ? '- Continue the rotation fairly from previous weeks, vary who gets which shifts' : ''}
 
-Return ONLY a JSON array. No markdown, no text, no code blocks. Just raw JSON.
+Return ONLY a valid JSON array. No markdown, no explanation, no code blocks.
 Format: [{"date":"YYYY-MM-DD","member":"Name","shift":"Shift Type"}]
-Every member must have exactly one entry per day.`
+Include one entry per member per day. Use "Off" for unscheduled members.`
 
     try {
       const response = await anthropic.messages.create({
