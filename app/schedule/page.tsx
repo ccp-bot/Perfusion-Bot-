@@ -209,7 +209,15 @@ export default function SchedulePage() {
   }
 
   function getEntry(userId: string, date: string, email?: string) {
-    return entries.find(e => e.date === date && (e.user_id === userId || (email && e.user_email === email)))
+    // Match by email first (most reliable), fall back to user_id only if non-null
+    if (email) {
+      const byEmail = entries.find(e => e.date === date && e.user_email === email)
+      if (byEmail) return byEmail
+    }
+    if (userId) {
+      return entries.find(e => e.date === date && e.user_id === userId)
+    }
+    return undefined
   }
 
   function getShiftColor(name: string): string {
