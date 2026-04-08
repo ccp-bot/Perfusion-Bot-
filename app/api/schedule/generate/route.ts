@@ -6,30 +6,25 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-interface ShiftConfig {
-  name: string
-  eligible: string[]
-  perDay: number
-  rules: string
-}
-
-interface Member {
-  name: string
-  userId: string
-  email: string
-}
-
 function parseRotation(rules: string): 'daily' | 'weekly' {
   const lower = (rules || '').toLowerCase()
   if (lower.includes('every day') || lower.includes('everyday') || lower.includes('rotates every') || lower.includes('per weekday')) {
     return 'daily'
   }
-  return 'weekly' // default to weekly
+  return 'weekly'
 }
 
 function isWeekend(dateStr: string): boolean {
   const day = new Date(dateStr + 'T12:00:00').getDay()
   return day === 0 || day === 6
+}
+
+function getMondayOf(date: Date): Date {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  d.setDate(d.getDate() + diff)
+  return d
 }
 
 export async function POST(req: NextRequest) {
@@ -43,35 +38,35 @@ export async function POST(req: NextRequest) {
   }
 
   const numWeeks = weeks || 6
-  // Always start from Monday of the given week so weekly rotations align Mon-Sun
   const rawStart = new Date((startDate || new Date().toISOString().split('T')[0]) + 'T12:00:00')
-  const dayOfWeek = rawStart.getDay()
-  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-  const start = new Date(rawStart)
-  start.setDate(start.getDate() + mondayOffset)
+  const start = getMondayOf(rawStart)
 
-  // Build member lookup
-  const memberMap: { [name: string]: Member } = {}
+  // Build member lookup by lowercase name AND by userId
+  const membersByName: { [name: string]: { userId: string, email: string } } = {}
+  const membersById: { [userId: string]: { name: string, email: string } } = {}
+  const allMemberIds: string[] = []
+
   for (const m of members) {
     const name = (m.name || m.email).toLowerCase()
-    memberMap[name] = { name: m.name || m.email, userId: m.userId, email: m.email }
+    membersByName[name] = { userId: m.userId, email: m.email }
+    membersById[m.userId] = { name, email: m.email }
+    allMemberIds.push(m.userId)
   }
 
-  // Build time-off lookup: { "name:date" -> true }
+  // Build time-off lookup
   const timeOffSet = new Set<string>()
   for (const t of (timeOffDates || [])) {
     timeOffSet.add(`${(t.name || '').toLowerCase()}:${t.date}`)
   }
 
-  // Load shift configs from the shiftTypes passed in (they should have eligible, per_day, rules from DB)
-  // Also fetch from DB to get full config
+  // Load shift configs from DB
   const { data: dbShiftTypes } = await supabase
     .from('shift_types')
     .select('*')
     .eq('group_id', groupId)
     .order('sort_order', { ascending: true })
 
-  const shiftConfigs: ShiftConfig[] = (dbShiftTypes || []).map((st: any) => ({
+  const shiftConfigs = (dbShiftTypes || []).map((st: any) => ({
     name: st.name,
     eligible: (st.eligible || []).map((e: string) => e.toLowerCase()),
     perDay: st.per_day || 1,
@@ -86,40 +81,28 @@ export async function POST(req: NextRequest) {
     allDates.push(day.toISOString().split('T')[0])
   }
 
-  // Clear ALL existing schedule entries for this group from the start date onward
-  const firstDate = allDates[0]
-  const lastDate = allDates[allDates.length - 1]
-  await supabase
-    .from('schedules')
-    .delete()
-    .eq('group_id', groupId)
-    .gte('date', firstDate)
+  // Build the schedule: memberAssignment[date][memberName] = shiftName
+  const memberAssignment: { [date: string]: { [member: string]: string } } = {}
+  const dayAssigned: { [date: string]: Set<string> } = {}
 
-  // Track assignments: date -> set of assigned user names (to prevent double-booking)
-  const dayAssignments: { [date: string]: Set<string> } = {}
   for (const date of allDates) {
-    dayAssignments[date] = new Set()
+    memberAssignment[date] = {}
+    dayAssigned[date] = new Set()
   }
 
-  // Track rotation index per shift (for fair round-robin)
-  const shiftRotationIndex: { [shiftName: string]: number } = {}
-
-  // For each shift type, assign members using round-robin rotation
-  const scheduleEntries: { date: string; member: string; shift: string }[] = []
-
+  // Process each shift type with round-robin
   for (const config of shiftConfigs) {
     if (config.eligible.length === 0) continue
 
     const rotation = parseRotation(config.rules)
     const isWeekdayOnly = config.rules.toLowerCase().includes('weekday')
-    let rotIndex = shiftRotationIndex[config.name] || 0
+    let rotIndex = 0
 
     if (rotation === 'weekly') {
-      // Weekly rotation: same person(s) for the entire week (Mon-Sun)
       for (let w = 0; w < numWeeks; w++) {
         const weekDates = allDates.slice(w * 7, (w + 1) * 7)
 
-        // Pick perDay people for this week, rotating through eligible list
+        // Pick one person for this week
         const assigned: string[] = []
         let attempts = 0
         while (assigned.length < config.perDay && attempts < config.eligible.length) {
@@ -127,31 +110,27 @@ export async function POST(req: NextRequest) {
           rotIndex++
           attempts++
 
-          // Check if candidate has time off for any day this week
-          const hasTimeOff = weekDates.some(d => timeOffSet.has(`${candidate}:${d}`))
-          if (hasTimeOff) continue
+          // Check time-off for any day this week
+          if (weekDates.some(d => timeOffSet.has(`${candidate}:${d}`))) continue
+          // Check not already assigned a different weekly shift this week
+          const alreadyBooked = weekDates.some(d => dayAssigned[d]?.has(candidate))
+          if (alreadyBooked) continue
 
           assigned.push(candidate)
         }
 
-        // Assign these people to every day of the week
         for (const date of weekDates) {
-          const weekend = isWeekend(date)
-          if (isWeekdayOnly && weekend) continue
-
+          if (isWeekdayOnly && isWeekend(date)) continue
           for (const person of assigned) {
-            // Don't double-book
-            if (dayAssignments[date].has(person)) continue
-            dayAssignments[date].add(person)
-            scheduleEntries.push({ date, member: person, shift: config.name })
+            dayAssigned[date].add(person)
+            memberAssignment[date][person] = config.name
           }
         }
       }
     } else {
-      // Daily rotation: different person each day
+      // Daily rotation
       for (const date of allDates) {
-        const weekend = isWeekend(date)
-        if (isWeekdayOnly && weekend) continue
+        if (isWeekdayOnly && isWeekend(date)) continue
 
         const assigned: string[] = []
         let attempts = 0
@@ -160,67 +139,80 @@ export async function POST(req: NextRequest) {
           rotIndex++
           attempts++
 
-          // Check time off
           if (timeOffSet.has(`${candidate}:${date}`)) continue
-
-          // Don't double-book on this day
-          if (dayAssignments[date].has(candidate)) continue
+          if (dayAssigned[date].has(candidate)) continue
 
           assigned.push(candidate)
         }
 
         for (const person of assigned) {
-          dayAssignments[date].add(person)
-          scheduleEntries.push({ date, member: person, shift: config.name })
+          dayAssigned[date].add(person)
+          memberAssignment[date][person] = config.name
         }
       }
     }
-
-    shiftRotationIndex[config.name] = rotIndex
   }
 
-  // Save to database
+  // Now write to DB: for EVERY member on EVERY date, upsert or delete
   let totalSaved = 0
-  const toInsert = scheduleEntries
-    .filter(entry => memberMap[entry.member])
-    .map(entry => {
-      const m = memberMap[entry.member]
-      return {
-        group_id: groupId,
-        user_id: m.userId,
-        user_email: m.email,
-        date: entry.date,
-        shift_type: entry.shift,
+  let totalDeleted = 0
+
+  for (const date of allDates) {
+    for (const m of members) {
+      const name = (m.name || m.email).toLowerCase()
+      const assignedShift = memberAssignment[date][name] || null
+
+      // Check if entry already exists
+      const { data: existing } = await supabase
+        .from('schedules')
+        .select('id, shift_type')
+        .eq('group_id', groupId)
+        .eq('user_id', m.userId)
+        .eq('date', date)
+
+      if (assignedShift) {
+        if (existing && existing.length > 0) {
+          // Delete all but keep one, then update it
+          const keepId = existing[0].id
+          if (existing.length > 1) {
+            const extraIds = existing.slice(1).map((e: any) => e.id)
+            await supabase.from('schedules').delete().in('id', extraIds)
+          }
+          if (existing[0].shift_type !== assignedShift) {
+            await supabase.from('schedules').update({ shift_type: assignedShift }).eq('id', keepId)
+          }
+        } else {
+          await supabase.from('schedules').insert({
+            group_id: groupId,
+            user_id: m.userId,
+            user_email: m.email,
+            date,
+            shift_type: assignedShift,
+          })
+        }
+        totalSaved++
+      } else {
+        // No shift — delete any existing entries for this member+date
+        if (existing && existing.length > 0) {
+          const ids = existing.map((e: any) => e.id)
+          await supabase.from('schedules').delete().in('id', ids)
+          totalDeleted += ids.length
+        }
       }
-    })
-
-  // Log what we're about to insert for debugging
-  console.log('Schedule generation summary:', {
-    shiftConfigs: shiftConfigs.map(c => ({ name: c.name, eligible: c.eligible, perDay: c.perDay, rotation: parseRotation(c.rules) })),
-    memberMapKeys: Object.keys(memberMap),
-    totalEntries: toInsert.length,
-    dateRange: `${firstDate} to ${lastDate}`,
-    sampleEntries: toInsert.slice(0, 10).map(e => `${e.date}: ${e.user_email} -> ${e.shift_type}`),
-  })
-
-  if (toInsert.length > 0) {
-    const { error } = await supabase.from('schedules').insert(toInsert)
-    if (error) {
-      return NextResponse.json({ error: 'Failed to save: ' + error.message }, { status: 500 })
     }
-    totalSaved = toInsert.length
   }
+
+  console.log(`Schedule generated: ${totalSaved} assigned, ${totalDeleted} cleared, ${allDates.length} days, ${shiftConfigs.length} shifts`)
 
   if (totalSaved === 0) {
     return NextResponse.json({
       error: 'No entries generated. Check shift configs and eligible members.',
       debug: {
-        shiftConfigs: shiftConfigs.map(c => ({ name: c.name, eligible: c.eligible, perDay: c.perDay, rotation: parseRotation(c.rules) })),
-        memberMapKeys: Object.keys(memberMap),
-        dateRange: `${firstDate} to ${lastDate}`,
+        shifts: shiftConfigs.map(c => ({ name: c.name, eligible: c.eligible, perDay: c.perDay })),
+        members: Object.keys(membersByName),
       }
     }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, entriesGenerated: totalSaved })
+  return NextResponse.json({ success: true, entriesGenerated: totalSaved, entriesCleared: totalDeleted })
 }
