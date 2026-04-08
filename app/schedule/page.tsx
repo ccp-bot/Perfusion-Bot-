@@ -466,7 +466,14 @@ export default function SchedulePage() {
               />
 
               <button
-                onClick={() => saveShiftConfigs(shiftConfigs, generalRules)}
+                onClick={async () => {
+                  setGenerateStatus('Saving...')
+                  try {
+                    await saveShiftConfigs(shiftConfigs, generalRules)
+                    setGenerateStatus('Configuration saved!')
+                    setTimeout(() => setGenerateStatus(''), 2000)
+                  } catch { setGenerateStatus('Failed to save') }
+                }}
                 style={{ width: '100%', padding: '0.4rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer', marginTop: '0.5rem', marginBottom: '0.5rem' }}
               >Save Configuration</button>
 
