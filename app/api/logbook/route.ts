@@ -39,6 +39,38 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ entries: data || [] })
 }
 
+// PATCH /api/logbook — append a timestamped note to an entry
+export async function PATCH(req: NextRequest) {
+  const { id, note, userId } = await req.json()
+
+  if (!id || !note) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+
+  // Get existing content
+  const { data: entry } = await supabase
+    .from('documents')
+    .select('content, user_id')
+    .eq('id', id)
+    .single()
+
+  if (!entry) return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
+
+  // Only the owner of the case note can add notes
+  if (entry.user_id !== userId) {
+    return NextResponse.json({ error: 'You can only add notes to your own entries' }, { status: 403 })
+  }
+
+  const timestamp = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  const appendedContent = `${entry.content}\n\n[${timestamp}] ${note}`
+
+  const { error } = await supabase
+    .from('documents')
+    .update({ content: appendedContent })
+    .eq('id', id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true, content: appendedContent })
+}
+
 // DELETE /api/logbook
 export async function DELETE(req: NextRequest) {
   const { id, userId, userRole } = await req.json()

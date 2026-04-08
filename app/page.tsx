@@ -67,6 +67,7 @@ export default function Home() {
   const [uploadStatus, setUploadStatus] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set())
+  const [addingNote, setAddingNote] = useState<{[id: number]: string}>({})
   const [checklistFiles, setChecklistFiles] = useState<any[]>([])
   const [checklistUploading, setChecklistUploading] = useState(false)
   const [inventoryItems, setInventoryItems] = useState<any[]>([])
@@ -1755,7 +1756,49 @@ export default function Home() {
                         </div>
                       </div>
                       {(!isCollapsible || isExpanded) && (
-                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content.length > 300 && !isExpanded ? entry.content.slice(0, 300) + '...' : entry.content}</div>
+                        <>
+                          <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content.length > 300 && !isExpanded ? entry.content.slice(0, 300) + '...' : entry.content}</div>
+                          {activePanel === 'Case Notes' && isExpanded && entry.user_id === user?.id && (
+                            <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.4rem' }} onClick={e => e.stopPropagation()}>
+                              <input
+                                value={addingNote[entry.id] || ''}
+                                onChange={e => setAddingNote(prev => ({ ...prev, [entry.id]: e.target.value }))}
+                                onKeyDown={async e => {
+                                  if (e.key === 'Enter' && addingNote[entry.id]?.trim()) {
+                                    const res = await fetch('/api/logbook', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: entry.id, note: addingNote[entry.id].trim(), userId: user.id })
+                                    })
+                                    const data = await res.json()
+                                    if (data.success) {
+                                      setPanelEntries(prev => prev.map(e => e.id === entry.id ? { ...e, content: data.content } : e))
+                                      setAddingNote(prev => ({ ...prev, [entry.id]: '' }))
+                                    }
+                                  }
+                                }}
+                                placeholder="Add a note..."
+                                style={{ flex: 1, padding: '0.4rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }}
+                              />
+                              <button
+                                onClick={async () => {
+                                  if (!addingNote[entry.id]?.trim()) return
+                                  const res = await fetch('/api/logbook', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: entry.id, note: addingNote[entry.id].trim(), userId: user.id })
+                                  })
+                                  const data = await res.json()
+                                  if (data.success) {
+                                    setPanelEntries(prev => prev.map(e => e.id === entry.id ? { ...e, content: data.content } : e))
+                                    setAddingNote(prev => ({ ...prev, [entry.id]: '' }))
+                                  }
+                                }}
+                                style={{ padding: '0.4rem 0.7rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}
+                              >+</button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   )
