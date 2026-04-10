@@ -429,50 +429,50 @@ export default function SchedulePage() {
         {/* Sidebar */}
         <div style={{ width: '260px', flexShrink: 0, background: 'rgba(255,255,255,0.015)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', padding: '1rem', backdropFilter: 'blur(12px)', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
           {isAdmin && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Shift Types</div>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.6rem', fontWeight: '600' }}>Shift Types</div>
               {shiftTypes.map(st => (
-                <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
-                  <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: st.color, flexShrink: 0 }} />
-                  <div style={{ flex: 1, fontSize: '0.78rem', color: '#94a3b8' }}>{st.name}</div>
-                  <button onClick={() => deleteShiftType(st.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.65rem', cursor: 'pointer', opacity: 0.6 }}>&#10005;</button>
+                <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', padding: '0.35rem 0.4rem', borderRadius: '8px', transition: 'background 0.15s ease' }} onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '4px', background: `linear-gradient(135deg, ${st.color}, ${st.color}88)`, flexShrink: 0, boxShadow: `0 1px 6px ${st.color}33` }} />
+                  <div style={{ flex: 1, fontSize: '0.78rem', color: '#cbd5e1', fontWeight: '500' }}>{st.name}</div>
+                  <button onClick={() => deleteShiftType(st.id)} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: '#64748b', fontSize: '0.6rem', cursor: 'pointer', borderRadius: '6px', padding: '0.2rem 0.35rem', transition: 'all 0.15s ease' }}>&#10005;</button>
                 </div>
               ))}
-              <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.5rem' }}>
-                <input value={newShiftName} onChange={e => setNewShiftName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addShiftType()} placeholder="New shift..." style={{ flex: 1, padding: '0.35rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.75rem', outline: 'none', boxSizing: 'border-box' }} />
-                <select value={newShiftColor} onChange={e => setNewShiftColor(e.target.value)} style={{ padding: '0.35rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0d1117', color: newShiftColor, fontSize: '0.75rem', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.6rem' }}>
+                <input value={newShiftName} onChange={e => setNewShiftName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addShiftType()} placeholder="New shift..." style={{ flex: 1, padding: '0.4rem 0.6rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', color: '#e2e8f0', fontSize: '0.73rem', outline: 'none', boxSizing: 'border-box', transition: 'border 0.15s ease' }} />
+                <select value={newShiftColor} onChange={e => setNewShiftColor(e.target.value)} style={{ padding: '0.4rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', color: newShiftColor, fontSize: '0.75rem', cursor: 'pointer' }}>
                   {colors.map(c => <option key={c} value={c} style={{ color: c }}>&#9632;</option>)}
                 </select>
-                <button onClick={addShiftType} style={{ padding: '0.35rem 0.5rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.75rem', cursor: 'pointer' }}>+</button>
+                <button onClick={addShiftType} style={{ padding: '0.4rem 0.65rem', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #e63946, #c62d3a)', color: 'white', fontSize: '0.78rem', cursor: 'pointer', fontWeight: '600', boxShadow: '0 2px 8px rgba(230,57,70,0.3)', transition: 'all 0.15s ease' }}>+</button>
               </div>
             </div>
           )}
 
           {/* Auto-Generate Schedule */}
           {isAdmin && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Configure Shifts</div>
-              <div style={{ fontSize: '0.68rem', color: '#4a5568', marginBottom: '0.5rem', opacity: 0.7 }}>Set eligible members and rules for each shift type.</div>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.4rem', fontWeight: '600' }}>Configure Shifts</div>
+              <div style={{ fontSize: '0.65rem', color: '#475569', marginBottom: '0.6rem' }}>Set eligible members and rules for each shift type.</div>
 
               {shiftTypes.map(st => {
                 const config = shiftConfigs[st.name] || { eligible: [], perDay: 1, rules: '' }
                 return (
-                  <div key={st.id} style={{ marginBottom: '0.75rem', padding: '0.6rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '3px', background: st.color }} />
-                      <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: '500', flex: 1 }}>{st.name}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                        <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>#/day:</span>
+                  <div key={st.id} style={{ marginBottom: '0.6rem', padding: '0.65rem', background: `linear-gradient(135deg, ${st.color}08, transparent)`, border: `1px solid ${st.color}15`, borderRadius: '12px', transition: 'border-color 0.15s ease' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '4px', background: `linear-gradient(135deg, ${st.color}, ${st.color}88)`, boxShadow: `0 1px 4px ${st.color}33` }} />
+                      <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '600', flex: 1 }}>{st.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(255,255,255,0.04)', padding: '0.2rem 0.4rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: '500' }}>#/day</span>
                         <input
                           type="number"
                           value={config.perDay}
                           onChange={e => setShiftConfigs(prev => ({ ...prev, [st.name]: { ...config, perDay: parseInt(e.target.value) || 1 } }))}
-                          style={{ width: '35px', padding: '0.2rem', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.7rem', outline: 'none', textAlign: 'center' }}
+                          style={{ width: '30px', padding: '0.15rem', borderRadius: '4px', border: 'none', background: 'transparent', color: '#e2e8f0', fontSize: '0.72rem', outline: 'none', textAlign: 'center', fontWeight: '600' }}
                         />
                       </div>
                     </div>
-                    <div style={{ fontSize: '0.65rem', color: '#4a5568', marginBottom: '0.3rem' }}>Eligible:</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.4rem' }}>
+                    <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: '0.3rem', fontWeight: '500' }}>Eligible:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.45rem' }}>
                       {members.map(m => {
                         const name = getMemberName(m)
                         const isSelected = config.eligible.includes(name)
@@ -485,7 +485,7 @@ export default function SchedulePage() {
                                 : [...config.eligible, name]
                               setShiftConfigs(prev => ({ ...prev, [st.name]: { ...config, eligible: updated } }))
                             }}
-                            style={{ padding: '0.2rem 0.45rem', borderRadius: '12px', border: `1px solid ${isSelected ? st.color : 'rgba(255,255,255,0.08)'}`, background: isSelected ? st.color + '22' : 'transparent', color: isSelected ? st.color : '#4a5568', fontSize: '0.65rem', cursor: 'pointer' }}
+                            style={{ padding: '0.22rem 0.5rem', borderRadius: '16px', border: `1.5px solid ${isSelected ? st.color : 'rgba(255,255,255,0.06)'}`, background: isSelected ? `linear-gradient(135deg, ${st.color}30, ${st.color}15)` : 'rgba(255,255,255,0.02)', color: isSelected ? st.color : '#64748b', fontSize: '0.63rem', cursor: 'pointer', fontWeight: isSelected ? '600' : '400', transition: 'all 0.15s ease', boxShadow: isSelected ? `0 1px 6px ${st.color}20` : 'none' }}
                           >{name}</button>
                         )
                       })}
@@ -494,25 +494,25 @@ export default function SchedulePage() {
                       value={config.rules}
                       onChange={e => setShiftConfigs(prev => ({ ...prev, [st.name]: { ...config, rules: e.target.value } }))}
                       placeholder="Rules for this shift..."
-                      style={{ width: '100%', padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.7rem', outline: 'none', boxSizing: 'border-box' }}
+                      style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.03)', color: '#cbd5e1', fontSize: '0.68rem', outline: 'none', boxSizing: 'border-box', transition: 'border 0.15s ease' }}
                     />
                   </div>
                 )
               })}
 
-              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '0.75rem', marginBottom: '0.4rem' }}>General Rules</div>
+              <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '0.75rem', marginBottom: '0.4rem', fontWeight: '600' }}>General Rules</div>
               <textarea
                 value={generalRules}
                 onChange={e => setGeneralRules(e.target.value)}
                 placeholder={"e.g., No more than 3 consecutive call days\nRotate weekends evenly\nEveryone gets 2 days off per week"}
                 rows={3}
-                style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.72rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
+                style={{ width: '100%', padding: '0.45rem 0.55rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.03)', color: '#cbd5e1', fontSize: '0.7rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.5', transition: 'border 0.15s ease' }}
               />
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', padding: '0.55rem 0.6rem', background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(139,92,246,0.03))', border: '1px solid rgba(139,92,246,0.15)', borderRadius: '10px' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.72rem', color: '#e2e8f0', fontWeight: '500' }}>Set schedule</div>
-                  <div style={{ fontSize: '0.6rem', color: '#4a5568' }}>Weeks locked in as final</div>
+                  <div style={{ fontSize: '0.72rem', color: '#e2e8f0', fontWeight: '600' }}>Set schedule</div>
+                  <div style={{ fontSize: '0.58rem', color: '#64748b' }}>Weeks locked in as final</div>
                 </div>
                 <input
                   type="number"
@@ -520,9 +520,9 @@ export default function SchedulePage() {
                   max={26}
                   value={setWeeksCount}
                   onChange={e => setSetWeeksCount(Math.max(1, Math.min(26, parseInt(e.target.value) || 6)))}
-                  style={{ width: '40px', padding: '0.25rem', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.75rem', outline: 'none', textAlign: 'center' }}
+                  style={{ width: '38px', padding: '0.3rem', borderRadius: '8px', border: '1px solid rgba(139,92,246,0.2)', background: 'rgba(139,92,246,0.1)', color: '#c4b5fd', fontSize: '0.78rem', outline: 'none', textAlign: 'center', fontWeight: '700' }}
                 />
-                <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>wks</span>
+                <span style={{ fontSize: '0.62rem', color: '#8b5cf6', fontWeight: '500' }}>wks</span>
               </div>
 
               <button
@@ -534,15 +534,13 @@ export default function SchedulePage() {
                     setTimeout(() => setGenerateStatus(''), 2000)
                   } catch { setGenerateStatus('Failed to save') }
                 }}
-                style={{ width: '100%', padding: '0.4rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer', marginTop: '0.5rem', marginBottom: '0.5rem' }}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.73rem', cursor: 'pointer', marginTop: '0.6rem', marginBottom: '0.4rem', fontWeight: '500', transition: 'all 0.15s ease', backdropFilter: 'blur(4px)' }}
               >Save Configuration</button>
 
               <button
                 onClick={async () => {
                   if (!userGroupId || generating) return
-                  // Save configs first
                   await saveShiftConfigs(shiftConfigs, generalRules)
-                  // Validate at least one shift has eligible members
                   const hasConfig = Object.values(shiftConfigs).some((c: any) => c.eligible.length > 0)
                   if (!hasConfig) { setGenerateStatus('Select eligible members for at least one shift.'); return }
 
@@ -585,21 +583,21 @@ export default function SchedulePage() {
                   setGenerating(false)
                 }}
                 disabled={generating}
-                style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: generating ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', fontWeight: '500', cursor: generating ? 'not-allowed' : 'pointer', marginTop: '0.5rem' }}
+                style={{ width: '100%', padding: '0.55rem', borderRadius: '10px', border: 'none', background: generating ? '#1e293b' : 'linear-gradient(135deg, #e63946, #c62d3a)', color: 'white', fontSize: '0.78rem', fontWeight: '600', cursor: generating ? 'not-allowed' : 'pointer', marginTop: '0.3rem', boxShadow: generating ? 'none' : '0 3px 12px rgba(230,57,70,0.35)', transition: 'all 0.2s ease', letterSpacing: '0.01em' }}
               >
                 {generating ? 'Generating...' : 'Generate 6-Month Schedule'}
               </button>
-              {generateStatus && <div style={{ fontSize: '0.7rem', color: generateStatus.includes('Done') ? '#22c55e' : generateStatus.includes('COR') ? '#f59e0b' : '#e63946', marginTop: '0.4rem' }}>{generateStatus}</div>}
+              {generateStatus && <div style={{ fontSize: '0.68rem', color: generateStatus.includes('Done') ? '#22c55e' : generateStatus.includes('COR') ? '#f59e0b' : '#e63946', marginTop: '0.5rem', padding: '0.35rem 0.5rem', background: generateStatus.includes('Done') ? 'rgba(34,197,94,0.08)' : generateStatus.includes('COR') ? 'rgba(245,158,11,0.08)' : 'rgba(230,57,70,0.08)', borderRadius: '8px', fontWeight: '500' }}>{generateStatus}</div>}
             </div>
           )}
 
           {!isAdmin && shiftTypes.length > 0 && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Legend</div>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.6rem', fontWeight: '600' }}>Legend</div>
               {shiftTypes.map(st => (
-                <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.3rem' }}>
-                  <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: st.color, flexShrink: 0 }} />
-                  <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{st.name}</div>
+                <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', padding: '0.3rem 0.4rem', borderRadius: '8px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '4px', background: `linear-gradient(135deg, ${st.color}, ${st.color}88)`, flexShrink: 0, boxShadow: `0 1px 6px ${st.color}33` }} />
+                  <div style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: '500' }}>{st.name}</div>
                 </div>
               ))}
             </div>
@@ -607,15 +605,15 @@ export default function SchedulePage() {
 
           {isAdmin && timeOffRequests.length > 0 && (
             <div>
-              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Time-Off Requests</div>
+              <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.6rem', fontWeight: '600' }}>Time-Off Requests</div>
               {timeOffRequests.map(req => (
-                <div key={req.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.6rem', marginBottom: '0.5rem' }}>
-                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: '500' }}>{emailProfileMap[req.user_email] || (req.user_id && profileMap[req.user_id]) || req.user_email?.split('@')[0]}</div>
-                  <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '2px' }}>{new Date(req.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                  {req.reason && <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '3px' }}>{req.reason}</div>}
-                  <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.4rem' }}>
-                    <button onClick={() => handleTimeOff(req.id, 'approved')} style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', border: 'none', background: '#22c55e', color: 'white', fontSize: '0.7rem', cursor: 'pointer' }}>Approve</button>
-                    <button onClick={() => handleTimeOff(req.id, 'denied')} style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.7rem', cursor: 'pointer' }}>Deny</button>
+                <div key={req.id} style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '0.65rem', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontWeight: '600' }}>{emailProfileMap[req.user_email] || (req.user_id && profileMap[req.user_id]) || req.user_email?.split('@')[0]}</div>
+                  <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px' }}>{new Date(req.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                  {req.reason && <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '4px', fontStyle: 'italic' }}>{req.reason}</div>}
+                  <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.5rem' }}>
+                    <button onClick={() => handleTimeOff(req.id, 'approved')} style={{ flex: 1, padding: '0.3rem 0.5rem', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: 'white', fontSize: '0.68rem', cursor: 'pointer', fontWeight: '600', boxShadow: '0 2px 6px rgba(34,197,94,0.25)' }}>Approve</button>
+                    <button onClick={() => handleTimeOff(req.id, 'denied')} style={{ flex: 1, padding: '0.3rem 0.5rem', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #e63946, #c62d3a)', color: 'white', fontSize: '0.68rem', cursor: 'pointer', fontWeight: '600', boxShadow: '0 2px 6px rgba(230,57,70,0.25)' }}>Deny</button>
                   </div>
                 </div>
               ))}
