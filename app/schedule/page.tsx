@@ -270,7 +270,7 @@ export default function SchedulePage() {
     }
 
     return (
-      <div style={{ background: 'white', padding: '0.2in 0.3in', color: '#000', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif", minHeight: '100vh' }}>
+      <div style={{ background: 'white', padding: '0.2in 0.3in', color: '#000', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', marginBottom: '0.15in' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/COR-print.png" alt="COR" width={44} height={44} style={{ width: '44px', height: '44px', objectFit: 'contain' }} />

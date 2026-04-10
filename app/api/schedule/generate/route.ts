@@ -143,33 +143,15 @@ export async function POST(req: NextRequest) {
       available.push(candidate)
     }
 
-    // Assign available members to daily shifts in order (C3 first, then 1, 2, 3, 4)
+    // Assign available members to daily shifts in order
     let availIdx = 0
     for (const config of dailyConfigs) {
-      for (let p = 0; p < config.perDay && availIdx < available.length; p++) {
+      for (let p = 0; p < config.perDay; p++) {
+        if (availIdx >= available.length) break
         const person = available[availIdx]
-        // Verify this person is eligible for THIS specific shift
-        if (config.eligible.includes(person)) {
-          dayAssigned[date].add(person)
-          memberAssignment[date][person] = config.name
-          availIdx++
-        } else {
-          // Find next available person who IS eligible for this shift
-          let found = false
-          for (let j = availIdx + 1; j < available.length; j++) {
-            if (config.eligible.includes(available[j])) {
-              const swap = available[j]
-              available.splice(j, 1)
-              available.splice(availIdx, 0, swap)
-              dayAssigned[date].add(swap)
-              memberAssignment[date][swap] = config.name
-              availIdx++
-              found = true
-              break
-            }
-          }
-          if (!found) availIdx++ // skip this slot
-        }
+        dayAssigned[date].add(person)
+        memberAssignment[date][person] = config.name
+        availIdx++
       }
     }
 
