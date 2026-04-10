@@ -270,8 +270,8 @@ export default function SchedulePage() {
   return (
     <div style={{ minHeight: '100vh', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginRight: 'auto' }}>
           <button onClick={() => window.location.href = '/'} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}>&larr;</button>
           <div>
             <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>Schedule</div>
@@ -322,6 +322,7 @@ export default function SchedulePage() {
             </div>
           )}
         </div>
+        <div style={{ marginLeft: 'auto', width: '140px' }} />
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', padding: '1rem 1.5rem' }}>
