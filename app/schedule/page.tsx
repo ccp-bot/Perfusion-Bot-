@@ -710,15 +710,14 @@ export default function SchedulePage() {
         return (
           <div id="print-schedule" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'white', zIndex: 300, overflow: 'auto', padding: '0.3in 0.4in', color: '#000', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
             {/* Header with COR robot */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '0.15in' }}>
-              <img src="/COR-1.PNG" alt="COR" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', marginBottom: '0.15in' }}>
+              <img src="/COR print.png" alt="COR" style={{ width: '44px', height: '44px', objectFit: 'contain' }} />
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '16pt', fontWeight: '700', color: '#111' }}>
                   {printScope === 'mine' ? 'My Schedule' : 'Team Schedule'} — {monthLabel}
                 </div>
                 <div style={{ fontSize: '9pt', color: '#e63946', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{userGroupName}</div>
               </div>
-              <img src="/COR-1.PNG" alt="COR" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
             </div>
 
             {/* Month calendar grid */}
