@@ -66,15 +66,17 @@ export async function PUT(req: NextRequest) {
 
   const userIds = members.filter(m => m.user_id).map(m => m.user_id)
   const memberEmails = members.filter(m => m.email).map(m => m.email)
+  // Also collect lowercased emails for case-insensitive matching
+  const memberEmailsLower = memberEmails.map(e => e.toLowerCase())
 
   // Fetch profiles by user_id
   const { data: profilesById } = userIds.length > 0
     ? await supabase.from('profiles').select('user_id, display_name, email').in('user_id', userIds)
     : { data: [] }
 
-  // Also fetch profiles by email (catches cases where group email matches profile email)
+  // Also fetch profiles by email (both original case and lowercase for matching)
   const { data: profilesByEmail } = memberEmails.length > 0
-    ? await supabase.from('profiles').select('user_id, display_name, email').in('email', memberEmails)
+    ? await supabase.from('profiles').select('user_id, display_name, email').in('email', [...new Set([...memberEmails, ...memberEmailsLower])])
     : { data: [] }
 
   // Build map: userId -> displayName
@@ -90,23 +92,24 @@ export async function PUT(req: NextRequest) {
   }
 
   // Build email -> displayName map (reliable even when user_id is null)
-  // First, index profiles by email for quick lookup
-  const profileEmailIndex: {[email: string]: string} = {}
+  // Index profiles by lowercase email for case-insensitive lookup
+  const profileEmailIndex: {[emailLower: string]: string} = {}
   for (const p of (profilesByEmail || [])) {
-    if (p.display_name) profileEmailIndex[p.email] = p.display_name
+    if (p.display_name && p.email) profileEmailIndex[p.email.toLowerCase()] = p.display_name
   }
   for (const p of (profilesById || [])) {
-    if (p.display_name && p.email) profileEmailIndex[p.email] = p.display_name
+    if (p.display_name && p.email) profileEmailIndex[p.email.toLowerCase()] = p.display_name
   }
 
   const emailMap: {[email: string]: string} = {}
   for (const m of members) {
     if (!m.email) continue
-    // Priority: profile by user_id > profile by email match > email prefix
+    const emailLower = m.email.toLowerCase()
+    // Priority: profile by user_id > profile by email match (case-insensitive) > email prefix
     if (m.user_id && map[m.user_id]) {
       emailMap[m.email] = map[m.user_id]
-    } else if (profileEmailIndex[m.email]) {
-      emailMap[m.email] = profileEmailIndex[m.email]
+    } else if (profileEmailIndex[emailLower]) {
+      emailMap[m.email] = profileEmailIndex[emailLower]
     } else {
       emailMap[m.email] = (m.email || '').split('@')[0]
     }
