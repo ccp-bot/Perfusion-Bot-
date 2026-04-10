@@ -689,8 +689,9 @@ export default function SchedulePage() {
         const weeks: Date[][] = []
         for (let i = 0; i < displayDays.length; i += 7) weeks.push(displayDays.slice(i, i + 7))
 
-        const printMembers = printScope === 'mine'
-          ? members.filter(m => m.email === user?.email)
+        const myMember = members.find(m => m.user_id === user?.id) || members.find(m => m.email === user?.email)
+        const printMembers = printScope === 'mine' && myMember
+          ? [myMember]
           : members
 
         function getPrintEntry(email: string, date: string) {
