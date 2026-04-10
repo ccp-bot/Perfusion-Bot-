@@ -284,12 +284,6 @@ export default function SchedulePage() {
             <div style={{ fontSize: '0.7rem', color: '#e63946', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{userGroupName}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {/* View tabs */}
-          {(['day', 'week', 'month'] as const).map(v => (
-            <button key={v} onClick={() => { setView(v); setCurrentDate(new Date()) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: `1px solid ${view === v ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: view === v ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.04)', color: view === v ? '#e63946' : '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', textTransform: 'capitalize', fontWeight: view === v ? '600' : '400' }}>{v}</button>
-          ))}
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
           <button onClick={() => navigate(-1)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&larr;</button>
           <button onClick={() => { setPickerMonth(currentDate); setShowDatePicker(!showDatePicker) }} style={{ fontSize: '0.85rem', fontWeight: '500', minWidth: '160px', textAlign: 'center', background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', padding: '0.3rem 0.5rem', borderRadius: '6px' }}>{headerLabel}</button>
@@ -330,6 +324,12 @@ export default function SchedulePage() {
               </div>
             </div>
           )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {/* View tabs */}
+          {(['day', 'week', 'month'] as const).map(v => (
+            <button key={v} onClick={() => { setView(v); setCurrentDate(new Date()) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: `1px solid ${view === v ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: view === v ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.04)', color: view === v ? '#e63946' : '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', textTransform: 'capitalize', fontWeight: view === v ? '600' : '400' }}>{v}</button>
+          ))}
         </div>
       </div>
 
