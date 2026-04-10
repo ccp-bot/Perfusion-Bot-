@@ -248,6 +248,85 @@ export default function SchedulePage() {
   const colors = ['#3b82f6', '#22c55e', '#e63946', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#4a5568']
   const todayStr = formatDate(new Date())
 
+  // When printing, render ONLY the print layout — nothing else
+  if (isPrinting) {
+    const target = printMonth === 'current' ? new Date() : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+    const pMonthStart = new Date(target.getFullYear(), target.getMonth(), 1)
+    const pMonthLabel = pMonthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    const pStartDay = getMonday(pMonthStart)
+    const pCalDays: Date[] = []
+    for (let i = 0; i < 42; i++) { const d = new Date(pStartDay); d.setDate(d.getDate() + i); pCalDays.push(d) }
+    const pLastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0)
+    const pWeeksNeeded = Math.ceil((pCalDays.findIndex(d => d > pLastDay)) / 7) || 6
+    const pDisplayDays = pCalDays.slice(0, pWeeksNeeded * 7)
+    const pWeeks: Date[][] = []
+    for (let i = 0; i < pDisplayDays.length; i += 7) pWeeks.push(pDisplayDays.slice(i, i + 7))
+
+    const myMember = members.find(m => m.user_id === user?.id) || members.find(m => m.email === user?.email)
+    const pMembers = printScope === 'mine' && myMember ? [myMember] : members
+
+    function getPE(email: string, date: string) {
+      return printEntries.find(e => e.user_email === email && e.date === date)
+    }
+
+    return (
+      <div style={{ background: 'white', padding: '0.2in 0.3in', color: '#000', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif", minHeight: '100vh' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', marginBottom: '0.15in' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/COR-print.png" alt="COR" width={44} height={44} style={{ width: '44px', height: '44px', objectFit: 'contain' }} />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '16pt', fontWeight: '700', color: '#111' }}>
+              {printScope === 'mine' ? 'My Schedule' : 'Team Schedule'} — {pMonthLabel}
+            </div>
+            <div style={{ fontSize: '9pt', color: '#e63946', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{userGroupName}</div>
+          </div>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <thead>
+            <tr>
+              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => (
+                <th key={d} style={{ padding: '4px', textAlign: 'center', borderBottom: '2px solid #333', fontWeight: '600', color: '#333', fontSize: '8pt', width: `${100/7}%` }}>{d}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {pWeeks.map((week, wi) => (
+              <tr key={wi}>
+                {week.map(d => {
+                  const ds = formatDate(d)
+                  const isCurMonth = d.getMonth() === pMonthStart.getMonth()
+                  const isToday = ds === todayStr
+                  const dayShifts = pMembers
+                    .map(m => {
+                      const entry = getPE(m.email, ds)
+                      if (!entry || !printShifts.includes(entry.shift_type)) return null
+                      return { name: getMemberName(m), shift: entry.shift_type, color: getShiftColor(entry.shift_type) }
+                    })
+                    .filter(Boolean) as { name: string; shift: string; color: string }[]
+                  return (
+                    <td key={ds} style={{ border: '1px solid #ccc', padding: '2px 3px', verticalAlign: 'top', height: printScope === 'mine' ? '60px' : '80px', opacity: isCurMonth ? 1 : 0.3, background: isToday ? '#fff5f5' : 'white' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: isToday ? '22px' : 'auto', height: isToday ? '22px' : 'auto', borderRadius: isToday ? '50%' : '0', background: isToday ? '#e63946' : 'transparent', color: isToday ? 'white' : '#333', fontSize: '8pt', fontWeight: isToday ? '700' : '500', marginBottom: '2px' }}>{d.getDate()}</div>
+                      {dayShifts.map((s, i) => (
+                        <div key={i} style={{ fontSize: '6pt', padding: '1px 3px', borderRadius: '2px', background: s.color + '22', color: s.color, marginBottom: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '600', border: `1px solid ${s.color}33` }}>
+                          {printScope === 'mine' ? s.shift : `${s.name.split(' ')[0]} — ${s.shift}`}
+                        </div>
+                      ))}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '0.1in', fontSize: '6.5pt', color: '#999' }}>
+          <span>Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+          <span>—</span>
+          <span>COR Perfusion Bot</span>
+        </div>
+      </div>
+    )
+  }
+
   // Calculate the "set" cutoff date — entries before this are locked in
   const setCutoff = new Date()
   setCutoff.setDate(setCutoff.getDate() + setWeeksCount * 7)
@@ -683,93 +762,6 @@ export default function SchedulePage() {
         )
       })()}
 
-      {/* Print Layout — month calendar grid, 1 page landscape */}
-      {isPrinting && (() => {
-        const target = printMonth === 'current' ? new Date() : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
-        const monthStart = new Date(target.getFullYear(), target.getMonth(), 1)
-        const monthLabel = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-        const startDay = getMonday(monthStart)
-        const calDays: Date[] = []
-        for (let i = 0; i < 42; i++) { const d = new Date(startDay); d.setDate(d.getDate() + i); calDays.push(d) }
-        // Trim to 5 or 6 weeks
-        const lastDayOfMonth = new Date(target.getFullYear(), target.getMonth() + 1, 0)
-        const weeksNeeded = Math.ceil((calDays.findIndex(d => d > lastDayOfMonth)) / 7) || 6
-        const displayDays = calDays.slice(0, weeksNeeded * 7)
-        const weeks: Date[][] = []
-        for (let i = 0; i < displayDays.length; i += 7) weeks.push(displayDays.slice(i, i + 7))
-
-        const myMember = members.find(m => m.user_id === user?.id) || members.find(m => m.email === user?.email)
-        const printMembers = printScope === 'mine' && myMember
-          ? [myMember]
-          : members
-
-        function getPrintEntry(email: string, date: string) {
-          return printEntries.find(e => e.user_email === email && e.date === date)
-        }
-
-        return (
-          <div id="print-schedule" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'white', zIndex: 300, overflow: 'auto', padding: '0.2in 0.3in', color: '#000', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
-            {/* Header with COR robot */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', marginBottom: '0.15in' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/COR-print.png" alt="COR" width={44} height={44} style={{ width: '44px', height: '44px', objectFit: 'contain', display: 'inline-block', visibility: 'visible' }} />
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '16pt', fontWeight: '700', color: '#111' }}>
-                  {printScope === 'mine' ? 'My Schedule' : 'Team Schedule'} — {monthLabel}
-                </div>
-                <div style={{ fontSize: '9pt', color: '#e63946', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{userGroupName}</div>
-              </div>
-            </div>
-
-            {/* Month calendar grid */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-              <thead>
-                <tr>
-                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => (
-                    <th key={d} style={{ padding: '4px', textAlign: 'center', borderBottom: '2px solid #333', fontWeight: '600', color: '#333', fontSize: '8pt', width: `${100/7}%` }}>{d}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {weeks.map((week, wi) => (
-                  <tr key={wi}>
-                    {week.map(d => {
-                      const ds = formatDate(d)
-                      const isCurrentMonth = d.getMonth() === monthStart.getMonth()
-                      const isToday = ds === todayStr
-                      // Get all member entries for this day
-                      const dayShifts = printMembers
-                        .map(m => {
-                          const entry = getPrintEntry(m.email, ds)
-                          if (!entry || !printShifts.includes(entry.shift_type)) return null
-                          return { name: getMemberName(m), shift: entry.shift_type, color: getShiftColor(entry.shift_type) }
-                        })
-                        .filter(Boolean) as { name: string; shift: string; color: string }[]
-
-                      return (
-                        <td key={ds} style={{ border: '1px solid #ccc', padding: '2px 3px', verticalAlign: 'top', height: printScope === 'mine' ? '60px' : '80px', opacity: isCurrentMonth ? 1 : 0.3, background: isToday ? '#fff5f5' : 'white' }}>
-                          <div style={{ fontSize: '8pt', fontWeight: isToday ? '700' : '500', color: isToday ? '#e63946' : '#333', marginBottom: '2px' }}>{d.getDate()}</div>
-                          {dayShifts.map((s, i) => (
-                            <div key={i} style={{ fontSize: '6pt', padding: '1px 3px', borderRadius: '2px', background: s.color + '22', color: s.color, marginBottom: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '600', border: `1px solid ${s.color}33` }}>
-                              {printScope === 'mine' ? s.shift : `${s.name.split(' ')[0]} — ${s.shift}`}
-                            </div>
-                          ))}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '0.1in', fontSize: '6.5pt', color: '#999' }}>
-              <span>Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
-              <span>—</span>
-              <span>COR Perfusion Bot</span>
-            </div>
-          </div>
-        )
-      })()}
     </div>
   )
 }
