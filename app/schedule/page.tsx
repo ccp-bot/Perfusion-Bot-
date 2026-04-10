@@ -46,7 +46,7 @@ export default function SchedulePage() {
   const [generalRules, setGeneralRules] = useState('')
   const [setWeeksCount, setSetWeeksCount] = useState(6)
   const [selectedShift, setSelectedShift] = useState<string | null>(null)
-  const [view, setView] = useState<'day' | 'week' | 'month'>('day')
+  const [view, setView] = useState<'week' | 'month'>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [pickerMonth, setPickerMonth] = useState(new Date())
@@ -105,9 +105,7 @@ export default function SchedulePage() {
 
     // Determine date range based on view
     let start: string
-    if (view === 'day') {
-      start = formatDate(currentDate)
-    } else if (view === 'week') {
+    if (view === 'week') {
       start = formatDate(getMonday(currentDate))
     } else {
       start = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
@@ -209,8 +207,7 @@ export default function SchedulePage() {
 
   function navigate(dir: -1 | 1) {
     const d = new Date(currentDate)
-    if (view === 'day') d.setDate(d.getDate() + dir)
-    else if (view === 'week') d.setDate(d.getDate() + dir * 7)
+    if (view === 'week') d.setDate(d.getDate() + dir * 7)
     else d.setMonth(d.getMonth() + dir)
     setCurrentDate(d)
   }
@@ -256,9 +253,7 @@ export default function SchedulePage() {
 
   // Build days for current view
   let viewDays: Date[] = []
-  if (view === 'day') {
-    viewDays = [currentDate]
-  } else if (view === 'week') {
+  if (view === 'week') {
     const mon = getMonday(currentDate)
     for (let i = 0; i < 7; i++) { const d = new Date(mon); d.setDate(d.getDate() + i); viewDays.push(d) }
   } else {
@@ -269,8 +264,7 @@ export default function SchedulePage() {
 
   // Header label
   let headerLabel = ''
-  if (view === 'day') headerLabel = getFullDateLabel(currentDate)
-  else if (view === 'week') headerLabel = `${getDateLabel(viewDays[0])} - ${getDateLabel(viewDays[6])}`
+  if (view === 'week') headerLabel = `${getDateLabel(viewDays[0])} - ${getDateLabel(viewDays[6])}`
   else headerLabel = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   return (
@@ -289,6 +283,9 @@ export default function SchedulePage() {
           <button onClick={() => { setPickerMonth(currentDate); setShowDatePicker(!showDatePicker) }} style={{ fontSize: '0.85rem', fontWeight: '500', minWidth: '160px', textAlign: 'center', background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', padding: '0.3rem 0.5rem', borderRadius: '6px' }}>{headerLabel}</button>
           <button onClick={() => navigate(1)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&rarr;</button>
           <button onClick={() => setCurrentDate(new Date())} style={{ padding: '0.35rem 0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Today</button>
+          {(['week', 'month'] as const).map(v => (
+            <button key={v} onClick={() => { setView(v); setCurrentDate(new Date()) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: `1px solid ${view === v ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: view === v ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.04)', color: view === v ? '#e63946' : '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', textTransform: 'capitalize', fontWeight: view === v ? '600' : '400' }}>{v}</button>
+          ))}
 
           {/* Mini Calendar Date Picker */}
           {showDatePicker && (
@@ -325,12 +322,6 @@ export default function SchedulePage() {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {/* View tabs */}
-          {(['day', 'week', 'month'] as const).map(v => (
-            <button key={v} onClick={() => { setView(v); setCurrentDate(new Date()) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: `1px solid ${view === v ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: view === v ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.04)', color: view === v ? '#e63946' : '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', textTransform: 'capitalize', fontWeight: view === v ? '600' : '400' }}>{v}</button>
-          ))}
-        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', padding: '1rem 1.5rem' }}>
@@ -344,36 +335,6 @@ export default function SchedulePage() {
                 <button key={st.id} onClick={() => setSelectedShift(selectedShift === st.name ? null : st.name)} style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${selectedShift === st.name ? st.color : 'rgba(255,255,255,0.1)'}`, background: selectedShift === st.name ? st.color : 'transparent', color: selectedShift === st.name ? 'white' : st.color, fontSize: '0.75rem', cursor: 'pointer', transition: 'all 0.15s ease' }}>{st.name}</button>
               ))}
               <button onClick={() => setSelectedShift(selectedShift === '__clear__' ? null : '__clear__')} style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${selectedShift === '__clear__' ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: selectedShift === '__clear__' ? 'rgba(230,57,70,0.2)' : 'transparent', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Clear</button>
-            </div>
-          )}
-
-          {/* DAY VIEW */}
-          {view === 'day' && (
-            <div>
-              <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>On Duty Today</div>
-              {members.map(member => {
-                const entry = getEntry(member.user_id, formatDate(currentDate), member.email)
-                const name = getMemberName(member)
-                const shiftName = entry?.shift_type || ''
-                const color = shiftName ? getShiftColor(shiftName) : ''
-                return (
-                  <div
-                    key={member.user_id || member.email}
-                    onClick={() => {
-                      if (!isAdmin || !selectedShift) return
-                      setScheduleEntry(member.user_id, member.email, formatDate(currentDate), selectedShift === '__clear__' ? null : selectedShift)
-                    }}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', marginBottom: '0.5rem', cursor: isAdmin && selectedShift ? 'pointer' : 'default' }}
-                  >
-                    <div style={{ fontSize: '0.88rem', color: '#e2e8f0', fontWeight: '500' }}>{name}</div>
-                    {shiftName ? (
-                      <div style={{ padding: '0.3rem 0.75rem', borderRadius: '16px', background: color + (isSet(formatDate(currentDate)) ? '22' : '11'), color, fontSize: '0.78rem', fontWeight: '500', opacity: isSet(formatDate(currentDate)) ? 1 : 0.5, borderStyle: isSet(formatDate(currentDate)) ? 'none' : 'dashed', borderWidth: '1px', borderColor: color + '44' }}>{shiftName}{!isSet(formatDate(currentDate)) && <span style={{ fontSize: '0.6rem', marginLeft: '0.3rem', opacity: 0.6 }}>draft</span>}</div>
-                    ) : (
-                      <div style={{ fontSize: '0.75rem', color: '#4a5568' }}>Not scheduled</div>
-                    )}
-                  </div>
-                )
-              })}
             </div>
           )}
 
