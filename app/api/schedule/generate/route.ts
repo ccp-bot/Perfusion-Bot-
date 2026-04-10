@@ -88,8 +88,14 @@ export async function POST(req: NextRequest) {
     dayAssigned[date] = new Set()
   }
 
-  // Process each shift type with round-robin
-  for (const config of shiftConfigs) {
+  // Process weekly shifts first (so they get priority over daily shifts)
+  const sortedConfigs = [...shiftConfigs].sort((a, b) => {
+    const aWeekly = parseRotation(a.rules) === 'weekly' ? 0 : 1
+    const bWeekly = parseRotation(b.rules) === 'weekly' ? 0 : 1
+    return aWeekly - bWeekly
+  })
+
+  for (const config of sortedConfigs) {
     if (config.eligible.length === 0) continue
 
     const rotation = parseRotation(config.rules)
@@ -187,6 +193,12 @@ export async function POST(req: NextRequest) {
     }
     totalSaved += chunk.length
   }
+
+  console.log('Schedule debug:', {
+    sortedShifts: sortedConfigs.map(c => ({ name: c.name, eligible: c.eligible, rotation: parseRotation(c.rules) })),
+    memberNames: members.map((m: any) => (m.name || m.email).toLowerCase()),
+    sampleDay: allDates[2] ? Object.entries(memberAssignment[allDates[2]]) : 'no data',
+  })
 
   if (totalSaved === 0) {
     return NextResponse.json({
