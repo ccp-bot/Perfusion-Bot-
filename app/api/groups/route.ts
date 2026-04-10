@@ -41,12 +41,12 @@ export async function GET(req: NextRequest) {
 
   let memberships = byId || []
 
-  // Claim any pending invites by email
+  // Claim any pending invites by email (case-insensitive)
   if (email) {
     const { data: pending } = await supabase
       .from('group_members')
       .select('id, group_id, role, email')
-      .eq('email', email)
+      .ilike('email', email)
       .is('user_id', null)
 
     if (pending && pending.length > 0) {
