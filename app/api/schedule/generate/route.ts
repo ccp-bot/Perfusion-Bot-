@@ -134,21 +134,23 @@ export async function POST(req: NextRequest) {
         }
       }
     } else {
+      // Daily rotation: scan from rotIndex, find the first available person
       for (const date of allDates) {
         if (isWeekdayOnly && isWeekend(date)) continue
 
         const assigned: string[] = []
-        let attempts = 0
-        while (assigned.length < config.perDay && attempts < config.eligible.length * 2) {
-          const candidate = config.eligible[rotIndex % config.eligible.length]
-          rotIndex++
-          attempts++
+        // Try every eligible member starting from rotIndex
+        for (let i = 0; i < config.eligible.length && assigned.length < config.perDay; i++) {
+          const candidate = config.eligible[(rotIndex + i) % config.eligible.length]
 
           if (timeOffSet.has(`${candidate}:${date}`)) continue
           if (dayAssigned[date].has(candidate)) continue
 
           assigned.push(candidate)
         }
+
+        // Only advance rotIndex by 1 per day (not per attempt) for true rotation
+        if (assigned.length > 0) rotIndex++
 
         for (const person of assigned) {
           dayAssigned[date].add(person)
