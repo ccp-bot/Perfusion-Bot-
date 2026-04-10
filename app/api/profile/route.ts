@@ -65,16 +65,22 @@ export async function PUT(req: NextRequest) {
   if (!members || members.length === 0) return NextResponse.json({ profiles: {} })
 
   const userIds = members.filter(m => m.user_id).map(m => m.user_id)
+  const memberEmails = members.filter(m => m.email).map(m => m.email)
 
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('user_id, display_name, email')
-    .in('user_id', userIds)
+  // Fetch profiles by user_id
+  const { data: profilesById } = userIds.length > 0
+    ? await supabase.from('profiles').select('user_id, display_name, email').in('user_id', userIds)
+    : { data: [] }
+
+  // Also fetch profiles by email (catches cases where group email matches profile email)
+  const { data: profilesByEmail } = memberEmails.length > 0
+    ? await supabase.from('profiles').select('user_id, display_name, email').in('email', memberEmails)
+    : { data: [] }
 
   // Build map: userId -> displayName
   const map: {[key: string]: string} = {}
-  for (const p of (profiles || [])) {
-    map[p.user_id] = p.display_name
+  for (const p of (profilesById || [])) {
+    if (p.display_name) map[p.user_id] = p.display_name
   }
   // Fill in missing with email prefix
   for (const m of members) {
@@ -83,13 +89,24 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  // Also build email -> displayName map (reliable even when user_id is null)
+  // Build email -> displayName map (reliable even when user_id is null)
+  // First, index profiles by email for quick lookup
+  const profileEmailIndex: {[email: string]: string} = {}
+  for (const p of (profilesByEmail || [])) {
+    if (p.display_name) profileEmailIndex[p.email] = p.display_name
+  }
+  for (const p of (profilesById || [])) {
+    if (p.display_name && p.email) profileEmailIndex[p.email] = p.display_name
+  }
+
   const emailMap: {[email: string]: string} = {}
   for (const m of members) {
     if (!m.email) continue
-    // Try to find display name from profiles via user_id
+    // Priority: profile by user_id > profile by email match > email prefix
     if (m.user_id && map[m.user_id]) {
       emailMap[m.email] = map[m.user_id]
+    } else if (profileEmailIndex[m.email]) {
+      emailMap[m.email] = profileEmailIndex[m.email]
     } else {
       emailMap[m.email] = (m.email || '').split('@')[0]
     }
