@@ -711,7 +711,8 @@ export default function SchedulePage() {
           <div id="print-schedule" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'white', zIndex: 300, overflow: 'auto', padding: '0.2in 0.3in', color: '#000', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
             {/* Header with COR robot */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', marginBottom: '0.15in' }}>
-              <img src="/COR-print.png" alt="COR" style={{ width: '44px', height: '44px', objectFit: 'contain' }} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/COR-print.png" alt="COR" width={44} height={44} style={{ width: '44px', height: '44px', objectFit: 'contain', display: 'inline-block', visibility: 'visible' }} />
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '16pt', fontWeight: '700', color: '#111' }}>
                   {printScope === 'mine' ? 'My Schedule' : 'Team Schedule'} — {monthLabel}
