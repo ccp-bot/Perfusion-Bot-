@@ -274,13 +274,13 @@ export default function SchedulePage() {
   else headerLabel = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #080b12 0%, #0a0e17 100%)', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginRight: 'auto' }}>
-          <button onClick={() => window.location.href = '/'} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}>&larr;</button>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '1rem', backdropFilter: 'blur(12px)', background: 'rgba(8,11,18,0.8)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginRight: 'auto' }}>
+          <button onClick={() => window.location.href = '/'} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', fontSize: '1rem', cursor: 'pointer', borderRadius: '10px', padding: '0.4rem 0.6rem', transition: 'all 0.15s ease' }}>&larr;</button>
           <div>
-            <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>Schedule</div>
+            <div style={{ fontWeight: '700', fontSize: '1.15rem', letterSpacing: '-0.01em' }}>Schedule</div>
             <div style={{ fontSize: '0.7rem', color: '#e63946', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{userGroupName}</div>
           </div>
         </div>
@@ -333,90 +333,101 @@ export default function SchedulePage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '1rem', padding: '1rem 1.5rem' }}>
+      <div style={{ display: 'flex', gap: '1.25rem', padding: '1rem 1.5rem' }}>
         {/* Main content */}
         <div style={{ flex: 1, overflowX: 'auto' }}>
           {/* Shift type selector for admins */}
           {isAdmin && (
-            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.7rem', color: '#4a5568', marginRight: '0.3rem' }}>Assign:</span>
+            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <span style={{ fontSize: '0.7rem', color: '#64748b', marginRight: '0.3rem', fontWeight: '500', letterSpacing: '0.03em' }}>Assign:</span>
               {shiftTypes.map(st => (
-                <button key={st.id} onClick={() => setSelectedShift(selectedShift === st.name ? null : st.name)} style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${selectedShift === st.name ? st.color : 'rgba(255,255,255,0.1)'}`, background: selectedShift === st.name ? st.color : 'transparent', color: selectedShift === st.name ? 'white' : st.color, fontSize: '0.75rem', cursor: 'pointer', transition: 'all 0.15s ease' }}>{st.name}</button>
+                <button key={st.id} onClick={() => setSelectedShift(selectedShift === st.name ? null : st.name)} style={{ padding: '0.35rem 0.8rem', borderRadius: '20px', border: `1.5px solid ${selectedShift === st.name ? st.color : 'rgba(255,255,255,0.08)'}`, background: selectedShift === st.name ? st.color : 'rgba(255,255,255,0.03)', color: selectedShift === st.name ? 'white' : st.color, fontSize: '0.73rem', cursor: 'pointer', transition: 'all 0.2s ease', fontWeight: selectedShift === st.name ? '600' : '400', backdropFilter: 'blur(8px)', boxShadow: selectedShift === st.name ? `0 2px 12px ${st.color}33` : 'none' }}>{st.name}</button>
               ))}
-              <button onClick={() => setSelectedShift(selectedShift === '__clear__' ? null : '__clear__')} style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${selectedShift === '__clear__' ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: selectedShift === '__clear__' ? 'rgba(230,57,70,0.2)' : 'transparent', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Clear</button>
+              <button onClick={() => setSelectedShift(selectedShift === '__clear__' ? null : '__clear__')} style={{ padding: '0.35rem 0.8rem', borderRadius: '20px', border: `1.5px solid ${selectedShift === '__clear__' ? '#e63946' : 'rgba(255,255,255,0.08)'}`, background: selectedShift === '__clear__' ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.03)', color: selectedShift === '__clear__' ? '#e63946' : '#64748b', fontSize: '0.73rem', cursor: 'pointer', transition: 'all 0.2s ease' }}>Clear</button>
             </div>
           )}
 
           {/* WEEK VIEW */}
           {view === 'week' && (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.06)', color: '#4a5568', fontWeight: '500', width: '140px' }}>Team</th>
-                  {viewDays.map(d => (
-                    <th key={formatDate(d)} style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', color: formatDate(d) === todayStr ? '#e63946' : '#4a5568', fontWeight: '500' }}>
-                      <div>{getDayName(d)}</div>
-                      <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>{getDateLabel(d)}</div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {members.map(member => (
-                  <tr key={member.user_id || member.email}>
-                    <td style={{ padding: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem' }}>
-                      {getMemberName(member)}
-                    </td>
+            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', backdropFilter: 'blur(12px)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                <thead>
+                  <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <th style={{ padding: '0.75rem 1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#64748b', fontWeight: '600', width: '140px', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Team</th>
                     {viewDays.map(d => {
-                      const dateStr = formatDate(d)
-                      const entry = getEntry(member.user_id, dateStr, member.email)
-                      const shiftName = entry?.shift_type || ''
-                      const color = shiftName ? getShiftColor(shiftName) : 'transparent'
+                      const isToday = formatDate(d) === todayStr
                       return (
-                        <td key={dateStr} onClick={() => { if (!isAdmin || !selectedShift) return; setScheduleEntry(member.user_id, member.email, dateStr, selectedShift === '__clear__' ? null : selectedShift) }} style={{ padding: '0.4rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: isAdmin && selectedShift ? 'pointer' : 'default', background: dateStr === todayStr ? 'rgba(230,57,70,0.04)' : 'transparent' }}>
-                          {shiftName && <div style={{ padding: '0.25rem 0.3rem', borderRadius: '6px', background: color + (isSet(dateStr) ? '22' : '0d'), color, fontSize: '0.68rem', fontWeight: '500', opacity: isSet(dateStr) ? 1 : 0.5, border: isSet(dateStr) ? 'none' : `1px dashed ${color}44` }}>{shiftName}</div>}
-                        </td>
+                        <th key={formatDate(d)} style={{ padding: '0.75rem 0.5rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', color: isToday ? '#e63946' : '#64748b', fontWeight: '600', fontSize: '0.72rem', position: 'relative' }}>
+                          <div style={{ fontSize: '0.7rem', letterSpacing: '0.03em' }}>{getDayName(d)}</div>
+                          <div style={{ fontSize: isToday ? '0.85rem' : '0.68rem', marginTop: '2px', opacity: isToday ? 1 : 0.6, fontWeight: isToday ? '700' : '400', color: isToday ? '#e63946' : '#94a3b8' }}>{d.getDate()}</div>
+                        </th>
                       )
                     })}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {members.map((member, mi) => (
+                    <tr key={member.user_id || member.email} style={{ transition: 'background 0.15s ease' }} onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <td style={{ padding: '0.6rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.8rem', fontWeight: '500' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: `linear-gradient(135deg, ${colors[mi % colors.length]}44, ${colors[mi % colors.length]}22)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: '700', color: colors[mi % colors.length], border: `1px solid ${colors[mi % colors.length]}33`, flexShrink: 0 }}>{getMemberName(member).charAt(0).toUpperCase()}</div>
+                          <span>{getMemberName(member)}</span>
+                        </div>
+                      </td>
+                      {viewDays.map(d => {
+                        const dateStr = formatDate(d)
+                        const entry = getEntry(member.user_id, dateStr, member.email)
+                        const shiftName = entry?.shift_type || ''
+                        const color = shiftName ? getShiftColor(shiftName) : 'transparent'
+                        const isToday = dateStr === todayStr
+                        return (
+                          <td key={dateStr} onClick={() => { if (!isAdmin || !selectedShift) return; setScheduleEntry(member.user_id, member.email, dateStr, selectedShift === '__clear__' ? null : selectedShift) }} style={{ padding: '0.35rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: isAdmin && selectedShift ? 'pointer' : 'default', background: isToday ? 'rgba(230,57,70,0.03)' : 'transparent', borderLeft: isToday ? '1px solid rgba(230,57,70,0.1)' : '1px solid transparent', borderRight: isToday ? '1px solid rgba(230,57,70,0.1)' : '1px solid transparent' }}>
+                            {shiftName && <div style={{ padding: '0.3rem 0.25rem', borderRadius: '8px', background: `linear-gradient(135deg, ${color}${isSet(dateStr) ? '28' : '10'}, ${color}${isSet(dateStr) ? '15' : '08'})`, color, fontSize: '0.7rem', fontWeight: '600', opacity: isSet(dateStr) ? 1 : 0.45, border: isSet(dateStr) ? `1px solid ${color}25` : `1px dashed ${color}30`, boxShadow: isSet(dateStr) ? `0 1px 4px ${color}15` : 'none', transition: 'all 0.15s ease' }}>{shiftName}</div>}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {/* MONTH VIEW */}
           {view === 'month' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', overflow: 'hidden' }}>
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
-                <div key={d} style={{ padding: '0.4rem', textAlign: 'center', fontSize: '0.7rem', color: '#4a5568', fontWeight: '500', background: '#0d1117' }}>{d}</div>
-              ))}
-              {viewDays.map(d => {
-                const dateStr = formatDate(d)
-                const isCurrentMonth = d.getMonth() === currentDate.getMonth()
-                const isToday = dateStr === todayStr
-                const dayEntries = getEntriesForDate(dateStr)
-                return (
-                  <div key={dateStr} style={{ minHeight: '70px', padding: '0.3rem', background: isToday ? 'rgba(230,57,70,0.06)' : '#080b12', opacity: isCurrentMonth ? 1 : 0.3 }}>
-                    <div style={{ fontSize: '0.7rem', color: isToday ? '#e63946' : '#4a5568', fontWeight: isToday ? '600' : '400', marginBottom: '0.2rem' }}>{d.getDate()}</div>
-                    {dayEntries.slice(0, 3).map((e: any, i: number) => {
-                      const color = getShiftColor(e.shift_type)
-                      const name = emailProfileMap[e.user_email] || profileMap[e.user_id] || (e.user_email || '').split('@')[0]
-                      return (
-                        <div key={i} style={{ fontSize: '0.55rem', padding: '1px 3px', borderRadius: '3px', background: color + (isSet(dateStr) ? '22' : '0d'), color, marginBottom: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: isSet(dateStr) ? 1 : 0.5, border: isSet(dateStr) ? 'none' : `1px dashed ${color}33` }}>
-                          {name.split(' ')[0]}
-                        </div>
-                      )
-                    })}
-                    {dayEntries.length > 3 && <div style={{ fontSize: '0.5rem', color: '#4a5568' }}>+{dayEntries.length - 3}</div>}
-                  </div>
-                )
-              })}
+            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', backdropFilter: 'blur(12px)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 0 }}>
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                  <div key={d} style={{ padding: '0.6rem', textAlign: 'center', fontSize: '0.72rem', color: '#64748b', fontWeight: '600', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.08)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{d}</div>
+                ))}
+                {viewDays.map(d => {
+                  const dateStr = formatDate(d)
+                  const isCurrentMonth = d.getMonth() === currentDate.getMonth()
+                  const isToday = dateStr === todayStr
+                  const dayEntries = getEntriesForDate(dateStr)
+                  return (
+                    <div key={dateStr} style={{ minHeight: '80px', padding: '0.4rem', background: isToday ? 'rgba(230,57,70,0.05)' : 'transparent', opacity: isCurrentMonth ? 1 : 0.25, borderBottom: '1px solid rgba(255,255,255,0.04)', borderRight: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s ease' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: isToday ? '22px' : 'auto', height: isToday ? '22px' : 'auto', borderRadius: isToday ? '50%' : '0', background: isToday ? '#e63946' : 'transparent', color: isToday ? 'white' : '#64748b', fontSize: '0.72rem', fontWeight: isToday ? '700' : '400', marginBottom: '0.25rem' }}>{d.getDate()}</div>
+                      {dayEntries.slice(0, 3).map((e: any, i: number) => {
+                        const color = getShiftColor(e.shift_type)
+                        const name = emailProfileMap[e.user_email] || profileMap[e.user_id] || (e.user_email || '').split('@')[0]
+                        return (
+                          <div key={i} style={{ fontSize: '0.55rem', padding: '2px 4px', borderRadius: '4px', background: `linear-gradient(135deg, ${color}${isSet(dateStr) ? '25' : '10'}, ${color}${isSet(dateStr) ? '12' : '05'})`, color, marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '600', opacity: isSet(dateStr) ? 1 : 0.45, border: isSet(dateStr) ? `1px solid ${color}20` : `1px dashed ${color}25` }}>
+                            {name.split(' ')[0]}
+                          </div>
+                        )
+                      })}
+                      {dayEntries.length > 3 && <div style={{ fontSize: '0.5rem', color: '#64748b', fontWeight: '500' }}>+{dayEntries.length - 3}</div>}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
 
         {/* Sidebar */}
-        <div style={{ width: '240px', flexShrink: 0 }}>
+        <div style={{ width: '260px', flexShrink: 0, background: 'rgba(255,255,255,0.015)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', padding: '1rem', backdropFilter: 'blur(12px)', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
           {isAdmin && (
             <div style={{ marginBottom: '1.5rem' }}>
               <div style={{ fontSize: '0.72rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Shift Types</div>
