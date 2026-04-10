@@ -93,71 +93,87 @@ export async function POST(req: NextRequest) {
     dayAssigned[date] = new Set()
   }
 
-  // Process weekly shifts first (so they get priority over daily shifts)
-  const sortedConfigs = [...shiftConfigs].sort((a, b) => {
-    const aWeekly = parseRotation(a.rules) === 'weekly' ? 0 : 1
-    const bWeekly = parseRotation(b.rules) === 'weekly' ? 0 : 1
-    return aWeekly - bWeekly
-  })
+  // Separate weekly and daily shift configs
+  const weeklyConfigs = shiftConfigs.filter(c => parseRotation(c.rules) === 'weekly' && c.eligible.length > 0)
+  const dailyConfigs = shiftConfigs.filter(c => parseRotation(c.rules) === 'daily' && c.eligible.length > 0)
 
-  for (const config of sortedConfigs) {
-    if (config.eligible.length === 0) continue
-
-    const rotation = parseRotation(config.rules)
-    const isWeekdayOnly = config.rules.toLowerCase().includes('weekday')
+  // Step 1: Assign weekly shifts first (round-robin per week)
+  for (const config of weeklyConfigs) {
     let rotIndex = 0
+    for (let w = 0; w < numWeeks; w++) {
+      const weekDates = allDates.slice(w * 7, (w + 1) * 7)
+      const isWeekdayOnly = config.rules.toLowerCase().includes('weekday')
 
-    if (rotation === 'weekly') {
-      for (let w = 0; w < numWeeks; w++) {
-        const weekDates = allDates.slice(w * 7, (w + 1) * 7)
-
-        const assigned: string[] = []
-        let attempts = 0
-        while (assigned.length < config.perDay && attempts < config.eligible.length * 2) {
-          const candidate = config.eligible[rotIndex % config.eligible.length]
-          rotIndex++
-          attempts++
-
-          if (weekDates.some(d => timeOffSet.has(`${candidate}:${d}`))) continue
-          const alreadyBooked = weekDates.some(d => dayAssigned[d]?.has(candidate))
-          if (alreadyBooked) continue
-
-          assigned.push(candidate)
-        }
-
-        for (const date of weekDates) {
-          if (isWeekdayOnly && isWeekend(date)) continue
-          for (const person of assigned) {
-            dayAssigned[date].add(person)
-            memberAssignment[date][person] = config.name
-          }
-        }
+      const assigned: string[] = []
+      for (let i = 0; i < config.eligible.length && assigned.length < config.perDay; i++) {
+        const candidate = config.eligible[(rotIndex + i) % config.eligible.length]
+        if (weekDates.some(d => timeOffSet.has(`${candidate}:${d}`))) continue
+        if (weekDates.some(d => dayAssigned[d]?.has(candidate))) continue
+        assigned.push(candidate)
       }
-    } else {
-      // Daily rotation: scan from rotIndex, find the first available person
-      for (const date of allDates) {
+      rotIndex = (rotIndex + 1) % config.eligible.length
+
+      for (const date of weekDates) {
         if (isWeekdayOnly && isWeekend(date)) continue
-
-        const assigned: string[] = []
-        // Try every eligible member starting from rotIndex
-        for (let i = 0; i < config.eligible.length && assigned.length < config.perDay; i++) {
-          const candidate = config.eligible[(rotIndex + i) % config.eligible.length]
-
-          if (timeOffSet.has(`${candidate}:${date}`)) continue
-          if (dayAssigned[date].has(candidate)) continue
-
-          assigned.push(candidate)
-        }
-
-        // Only advance rotIndex by 1 per day (not per attempt) for true rotation
-        if (assigned.length > 0) rotIndex++
-
         for (const person of assigned) {
           dayAssigned[date].add(person)
           memberAssignment[date][person] = config.name
         }
       }
     }
+  }
+
+  // Step 2: Assign daily shifts — all daily shifts for each day at once
+  // Build a pool of all members eligible for any daily shift
+  let dailyRotIndex = 0
+  // Collect all unique daily-eligible members (union of all daily shift eligible lists)
+  const allDailyEligible = [...new Set(dailyConfigs.flatMap(c => c.eligible))]
+
+  for (const date of allDates) {
+    // Check if any daily config is weekday-only (if so, skip weekends)
+    const isWeekday = !isWeekend(date)
+    if (!isWeekday) continue // daily shifts are weekday-only
+
+    // Get available members (not already on weekly shifts, not on time-off)
+    const available: string[] = []
+    for (let i = 0; i < allDailyEligible.length; i++) {
+      const candidate = allDailyEligible[(dailyRotIndex + i) % allDailyEligible.length]
+      if (timeOffSet.has(`${candidate}:${date}`)) continue
+      if (dayAssigned[date].has(candidate)) continue
+      available.push(candidate)
+    }
+
+    // Assign available members to daily shifts in order (C3 first, then 1, 2, 3, 4)
+    let availIdx = 0
+    for (const config of dailyConfigs) {
+      for (let p = 0; p < config.perDay && availIdx < available.length; p++) {
+        const person = available[availIdx]
+        // Verify this person is eligible for THIS specific shift
+        if (config.eligible.includes(person)) {
+          dayAssigned[date].add(person)
+          memberAssignment[date][person] = config.name
+          availIdx++
+        } else {
+          // Find next available person who IS eligible for this shift
+          let found = false
+          for (let j = availIdx + 1; j < available.length; j++) {
+            if (config.eligible.includes(available[j])) {
+              const swap = available[j]
+              available.splice(j, 1)
+              available.splice(availIdx, 0, swap)
+              dayAssigned[date].add(swap)
+              memberAssignment[date][swap] = config.name
+              availIdx++
+              found = true
+              break
+            }
+          }
+          if (!found) availIdx++ // skip this slot
+        }
+      }
+    }
+
+    dailyRotIndex = (dailyRotIndex + 1) % allDailyEligible.length
   }
 
   // First: delete ALL existing schedule entries for this group in this date range
@@ -205,7 +221,8 @@ export async function POST(req: NextRequest) {
   }
 
   console.log('Schedule debug:', {
-    sortedShifts: sortedConfigs.map(c => ({ name: c.name, eligible: c.eligible, rotation: parseRotation(c.rules) })),
+    weeklyShifts: weeklyConfigs.map(c => ({ name: c.name, eligible: c.eligible })),
+    dailyShifts: dailyConfigs.map(c => ({ name: c.name, eligible: c.eligible })),
     memberNames: members.map((m: any) => (m.name || m.email).toLowerCase()),
     sampleDay: allDates[2] ? Object.entries(memberAssignment[allDates[2]]) : 'no data',
   })
