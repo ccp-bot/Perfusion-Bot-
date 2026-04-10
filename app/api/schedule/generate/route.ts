@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
 
         const assigned: string[] = []
         let attempts = 0
-        while (assigned.length < config.perDay && attempts < config.eligible.length) {
+        while (assigned.length < config.perDay && attempts < config.eligible.length * 2) {
           const candidate = config.eligible[rotIndex % config.eligible.length]
           rotIndex++
           attempts++
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
 
         const assigned: string[] = []
         let attempts = 0
-        while (assigned.length < config.perDay && attempts < config.eligible.length) {
+        while (assigned.length < config.perDay && attempts < config.eligible.length * 2) {
           const candidate = config.eligible[rotIndex % config.eligible.length]
           rotIndex++
           attempts++
