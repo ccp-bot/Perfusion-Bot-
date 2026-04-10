@@ -50,6 +50,11 @@ export default function SchedulePage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [pickerMonth, setPickerMonth] = useState(new Date())
+  const [showPrintModal, setShowPrintModal] = useState(false)
+  const [printScope, setPrintScope] = useState<'group' | 'mine'>('group')
+  const [printWeeks, setPrintWeeks] = useState(4)
+  const [printShifts, setPrintShifts] = useState<string[]>([])
+  const [isPrinting, setIsPrinting] = useState(false)
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
@@ -322,7 +327,9 @@ export default function SchedulePage() {
             </div>
           )}
         </div>
-        <div style={{ marginLeft: 'auto', width: '140px' }} />
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button onClick={() => { setPrintShifts(shiftTypes.map(s => s.name)); setShowPrintModal(true) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>Print</button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', padding: '1rem 1.5rem' }}>
@@ -604,6 +611,121 @@ export default function SchedulePage() {
           )}
         </div>
       </div>
+      {/* Print Options Modal */}
+      {showPrintModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowPrintModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.5rem', width: '360px', maxWidth: '90vw' }}>
+            <div style={{ fontSize: '1rem', fontWeight: '600', color: '#e2e8f0', marginBottom: '1rem' }}>Print Schedule</div>
+
+            <div style={{ fontSize: '0.75rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>Show</div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              {(['group', 'mine'] as const).map(s => (
+                <button key={s} onClick={() => setPrintScope(s)} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: `1px solid ${printScope === s ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: printScope === s ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.04)', color: printScope === s ? '#e63946' : '#94a3b8', fontSize: '0.8rem', cursor: 'pointer', fontWeight: printScope === s ? '600' : '400' }}>{s === 'group' ? 'Group Schedule' : 'My Schedule'}</button>
+              ))}
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>Shifts to include</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '1rem' }}>
+              {shiftTypes.map(st => {
+                const included = printShifts.includes(st.name)
+                return (
+                  <button key={st.id} onClick={() => setPrintShifts(prev => included ? prev.filter(n => n !== st.name) : [...prev, st.name])} style={{ padding: '0.3rem 0.6rem', borderRadius: '12px', border: `1px solid ${included ? st.color : 'rgba(255,255,255,0.08)'}`, background: included ? st.color + '22' : 'transparent', color: included ? st.color : '#4a5568', fontSize: '0.72rem', cursor: 'pointer' }}>{st.name}</button>
+                )
+              })}
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>Weeks to print</div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', alignItems: 'center' }}>
+              {[1, 2, 4, 6].map(w => (
+                <button key={w} onClick={() => setPrintWeeks(w)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: `1px solid ${printWeeks === w ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: printWeeks === w ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.04)', color: printWeeks === w ? '#e63946' : '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>{w}w</button>
+              ))}
+              <input type="number" min={1} max={26} value={printWeeks} onChange={e => setPrintWeeks(Math.max(1, Math.min(26, parseInt(e.target.value) || 4)))} style={{ width: '50px', padding: '0.4rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', textAlign: 'center' }} />
+            </div>
+
+            <button
+              onClick={() => { setShowPrintModal(false); setIsPrinting(true); setTimeout(() => { window.print(); setIsPrinting(false) }, 300) }}
+              style={{ width: '100%', padding: '0.6rem', borderRadius: '10px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer' }}
+            >Print Schedule</button>
+          </div>
+        </div>
+      )}
+
+      {/* Print Layout — hidden on screen, shown only when printing */}
+      {isPrinting && (() => {
+        const printStart = getMonday(currentDate)
+        const printDays: Date[] = []
+        for (let i = 0; i < printWeeks * 7; i++) { const d = new Date(printStart); d.setDate(d.getDate() + i); printDays.push(d) }
+
+        const printWeekChunks: Date[][] = []
+        for (let i = 0; i < printDays.length; i += 7) printWeekChunks.push(printDays.slice(i, i + 7))
+
+        const printMembers = printScope === 'mine'
+          ? members.filter(m => m.email === user?.email)
+          : members
+
+        return (
+          <div id="print-schedule" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'white', zIndex: 300, overflow: 'auto', padding: '0.5in', color: '#000', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
+            <div style={{ textAlign: 'center', marginBottom: '0.3in' }}>
+              <div style={{ fontSize: '18pt', fontWeight: '700', color: '#111' }}>
+                {printScope === 'mine' ? 'My Schedule' : 'Team Schedule'}
+              </div>
+              <div style={{ fontSize: '11pt', color: '#e63946', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>{userGroupName}</div>
+              <div style={{ fontSize: '9pt', color: '#666', marginTop: '4px' }}>
+                {getDateLabel(printDays[0])} — {getDateLabel(printDays[printDays.length - 1])}, {printDays[printDays.length - 1].getFullYear()}
+              </div>
+            </div>
+
+            {printWeekChunks.map((week, wi) => (
+              <table key={wi} style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0.2in', fontSize: '9pt' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '6px 8px', textAlign: 'left', borderBottom: '2px solid #333', fontWeight: '600', color: '#333', width: '100px', fontSize: '8pt' }}>Team</th>
+                    {week.map(d => {
+                      const ds = formatDate(d)
+                      const isToday = ds === todayStr
+                      return (
+                        <th key={ds} style={{ padding: '6px 4px', textAlign: 'center', borderBottom: '2px solid #333', fontWeight: '600', color: isToday ? '#e63946' : '#333', fontSize: '8pt' }}>
+                          <div>{getDayName(d)}</div>
+                          <div style={{ fontWeight: '400', color: '#666', fontSize: '7pt' }}>{getDateLabel(d)}</div>
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {printMembers.map(member => (
+                    <tr key={member.user_id || member.email}>
+                      <td style={{ padding: '5px 8px', borderBottom: '1px solid #ddd', fontWeight: '500', color: '#222', fontSize: '8.5pt' }}>
+                        {getMemberName(member)}
+                      </td>
+                      {week.map(d => {
+                        const ds = formatDate(d)
+                        const entry = getEntry(member.user_id, ds, member.email)
+                        const shiftName = entry?.shift_type || ''
+                        const show = shiftName && printShifts.includes(shiftName)
+                        const color = show ? getShiftColor(shiftName) : 'transparent'
+                        return (
+                          <td key={ds} style={{ padding: '4px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>
+                            {show && (
+                              <div style={{ padding: '3px 4px', borderRadius: '4px', background: color + '22', color, fontSize: '7.5pt', fontWeight: '600', border: `1px solid ${color}44` }}>
+                                {shiftName}
+                              </div>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ))}
+
+            <div style={{ textAlign: 'center', fontSize: '7pt', color: '#999', marginTop: '0.15in' }}>
+              Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} — COR Perfusion Bot
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

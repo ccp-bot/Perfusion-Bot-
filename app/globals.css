@@ -24,3 +24,27 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@media print {
+  body > * {
+    visibility: hidden !important;
+  }
+  #print-schedule,
+  #print-schedule * {
+    visibility: visible !important;
+  }
+  #print-schedule {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: white !important;
+    color: black !important;
+    padding: 0.4in !important;
+    z-index: 9999 !important;
+  }
+  @page {
+    size: landscape;
+    margin: 0.3in;
+  }
+}
