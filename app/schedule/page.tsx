@@ -47,6 +47,8 @@ export default function SchedulePage() {
   const [selectedShift, setSelectedShift] = useState<string | null>(null)
   const [view, setView] = useState<'day' | 'week' | 'month'>('day')
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [pickerMonth, setPickerMonth] = useState(new Date())
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
@@ -276,11 +278,46 @@ export default function SchedulePage() {
             <button key={v} onClick={() => { setView(v); setCurrentDate(new Date()) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: `1px solid ${view === v ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: view === v ? 'rgba(230,57,70,0.15)' : 'rgba(255,255,255,0.04)', color: view === v ? '#e63946' : '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', textTransform: 'capitalize', fontWeight: view === v ? '600' : '400' }}>{v}</button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
           <button onClick={() => navigate(-1)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&larr;</button>
-          <div style={{ fontSize: '0.85rem', fontWeight: '500', minWidth: '160px', textAlign: 'center' }}>{headerLabel}</div>
+          <button onClick={() => { setPickerMonth(currentDate); setShowDatePicker(!showDatePicker) }} style={{ fontSize: '0.85rem', fontWeight: '500', minWidth: '160px', textAlign: 'center', background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', padding: '0.3rem 0.5rem', borderRadius: '6px' }}>{headerLabel}</button>
           <button onClick={() => navigate(1)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&rarr;</button>
           <button onClick={() => setCurrentDate(new Date())} style={{ padding: '0.35rem 0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Today</button>
+
+          {/* Mini Calendar Date Picker */}
+          {showDatePicker && (
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem', background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '0.75rem', zIndex: 100, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', minWidth: '260px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <button onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1))} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.9rem', cursor: 'pointer', padding: '0.2rem 0.5rem' }}>&larr;</button>
+                <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#e2e8f0' }}>{pickerMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+                <button onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1))} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.9rem', cursor: 'pointer', padding: '0.2rem 0.5rem' }}>&rarr;</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center' }}>
+                {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => (
+                  <div key={d} style={{ fontSize: '0.6rem', color: '#4a5568', padding: '0.2rem', fontWeight: '500' }}>{d}</div>
+                ))}
+                {(() => {
+                  const firstOfMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), 1)
+                  const startDay = getMonday(firstOfMonth)
+                  const days: Date[] = []
+                  for (let i = 0; i < 42; i++) { const d = new Date(startDay); d.setDate(d.getDate() + i); days.push(d) }
+                  const today = formatDate(new Date())
+                  const selected = formatDate(currentDate)
+                  return days.map((d, i) => {
+                    const ds = formatDate(d)
+                    const isCurrentMonth = d.getMonth() === pickerMonth.getMonth()
+                    const isToday = ds === today
+                    const isSelected = ds === selected
+                    return (
+                      <button key={i} onClick={() => { setCurrentDate(d); setShowDatePicker(false) }} style={{ padding: '0.3rem', fontSize: '0.7rem', borderRadius: '6px', border: isSelected ? '1px solid #e63946' : '1px solid transparent', background: isSelected ? 'rgba(230,57,70,0.2)' : isToday ? 'rgba(255,255,255,0.08)' : 'transparent', color: isSelected ? '#e63946' : isCurrentMonth ? '#e2e8f0' : '#4a5568', cursor: 'pointer', fontWeight: isToday ? '600' : '400' }}>
+                        {d.getDate()}
+                      </button>
+                    )
+                  })
+                })()}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
