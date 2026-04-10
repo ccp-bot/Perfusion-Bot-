@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
 
     const { data: groupData } = await supabase
       .from('groups')
-      .select('schedule_rules')
+      .select('schedule_rules, set_weeks')
       .eq('id', groupId)
       .single()
 
-    return NextResponse.json({ shiftTypes: data || [], generalRules: groupData?.schedule_rules || '' })
+    return NextResponse.json({ shiftTypes: data || [], generalRules: groupData?.schedule_rules || '', setWeeks: groupData?.set_weeks || 6 })
   }
 
   if (!weekStart) return NextResponse.json({ error: 'Missing weekStart' }, { status: 400 })
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/schedule — set a schedule entry (Admin/Owner only)
 export async function POST(req: NextRequest) {
-  const { groupId, userId, userEmail, date, shiftType, userRole, action, shiftTypeName, shiftTypeColor, sortOrder } = await req.json()
+  const { groupId, userId, userEmail, date, shiftType, userRole, action, shiftTypeName, shiftTypeColor, sortOrder, setWeeks } = await req.json()
 
   if (!groupId) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
@@ -91,8 +91,10 @@ export async function POST(req: NextRequest) {
         .eq('name', name)
     }
 
-    // Save general rules on the group
-    await supabase.from('groups').update({ schedule_rules: generalRules }).eq('id', groupId)
+    // Save general rules and set_weeks on the group
+    const groupUpdate: any = { schedule_rules: generalRules }
+    if (setWeeks !== undefined) groupUpdate.set_weeks = setWeeks
+    await supabase.from('groups').update(groupUpdate).eq('id', groupId)
 
     return NextResponse.json({ success: true })
   }

@@ -44,6 +44,7 @@ export default function SchedulePage() {
   const [generateStatus, setGenerateStatus] = useState('')
   const [shiftConfigs, setShiftConfigs] = useState<{[shiftName: string]: { eligible: string[], perDay: number, rules: string }}>({})
   const [generalRules, setGeneralRules] = useState('')
+  const [setWeeksCount, setSetWeeksCount] = useState(6)
   const [selectedShift, setSelectedShift] = useState<string | null>(null)
   const [view, setView] = useState<'day' | 'week' | 'month'>('day')
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -89,6 +90,7 @@ export default function SchedulePage() {
     const stData = await stRes.json()
     setShiftTypes(stData.shiftTypes || [])
     setGeneralRules(stData.generalRules || '')
+    setSetWeeksCount(stData.setWeeks || 6)
 
     // Load saved shift configs
     const loadedConfigs: {[k: string]: { eligible: string[], perDay: number, rules: string }} = {}
@@ -160,7 +162,7 @@ export default function SchedulePage() {
     }
   }
 
-  async function saveShiftConfigs(configs: any, rules: string) {
+  async function saveShiftConfigs(configs: any, rules: string, swCount?: number) {
     if (!userGroupId) return
     await fetch('/api/schedule', {
       method: 'POST',
@@ -171,6 +173,7 @@ export default function SchedulePage() {
         userRole,
         shiftTypeName: configs,
         shiftTypeColor: rules,
+        setWeeks: swCount ?? setWeeksCount,
       })
     })
   }
@@ -241,6 +244,15 @@ export default function SchedulePage() {
   const isAdmin = userRole === 'owner' || userRole === 'admin'
   const colors = ['#3b82f6', '#22c55e', '#e63946', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#4a5568']
   const todayStr = formatDate(new Date())
+
+  // Calculate the "set" cutoff date — entries before this are locked in
+  const setCutoff = new Date()
+  setCutoff.setDate(setCutoff.getDate() + setWeeksCount * 7)
+  const setCutoffStr = formatDate(setCutoff)
+
+  function isSet(dateStr: string): boolean {
+    return dateStr <= setCutoffStr
+  }
 
   // Build days for current view
   let viewDays: Date[] = []
@@ -355,7 +367,7 @@ export default function SchedulePage() {
                   >
                     <div style={{ fontSize: '0.88rem', color: '#e2e8f0', fontWeight: '500' }}>{name}</div>
                     {shiftName ? (
-                      <div style={{ padding: '0.3rem 0.75rem', borderRadius: '16px', background: color + '22', color, fontSize: '0.78rem', fontWeight: '500' }}>{shiftName}</div>
+                      <div style={{ padding: '0.3rem 0.75rem', borderRadius: '16px', background: color + (isSet(formatDate(currentDate)) ? '22' : '11'), color, fontSize: '0.78rem', fontWeight: '500', opacity: isSet(formatDate(currentDate)) ? 1 : 0.5, borderStyle: isSet(formatDate(currentDate)) ? 'none' : 'dashed', borderWidth: '1px', borderColor: color + '44' }}>{shiftName}{!isSet(formatDate(currentDate)) && <span style={{ fontSize: '0.6rem', marginLeft: '0.3rem', opacity: 0.6 }}>draft</span>}</div>
                     ) : (
                       <div style={{ fontSize: '0.75rem', color: '#4a5568' }}>Not scheduled</div>
                     )}
@@ -392,7 +404,7 @@ export default function SchedulePage() {
                       const color = shiftName ? getShiftColor(shiftName) : 'transparent'
                       return (
                         <td key={dateStr} onClick={() => { if (!isAdmin || !selectedShift) return; setScheduleEntry(member.user_id, member.email, dateStr, selectedShift === '__clear__' ? null : selectedShift) }} style={{ padding: '0.4rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: isAdmin && selectedShift ? 'pointer' : 'default', background: dateStr === todayStr ? 'rgba(230,57,70,0.04)' : 'transparent' }}>
-                          {shiftName && <div style={{ padding: '0.25rem 0.3rem', borderRadius: '6px', background: color + '22', color, fontSize: '0.68rem', fontWeight: '500' }}>{shiftName}</div>}
+                          {shiftName && <div style={{ padding: '0.25rem 0.3rem', borderRadius: '6px', background: color + (isSet(dateStr) ? '22' : '0d'), color, fontSize: '0.68rem', fontWeight: '500', opacity: isSet(dateStr) ? 1 : 0.5, border: isSet(dateStr) ? 'none' : `1px dashed ${color}44` }}>{shiftName}</div>}
                         </td>
                       )
                     })}
@@ -420,7 +432,7 @@ export default function SchedulePage() {
                       const color = getShiftColor(e.shift_type)
                       const name = emailProfileMap[e.user_email] || profileMap[e.user_id] || (e.user_email || '').split('@')[0]
                       return (
-                        <div key={i} style={{ fontSize: '0.55rem', padding: '1px 3px', borderRadius: '3px', background: color + '22', color, marginBottom: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div key={i} style={{ fontSize: '0.55rem', padding: '1px 3px', borderRadius: '3px', background: color + (isSet(dateStr) ? '22' : '0d'), color, marginBottom: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: isSet(dateStr) ? 1 : 0.5, border: isSet(dateStr) ? 'none' : `1px dashed ${color}33` }}>
                           {name.split(' ')[0]}
                         </div>
                       )
@@ -516,6 +528,22 @@ export default function SchedulePage() {
                 style={{ width: '100%', padding: '0.4rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.72rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
               />
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.72rem', color: '#e2e8f0', fontWeight: '500' }}>Set schedule</div>
+                  <div style={{ fontSize: '0.6rem', color: '#4a5568' }}>Weeks locked in as final</div>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  max={26}
+                  value={setWeeksCount}
+                  onChange={e => setSetWeeksCount(Math.max(1, Math.min(26, parseInt(e.target.value) || 6)))}
+                  style={{ width: '40px', padding: '0.25rem', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.75rem', outline: 'none', textAlign: 'center' }}
+                />
+                <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>wks</span>
+              </div>
+
               <button
                 onClick={async () => {
                   setGenerateStatus('Saving...')
@@ -562,7 +590,7 @@ export default function SchedulePage() {
                         shiftTypes,
                         timeOffDates: approvedOff,
                         startDate: formatDate(new Date()),
-                        weeks: 6,
+                        weeks: 26,
                       })
                     })
                     const data = await res.json()
@@ -578,7 +606,7 @@ export default function SchedulePage() {
                 disabled={generating}
                 style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: 'none', background: generating ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', fontWeight: '500', cursor: generating ? 'not-allowed' : 'pointer', marginTop: '0.5rem' }}
               >
-                {generating ? 'Generating...' : 'Generate 6-Week Schedule'}
+                {generating ? 'Generating...' : 'Generate 6-Month Schedule'}
               </button>
               {generateStatus && <div style={{ fontSize: '0.7rem', color: generateStatus.includes('Done') ? '#22c55e' : generateStatus.includes('COR') ? '#f59e0b' : '#e63946', marginTop: '0.4rem' }}>{generateStatus}</div>}
             </div>
