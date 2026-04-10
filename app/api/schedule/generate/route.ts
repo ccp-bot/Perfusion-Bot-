@@ -42,12 +42,15 @@ export async function POST(req: NextRequest) {
   const start = getMondayOf(rawStart)
 
   // Build member lookup by lowercase display name -> email
+  // Also map email prefix -> email for backwards compatibility with old eligible lists
   const membersByName: { [name: string]: { email: string } } = {}
   const allEmails: string[] = []
 
   for (const m of members) {
-    const name = (m.name || m.email).toLowerCase()
-    membersByName[name] = { email: m.email }
+    const displayName = (m.name || m.email).toLowerCase()
+    const emailPrefix = (m.email || '').split('@')[0].toLowerCase()
+    membersByName[displayName] = { email: m.email }
+    membersByName[emailPrefix] = { email: m.email } // fallback for old eligible lists
     allEmails.push(m.email)
   }
 
@@ -66,7 +69,9 @@ export async function POST(req: NextRequest) {
 
   const shiftConfigs = (dbShiftTypes || []).map((st: any) => ({
     name: st.name,
-    eligible: (st.eligible || []).map((e: string) => e.toLowerCase()),
+    eligible: (st.eligible || [])
+      .map((e: string) => e.toLowerCase())
+      .filter((e: string) => membersByName[e]), // only keep names that map to actual members
     perDay: st.per_day || 1,
     rules: st.rules || '',
   }))
@@ -166,19 +171,22 @@ export async function POST(req: NextRequest) {
   }
 
   // Now insert fresh entries — one per member per date where they have a shift
+  // Build reverse map: eligible name -> email for insertion
   const toInsert: any[] = []
   for (const date of allDates) {
-    for (const m of members) {
-      const name = (m.name || m.email).toLowerCase()
-      const assignedShift = memberAssignment[date][name]
-      if (!assignedShift) continue
+    for (const [eligibleName, shiftName] of Object.entries(memberAssignment[date])) {
+      const member = membersByName[eligibleName]
+      if (!member) continue
+
+      // Find the full member object to get userId
+      const fullMember = members.find((m: any) => m.email === member.email)
 
       toInsert.push({
         group_id: groupId,
-        user_id: m.userId || null,
-        user_email: m.email,
+        user_id: fullMember?.userId || null,
+        user_email: member.email,
         date,
-        shift_type: assignedShift,
+        shift_type: shiftName,
       })
     }
   }
