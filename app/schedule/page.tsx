@@ -98,16 +98,15 @@ export default function SchedulePage() {
     setGeneralRules(stData.generalRules || '')
     setSetWeeksCount(stData.setWeeks || 6)
 
-    // Load saved shift configs
-    const loadedConfigs: {[k: string]: { eligible: string[], perDay: number, rules: string }} = {}
+    // Load saved shift configs (translate eligible names will happen after profiles load)
+    const rawConfigs: {[k: string]: { eligible: string[], perDay: number, rules: string }} = {}
     for (const st of (stData.shiftTypes || [])) {
-      loadedConfigs[st.name] = {
+      rawConfigs[st.name] = {
         eligible: st.eligible || [],
         perDay: st.per_day || 1,
         rules: st.rules || '',
       }
     }
-    setShiftConfigs(loadedConfigs)
 
     // Determine date range based on view
     let start: string
@@ -141,8 +140,35 @@ export default function SchedulePage() {
       body: JSON.stringify({ groupId: userGroupId })
     })
     const pData = await pRes.json()
-    setProfileMap(pData.profiles || {})
-    setEmailProfileMap(pData.emailProfiles || {})
+    const loadedProfiles = pData.profiles || {}
+    const loadedEmailProfiles = pData.emailProfiles || {}
+    setProfileMap(loadedProfiles)
+    setEmailProfileMap(loadedEmailProfiles)
+
+    // Build email-prefix -> display name mapping for migrating old eligible lists
+    const prefixToName: {[prefix: string]: string} = {}
+    for (const [email, displayName] of Object.entries(loadedEmailProfiles)) {
+      const prefix = (email as string).split('@')[0]
+      prefixToName[prefix.toLowerCase()] = displayName as string
+    }
+
+    // Translate old eligible names (email prefixes) to current display names
+    const memberDisplayNames = (mData.members || []).map((m: any) =>
+      loadedEmailProfiles[m.email] || loadedProfiles[m.user_id] || (m.email || '').split('@')[0]
+    )
+    const loadedConfigs: {[k: string]: { eligible: string[], perDay: number, rules: string }} = {}
+    for (const [name, config] of Object.entries(rawConfigs)) {
+      const translatedEligible = (config as any).eligible.map((e: string) => {
+        // If this name is already a current display name, keep it
+        if (memberDisplayNames.includes(e)) return e
+        // Try to translate from email prefix
+        const translated = prefixToName[e.toLowerCase()]
+        if (translated && memberDisplayNames.includes(translated)) return translated
+        return e // keep as-is if no translation found
+      })
+      loadedConfigs[name] = { ...(config as any), eligible: translatedEligible }
+    }
+    setShiftConfigs(loadedConfigs)
 
     const toRes = await fetch(`/api/time-off?groupId=${userGroupId}&pending=true`)
     const toData = await toRes.json()
