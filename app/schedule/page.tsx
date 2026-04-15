@@ -27,6 +27,7 @@ function getFullDateLabel(d: Date): string {
 
 
 export default function SchedulePage() {
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -380,9 +381,34 @@ export default function SchedulePage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #080b12 0%, #0a0e17 100%)', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, system-ui, sans-serif" }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .sched-header { padding: 0.6rem 0.75rem !important; gap: 0.5rem !important; }
+          .sched-title { display: none !important; }
+          .sched-body { flex-direction: column !important; padding: 0.5rem !important; gap: 0.5rem !important; }
+          .sched-sidebar { display: none !important; width: 100% !important; max-height: none !important; position: static !important; }
+          .sched-sidebar.mobile-open { display: block !important; position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; z-index: 200 !important; overflow-y: auto !important; width: 100% !important; max-width: 100% !important; border-radius: 0 !important; padding: 1rem !important; background: #0d1117 !important; }
+          .sched-main { width: 100% !important; }
+          .sched-assign { margin-bottom: 0.5rem !important; padding: 0.4rem !important; }
+          .sched-assign span { display: none !important; }
+          .sched-table-wrap { border-radius: 10px !important; }
+          .sched-table th { padding: 0.4rem 0.2rem !important; font-size: 0.6rem !important; }
+          .sched-table td { padding: 0.2rem !important; }
+          .sched-table .sched-team-name { font-size: 0.68rem !important; padding: 0.3rem 0.4rem !important; }
+          .sched-table .sched-team-name span { display: none !important; }
+          .sched-table .sched-avatar { width: 22px !important; height: 22px !important; font-size: 0.55rem !important; }
+          .sched-shift-badge { font-size: 0.55rem !important; padding: 0.2rem !important; }
+          .sched-mobile-config { display: flex !important; }
+          .sched-nav-date { min-width: 100px !important; font-size: 0.75rem !important; }
+          .sched-print-btn { padding: 0.3rem 0.5rem !important; font-size: 0.7rem !important; }
+          .sched-month-grid { border-radius: 10px !important; }
+          .sched-month-cell { min-height: 50px !important; padding: 0.2rem !important; }
+          .sched-month-entry { font-size: 0.45rem !important; }
+        }
+      `}</style>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '1rem', backdropFilter: 'blur(12px)', background: 'rgba(8,11,18,0.8)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginRight: 'auto' }}>
+      <div className="sched-header" style={{ display: 'flex', alignItems: 'center', padding: '1rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '1rem', backdropFilter: 'blur(12px)', background: 'rgba(8,11,18,0.8)' }}>
+        <div className="sched-title" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginRight: 'auto' }}>
           <button onClick={() => window.location.href = '/'} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', fontSize: '1rem', cursor: 'pointer', borderRadius: '10px', padding: '0.4rem 0.6rem', transition: 'all 0.15s ease' }}>&larr;</button>
           <div>
             <div style={{ fontWeight: '700', fontSize: '1.15rem', letterSpacing: '-0.01em' }}>Schedule</div>
@@ -391,7 +417,7 @@ export default function SchedulePage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
           <button onClick={() => navigate(-1)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&larr;</button>
-          <button onClick={() => { setPickerMonth(currentDate); setShowDatePicker(!showDatePicker) }} style={{ fontSize: '0.85rem', fontWeight: '500', minWidth: '160px', textAlign: 'center', background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', padding: '0.3rem 0.5rem', borderRadius: '6px' }}>{headerLabel}</button>
+          <button className="sched-nav-date" onClick={() => { setPickerMonth(currentDate); setShowDatePicker(!showDatePicker) }} style={{ fontSize: '0.85rem', fontWeight: '500', minWidth: '160px', textAlign: 'center', background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', padding: '0.3rem 0.5rem', borderRadius: '6px' }}>{headerLabel}</button>
           <button onClick={() => navigate(1)} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&rarr;</button>
           <button onClick={() => setCurrentDate(new Date())} style={{ padding: '0.35rem 0.65rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Today</button>
           {(['week', 'month'] as const).map(v => (
@@ -434,16 +460,20 @@ export default function SchedulePage() {
           )}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button onClick={() => { setPrintShifts(shiftTypes.map(s => s.name)); setShowPrintModal(true) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>Print</button>
+          {isAdmin && <button className="sched-mobile-config" onClick={() => setShowMobileSidebar(!showMobileSidebar)} style={{ display: 'none', padding: '0.35rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>Config</button>}
+          <button className="sched-print-btn" onClick={() => { setPrintShifts(shiftTypes.map(s => s.name)); setShowPrintModal(true) }} style={{ padding: '0.35rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>Print</button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '1.25rem', padding: '1rem 1.5rem' }}>
+      {/* Mobile sidebar overlay */}
+      {showMobileSidebar && <div onClick={() => setShowMobileSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 190 }} />}
+
+      <div className="sched-body" style={{ display: 'flex', gap: '1.25rem', padding: '1rem 1.5rem' }}>
         {/* Main content */}
-        <div style={{ flex: 1, overflowX: 'auto' }}>
+        <div className="sched-main" style={{ flex: 1, overflowX: 'auto' }}>
           {/* Shift type selector for admins */}
           {isAdmin && (
-            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="sched-assign" style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center', padding: '0.6rem 0.8rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
               <span style={{ fontSize: '0.7rem', color: '#64748b', marginRight: '0.3rem', fontWeight: '500', letterSpacing: '0.03em' }}>Assign:</span>
               {shiftTypes.map(st => (
                 <button key={st.id} onClick={() => setSelectedShift(selectedShift === st.name ? null : st.name)} style={{ padding: '0.35rem 0.8rem', borderRadius: '20px', border: `1.5px solid ${selectedShift === st.name ? st.color : 'rgba(255,255,255,0.08)'}`, background: selectedShift === st.name ? st.color : 'rgba(255,255,255,0.03)', color: selectedShift === st.name ? 'white' : st.color, fontSize: '0.73rem', cursor: 'pointer', transition: 'all 0.2s ease', fontWeight: selectedShift === st.name ? '600' : '400', backdropFilter: 'blur(8px)', boxShadow: selectedShift === st.name ? `0 2px 12px ${st.color}33` : 'none' }}>{st.name}</button>
@@ -454,8 +484,8 @@ export default function SchedulePage() {
 
           {/* WEEK VIEW */}
           {view === 'week' && (
-            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', backdropFilter: 'blur(12px)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+            <div className="sched-table-wrap" style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', backdropFilter: 'blur(12px)' }}>
+              <table className="sched-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.03)' }}>
                     <th style={{ padding: '0.75rem 1rem', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.08)', color: '#64748b', fontWeight: '600', width: '140px', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Team</th>
@@ -473,9 +503,9 @@ export default function SchedulePage() {
                 <tbody>
                   {members.map((member, mi) => (
                     <tr key={member.user_id || member.email} style={{ transition: 'background 0.15s ease' }} onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                      <td style={{ padding: '0.6rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.8rem', fontWeight: '500' }}>
+                      <td className="sched-team-name" style={{ padding: '0.6rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.8rem', fontWeight: '500' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: `linear-gradient(135deg, ${colors[mi % colors.length]}44, ${colors[mi % colors.length]}22)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: '700', color: colors[mi % colors.length], border: `1px solid ${colors[mi % colors.length]}33`, flexShrink: 0 }}>{getMemberName(member).charAt(0).toUpperCase()}</div>
+                          <div className="sched-avatar" style={{ width: '28px', height: '28px', borderRadius: '8px', background: `linear-gradient(135deg, ${colors[mi % colors.length]}44, ${colors[mi % colors.length]}22)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: '700', color: colors[mi % colors.length], border: `1px solid ${colors[mi % colors.length]}33`, flexShrink: 0 }}>{getMemberName(member).charAt(0).toUpperCase()}</div>
                           <span>{getMemberName(member)}</span>
                         </div>
                       </td>
@@ -487,7 +517,7 @@ export default function SchedulePage() {
                         const isToday = dateStr === todayStr
                         return (
                           <td key={dateStr} onClick={() => { if (!isAdmin || !selectedShift) return; setScheduleEntry(member.user_id, member.email, dateStr, selectedShift === '__clear__' ? null : selectedShift) }} style={{ padding: '0.35rem', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: isAdmin && selectedShift ? 'pointer' : 'default', background: isToday ? 'rgba(230,57,70,0.03)' : 'transparent', borderLeft: isToday ? '1px solid rgba(230,57,70,0.1)' : '1px solid transparent', borderRight: isToday ? '1px solid rgba(230,57,70,0.1)' : '1px solid transparent' }}>
-                            {shiftName && <div style={{ padding: '0.3rem 0.25rem', borderRadius: '8px', background: `linear-gradient(135deg, ${color}${isSet(dateStr) ? '28' : '10'}, ${color}${isSet(dateStr) ? '15' : '08'})`, color, fontSize: '0.7rem', fontWeight: '600', opacity: isSet(dateStr) ? 1 : 0.45, border: isSet(dateStr) ? `1px solid ${color}25` : `1px dashed ${color}30`, boxShadow: isSet(dateStr) ? `0 1px 4px ${color}15` : 'none', transition: 'all 0.15s ease' }}>{shiftName}</div>}
+                            {shiftName && <div className="sched-shift-badge" style={{ padding: '0.3rem 0.25rem', borderRadius: '8px', background: `linear-gradient(135deg, ${color}${isSet(dateStr) ? '28' : '10'}, ${color}${isSet(dateStr) ? '15' : '08'})`, color, fontSize: '0.7rem', fontWeight: '600', opacity: isSet(dateStr) ? 1 : 0.45, border: isSet(dateStr) ? `1px solid ${color}25` : `1px dashed ${color}30`, boxShadow: isSet(dateStr) ? `0 1px 4px ${color}15` : 'none', transition: 'all 0.15s ease' }}>{shiftName}</div>}
                           </td>
                         )
                       })}
@@ -500,7 +530,7 @@ export default function SchedulePage() {
 
           {/* MONTH VIEW */}
           {view === 'month' && (
-            <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', backdropFilter: 'blur(12px)' }}>
+            <div className="sched-month-grid" style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', backdropFilter: 'blur(12px)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 0 }}>
                 {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
                   <div key={d} style={{ padding: '0.6rem', textAlign: 'center', fontSize: '0.72rem', color: '#64748b', fontWeight: '600', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.08)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{d}</div>
@@ -511,13 +541,13 @@ export default function SchedulePage() {
                   const isToday = dateStr === todayStr
                   const dayEntries = getEntriesForDate(dateStr)
                   return (
-                    <div key={dateStr} style={{ minHeight: '80px', padding: '0.4rem', background: isToday ? 'rgba(230,57,70,0.05)' : 'transparent', opacity: isCurrentMonth ? 1 : 0.25, borderBottom: '1px solid rgba(255,255,255,0.04)', borderRight: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s ease' }}>
+                    <div className="sched-month-cell" key={dateStr} style={{ minHeight: '80px', padding: '0.4rem', background: isToday ? 'rgba(230,57,70,0.05)' : 'transparent', opacity: isCurrentMonth ? 1 : 0.25, borderBottom: '1px solid rgba(255,255,255,0.04)', borderRight: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s ease' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: isToday ? '22px' : 'auto', height: isToday ? '22px' : 'auto', borderRadius: isToday ? '50%' : '0', background: isToday ? '#e63946' : 'transparent', color: isToday ? 'white' : '#64748b', fontSize: '0.72rem', fontWeight: isToday ? '700' : '400', marginBottom: '0.25rem' }}>{d.getDate()}</div>
                       {dayEntries.slice(0, 3).map((e: any, i: number) => {
                         const color = getShiftColor(e.shift_type)
                         const name = emailProfileMap[e.user_email] || profileMap[e.user_id] || (e.user_email || '').split('@')[0]
                         return (
-                          <div key={i} style={{ fontSize: '0.55rem', padding: '2px 4px', borderRadius: '4px', background: `linear-gradient(135deg, ${color}${isSet(dateStr) ? '25' : '10'}, ${color}${isSet(dateStr) ? '12' : '05'})`, color, marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '600', opacity: isSet(dateStr) ? 1 : 0.45, border: isSet(dateStr) ? `1px solid ${color}20` : `1px dashed ${color}25` }}>
+                          <div className="sched-month-entry" key={i} style={{ fontSize: '0.55rem', padding: '2px 4px', borderRadius: '4px', background: `linear-gradient(135deg, ${color}${isSet(dateStr) ? '25' : '10'}, ${color}${isSet(dateStr) ? '12' : '05'})`, color, marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '600', opacity: isSet(dateStr) ? 1 : 0.45, border: isSet(dateStr) ? `1px solid ${color}20` : `1px dashed ${color}25` }}>
                             {name.split(' ')[0]}
                           </div>
                         )
@@ -532,7 +562,9 @@ export default function SchedulePage() {
         </div>
 
         {/* Sidebar */}
-        <div style={{ width: '260px', flexShrink: 0, background: 'rgba(255,255,255,0.015)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', padding: '1rem', backdropFilter: 'blur(12px)', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+        <div className={`sched-sidebar${showMobileSidebar ? ' mobile-open' : ''}`} style={{ width: '260px', flexShrink: 0, background: 'rgba(255,255,255,0.015)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', padding: '1rem', backdropFilter: 'blur(12px)', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+          {/* Mobile close button */}
+          <button onClick={() => setShowMobileSidebar(false)} style={{ display: showMobileSidebar ? 'block' : 'none', position: 'absolute', top: '0.75rem', right: '0.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', fontSize: '1rem', cursor: 'pointer', borderRadius: '8px', padding: '0.3rem 0.5rem', zIndex: 201 }}>&#10005;</button>
           {isAdmin && (
             <div style={{ marginBottom: '1.25rem' }}>
               <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.6rem', fontWeight: '600' }}>Shift Types</div>

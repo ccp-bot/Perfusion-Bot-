@@ -35,10 +35,11 @@ export default function LoginPage() {
         @keyframes glow { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
         input::placeholder { color: #4a5568; }
         @media (max-width: 768px) {
-          .login-layout { flex-direction: column !important; gap: 1rem !important; }
-          .login-cor { max-width: 200px !important; }
-          .login-form { width: 100% !important; padding: 0 1rem !important; box-sizing: border-box !important; }
-          .login-title { font-size: 1.5rem !important; }
+          .login-layout { flex-direction: column !important; gap: 1rem !important; padding: 1rem !important; }
+          .login-cor { max-width: 180px !important; }
+          .login-form { width: 100% !important; max-width: 100% !important; padding: 0 !important; box-sizing: border-box !important; }
+          .login-title { font-size: 1.3rem !important; }
+          .login-subtitle { font-size: 0.75rem !important; }
         }
       `}</style>
 
@@ -60,7 +61,7 @@ export default function LoginPage() {
            </div>
 
         {/* Login form */}
-        <div className="login-form" style={{ width: '360px', flexShrink: 0 }}>
+        <div className="login-form" style={{ width: '360px', maxWidth: '100%', flexShrink: 0, boxSizing: 'border-box' }}>
           <div style={{ marginBottom: '2rem' }}>
             <div className="login-title" style={{ fontSize: '2rem', fontWeight: '700', color: '#ffffff', letterSpacing: '-0.03em', marginBottom: '0.25rem' }}>
               Welcome to <span style={{ color: '#e63946' }}>COR</span>
