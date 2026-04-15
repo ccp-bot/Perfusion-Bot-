@@ -40,6 +40,7 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState('')
   const [saving, setSaving] = useState(false)
   const [displayName, setDisplayName] = useState<string | null>(null)
+  const [notifPermission, setNotifPermission] = useState<string>('default')
   const [showNamePrompt, setShowNamePrompt] = useState(false)
   const [nameInput, setNameInput] = useState('')
   const [user, setUser] = useState<any>(null)
@@ -240,6 +241,55 @@ export default function Home() {
     const hideTimer = setTimeout(() => { setShowSplash(false); sessionStorage.setItem('splashShown', '1') }, 6500)
     return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer) }
   }, [])
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotifPermission(Notification.permission)
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(p => setNotifPermission(p))
+      }
+    }
+  }, [])
+
+  function notifyCORDone(preview?: string) {
+    // Play a chime sound using Web Audio API
+    try {
+      const ctx = new AudioContext()
+      // First tone
+      const osc1 = ctx.createOscillator()
+      const gain1 = ctx.createGain()
+      osc1.type = 'sine'
+      osc1.frequency.setValueAtTime(880, ctx.currentTime)
+      gain1.gain.setValueAtTime(0.15, ctx.currentTime)
+      gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
+      osc1.connect(gain1)
+      gain1.connect(ctx.destination)
+      osc1.start(ctx.currentTime)
+      osc1.stop(ctx.currentTime + 0.3)
+      // Second tone (higher, slight delay)
+      const osc2 = ctx.createOscillator()
+      const gain2 = ctx.createGain()
+      osc2.type = 'sine'
+      osc2.frequency.setValueAtTime(1174, ctx.currentTime + 0.15)
+      gain2.gain.setValueAtTime(0.12, ctx.currentTime + 0.15)
+      gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
+      osc2.connect(gain2)
+      gain2.connect(ctx.destination)
+      osc2.start(ctx.currentTime + 0.15)
+      osc2.stop(ctx.currentTime + 0.5)
+    } catch { /* audio not available */ }
+
+    // Browser notification (if tab not focused)
+    if (document.hidden && notifPermission === 'granted') {
+      try {
+        new Notification('COR has responded', {
+          body: preview ? preview.slice(0, 100) + (preview.length > 100 ? '...' : '') : 'Your answer is ready.',
+          icon: '/COR-1.PNG',
+        })
+      } catch { /* notification not available */ }
+    }
+  }
 
   if (authLoading) return null
 
@@ -1032,12 +1082,14 @@ export default function Home() {
 
       // Auto-save to history after every response
       await autoSaveHistory(finalMessages)
+      notifyCORDone(data.answer || data.summary)
 
     } catch {
       const errorMsg = { role: 'assistant', content: 'Error getting response.' }
       const finalMessages = [...updatedMessages, errorMsg]
       setMessages(finalMessages)
       await autoSaveHistory(finalMessages)
+      notifyCORDone('Error getting response.')
     }
 
     setLoading(false)
