@@ -29,7 +29,10 @@ export default function Home() {
   const [messages, setMessages] = useState<{role: string, content: string, image?: string}[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showSplash, setShowSplash] = useState(true)
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window !== 'undefined' && sessionStorage.getItem('splashShown')) return false
+    return true
+  })
   const [fadingSplash, setFadingSplash] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
   const [savePreview, setSavePreview] = useState(false)
@@ -232,8 +235,9 @@ export default function Home() {
   }, [messages])
 
   useEffect(() => {
+    if (!showSplash) return
     const fadeTimer = setTimeout(() => setFadingSplash(true), 5000)
-    const hideTimer = setTimeout(() => setShowSplash(false), 6500)
+    const hideTimer = setTimeout(() => { setShowSplash(false); sessionStorage.setItem('splashShown', '1') }, 6500)
     return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer) }
   }, [])
 
