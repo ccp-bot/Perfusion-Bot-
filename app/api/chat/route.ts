@@ -198,51 +198,75 @@ Return only the summary, no preamble.`
   }
 
   // ── NORMAL CHAT ────────────────────────────────────────────
-  const embeddingResponse = await openai.embeddings.create({
-    model: 'text-embedding-3-small',
-    input: message,
-  })
-  const embedding = embeddingResponse.data[0].embedding
-
-  // Search documents — filter by group if user belongs to one
-  let documents: any[] = []
-  if (groupId) {
-    // Search within group's documents
-    const { data } = await supabase.rpc('match_documents', {
-      query_embedding: embedding,
-      match_threshold: 0.5,
-      match_count: 5,
+  // Search institutional knowledge base for supplementary context
+  let institutionalContext = ''
+  try {
+    const embeddingResponse = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: message,
     })
-    // Filter to group documents + global docs
-    documents = (data || []).filter((d: any) =>
-      d.group_id === groupId || d.institution_id === 'hospital_a'
-    )
-  } else {
-    const { data } = await supabase.rpc('match_documents', {
-      query_embedding: embedding,
-      match_threshold: 0.5,
-      match_count: 5,
-    })
-    documents = data || []
-  }
+    const embedding = embeddingResponse.data[0].embedding
 
-  const context = documents.map((d: any) => d.content).join('\n\n') || 'No relevant documents found.'
+    let documents: any[] = []
+    if (groupId) {
+      const { data } = await supabase.rpc('match_documents', {
+        query_embedding: embedding,
+        match_threshold: 0.65,
+        match_count: 3,
+      })
+      documents = (data || []).filter((d: any) =>
+        d.group_id === groupId || d.institution_id === 'hospital_a'
+      )
+    } else {
+      const { data } = await supabase.rpc('match_documents', {
+        query_embedding: embedding,
+        match_threshold: 0.65,
+        match_count: 3,
+      })
+      documents = data || []
+    }
+
+    if (documents.length > 0) {
+      institutionalContext = documents.map((d: any) => d.content).join('\n\n')
+    }
+  } catch { /* institutional search failure shouldn't block chat */ }
 
   const conversationHistory = messages.map((m: any) => ({
     role: m.role as 'user' | 'assistant',
     content: m.content
   }))
 
+  const institutionalSection = institutionalContext
+    ? `\n\nINSTITUTIONAL KNOWLEDGE (from your institution's saved protocols, policies, and case notes — use this to supplement your answers when relevant, and note when information comes from institutional records):
+${institutionalContext}`
+    : ''
+
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    system: `You are COR, a friendly and knowledgeable AI assistant specialized in cardiovascular perfusion. You were built to support perfusionists in their clinical practice.
+    max_tokens: 2048,
+    system: `You are COR, the world's most knowledgeable cardiovascular perfusion AI assistant. You have deep expertise across all aspects of perfusion science, clinical practice, and patient care — equivalent to a seasoned perfusionist with decades of experience and academic knowledge.
+
+Your expertise includes:
+- Cardiopulmonary bypass (CPB) setup, management, and troubleshooting
+- ECMO (VA, VV) cannulation, circuit management, and weaning
+- Myocardial protection strategies and cardioplegia delivery
+- Anticoagulation management (heparin, bivalirudin, ACT monitoring)
+- Blood gas management (alpha-stat, pH-stat)
+- Hemodilution, ultrafiltration, and blood conservation
+- Hypothermia and temperature management
+- Circulatory arrest techniques (DHCA, ACP, RCP)
+- Pediatric and neonatal perfusion
+- Mechanical circulatory support devices (IABP, Impella, VADs)
+- Coagulation cascades, TEG/ROTEM interpretation
+- Hemodynamic monitoring and troubleshooting
+- Emergency scenarios (massive air embolism, pump failure, protamine reactions)
+- Current guidelines from STS, AmSECT, ELSO, and other professional organizations
 
 Your personality:
-- Warm, approachable, and conversational - like a trusted Professor who is also a mentor and colleague
-- Very detailed oriented and evidence-based - you always back up your answers with data and references when possible
-- Very succint answers - you get to the point quickly without unnecessary filler
-- Honest and truth-seeking - you acknowledge uncertainty and never fabricate answers
+- Warm, approachable, and conversational — like a trusted professor who is also a mentor and colleague
+- Evidence-based — you reference studies, guidelines, and clinical data when relevant
+- Succinct — you get to the point quickly without unnecessary filler
+- Honest — you acknowledge uncertainty and never fabricate answers
 - When evidence is mixed or unclear, say so openly
 - Never give a definitive answer when the data does not support one
 
@@ -256,10 +280,12 @@ Your formatting style:
 
 When answering:
 - Lead with the answer, not the context
+- Use your full perfusion knowledge first — you ARE the expert
+- If the institutional knowledge base has relevant protocols or policies for this institution, incorporate those and note them
 - Be direct and clinical. Say what needs to be said, nothing more.
-- If you don't have enough information, say "I don't have that in my knowledge base" and stop
-- When guidelines differ between institutions, note it briefly
+- When guidelines differ between institutions or societies, note it briefly
 - Always prioritize patient safety
+- If asked about something outside perfusion, you can answer briefly but remind them of your specialty
 
 IMPORTANT — Protocol and Policy Change Detection:
 When a user tells you about a change to a protocol, procedure, equipment preference, or institutional policy (e.g., "Dr. Smith switched to 24Fr cannula", "we no longer use heparin-bonded circuits", "new policy: all patients get TEE"), you MUST:
@@ -269,10 +295,7 @@ When a user tells you about a change to a protocol, procedure, equipment prefere
    [PROTOCOL_UPDATE: your concise summary of the change here] — if it's a protocol/procedure/equipment change
    [POLICY_UPDATE: your concise summary of the change here] — if it's an institutional policy change
 
-Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).
-
-Context from knowledge base:
-${context}`,
+Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).${institutionalSection}`,
     messages: [
       ...conversationHistory,
       { role: 'user', content: message }
