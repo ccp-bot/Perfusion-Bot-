@@ -9,6 +9,26 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
+
+  async function handleResetPassword() {
+    if (!email) {
+      setError('Enter your email address first')
+      return
+    }
+    setResetLoading(true)
+    setError('')
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    if (error) {
+      setError(error.message)
+    } else {
+      setResetSent(true)
+    }
+    setResetLoading(false)
+  }
 
   async function handleAuth() {
     setLoading(true)
@@ -102,8 +122,23 @@ export default function LoginPage() {
             {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
           </button>
 
+          {resetSent && (
+            <div style={{ color: '#22c55e', fontSize: '0.78rem', marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(34,197,94,0.08)', borderRadius: '8px', border: '1px solid rgba(34,197,94,0.2)', textAlign: 'center' }}>
+              Password reset email sent! Check your inbox.
+            </div>
+          )}
+
+          {!isSignUp && (
+            <div
+              onClick={resetLoading ? undefined : handleResetPassword}
+              style={{ textAlign: 'center', fontSize: '0.78rem', color: '#94a3b8', cursor: resetLoading ? 'not-allowed' : 'pointer', marginBottom: '0.75rem', transition: 'color 0.15s ease' }}
+            >
+              {resetLoading ? 'Sending...' : 'Forgot password?'}
+            </div>
+          )}
+
           <div
-            onClick={() => setIsSignUp(!isSignUp)}
+            onClick={() => { setIsSignUp(!isSignUp); setResetSent(false); setError('') }}
             style={{ textAlign: 'center', fontSize: '0.8rem', color: '#4a5568', cursor: 'pointer', transition: 'color 0.15s ease' }}
           >
             {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
