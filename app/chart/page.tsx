@@ -51,6 +51,12 @@ type CaseRecord = {
   created_at?: string
 }
 
+type PhaseData = {
+  runs: Array<{ start: string; stop?: string; min: number }>
+  totalMin: number
+  running: boolean
+}
+
 type CaseEvent = {
   id: string
   case_id: string
@@ -282,8 +288,6 @@ export default function ChartPage() {
   const timers = useMemo(() => {
     const findLatest = (label: string) =>
       [...events].reverse().find(e => e.label === label)?.event_time
-    const findEarliest = (label: string) =>
-      events.find(e => e.label === label)?.event_time
     const findNextAfter = (label: string, afterIso: string | undefined) => {
       if (!afterIso) return undefined
       const afterMs = new Date(afterIso).getTime()
@@ -293,6 +297,34 @@ export default function ChartPage() {
     const offBypass = findLatest('Off Bypass')
     const offBypassMs = offBypass ? new Date(offBypass).getTime() : null
 
+    // Multi-run phase: pairs every start with its next stop, sums total time.
+    function computePhase(startLabel: string, stopLabel: string): PhaseData | null {
+      const runs: Array<{ start: string; stop?: string; min: number }> = []
+      let currentStart: string | null = null
+
+      for (const e of events) {
+        if (e.label === startLabel) {
+          if (!currentStart) currentStart = e.event_time
+        } else if (e.label === stopLabel && currentStart) {
+          const min = Math.max(0, Math.floor((new Date(e.event_time).getTime() - new Date(currentStart).getTime()) / 60000))
+          runs.push({ start: currentStart, stop: e.event_time, min })
+          currentStart = null
+        }
+      }
+
+      let running = false
+      if (currentStart) {
+        running = true
+        const min = Math.max(0, Math.floor((now - new Date(currentStart).getTime()) / 60000))
+        runs.push({ start: currentStart, min })
+      }
+
+      if (runs.length === 0) return null
+      const totalMin = runs.reduce((sum, r) => sum + r.min, 0)
+      return { runs, totalMin, running }
+    }
+
+    // Single-period timer (start → stop or cap at Off Bypass/now).
     function makeTimer(startIso?: string, stopIso?: string): { running: boolean; min: number } | null {
       if (!startIso) return null
       const start = new Date(startIso).getTime()
@@ -303,20 +335,19 @@ export default function ChartPage() {
       return { running: true, min: Math.max(0, Math.floor((now - start) / 60000)) }
     }
 
-    // CPB: first On Bypass → Off Bypass
-    const cpb = makeTimer(findEarliest('On Bypass'), findLatest('Off Bypass'))
+    // Multi-run phases
+    const cpb = computePhase('On Bypass', 'Off Bypass')
+    const xclamp = computePhase('Aortic Clamp On', 'Aortic Clamp Off')
+    const dhca = computePhase('DHCA Start', 'DHCA Stop')
+    const sacp = computePhase('SACP Start', 'SACP Stop')
+    const extra = computePhase('Extra Start', 'Extra Stop')
 
-    // X-Clamp: most recent clamp on / clamp off pair
-    const clampOn = findLatest('Aortic Clamp On')
-    const clampOff = findLatest('Aortic Clamp Off')
-    const xclamp = makeTimer(clampOn, clampOff)
-
-    // CP Timer: since most recent CP dose (any cp event)
+    // CP Timer: since most recent CP dose event
     const latestCp = [...events].reverse().find(e => e.event_type === 'cp')?.event_time
     const cp = makeTimer(latestCp)
 
     // Reperfusion: most recent Aortic Clamp Off → Off Bypass
-    const reperfusion = makeTimer(clampOff)
+    const reperfusion = makeTimer(findLatest('Aortic Clamp Off'))
 
     // Cooling: latest Cooling → next Rewarming after it
     const latestCooling = findLatest('Cooling')
@@ -327,15 +358,6 @@ export default function ChartPage() {
     const latestRewarming = findLatest('Rewarming')
     const rewarmingStop = findNextAfter('Cooling', latestRewarming)
     const rewarming = makeTimer(latestRewarming, rewarmingStop)
-
-    // SACP: latest pair
-    const sacp = makeTimer(findLatest('SACP Start'), findLatest('SACP Stop'))
-
-    // DHCA: latest pair
-    const dhca = makeTimer(findLatest('DHCA Start'), findLatest('DHCA Stop'))
-
-    // Extra: generic user-driven timer (tap to start/stop)
-    const extra = makeTimer(findLatest('Extra Start'), findLatest('Extra Stop'))
 
     return { cpb, xclamp, cp, reperfusion, cooling, rewarming, sacp, dhca, extra }
   }, [events, now])
@@ -600,15 +622,15 @@ function LiveChart({
   caseRecord: CaseRecord
   events: CaseEvent[]
   timers: {
-    cpb: { running: boolean; min: number } | null
-    xclamp: { running: boolean; min: number } | null
+    cpb: PhaseData | null
+    xclamp: PhaseData | null
     cp: { running: boolean; min: number } | null
     reperfusion: { running: boolean; min: number } | null
     cooling: { running: boolean; min: number } | null
     rewarming: { running: boolean; min: number } | null
-    sacp: { running: boolean; min: number } | null
-    dhca: { running: boolean; min: number } | null
-    extra: { running: boolean; min: number } | null
+    sacp: PhaseData | null
+    dhca: PhaseData | null
+    extra: PhaseData | null
   }
   now: number
   activeForm: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null
@@ -621,7 +643,7 @@ function LiveChart({
   const clockStr = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
   type PrimaryKey = 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra'
-  const primaryRows: { key: PrimaryKey; label: string; data: { running: boolean; min: number } | null }[] = [
+  const primaryRows: { key: PrimaryKey; label: string; data: PhaseData | null }[] = [
     { key: 'cpb', label: 'CPB', data: timers.cpb },
     { key: 'xclamp', label: 'X-Clamp', data: timers.xclamp },
     { key: 'dhca', label: 'DHCA', data: timers.dhca },
@@ -650,7 +672,8 @@ function LiveChart({
           {primaryRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
-            const value = t.data?.min != null ? `${t.data.min} min` : 'Tap to start'
+            const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
+            const runCount = t.data?.runs.length ?? 0
             return (
               <button
                 key={t.key}
@@ -662,11 +685,29 @@ function LiveChart({
                   {running && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
                   {t.label}
                 </div>
-                <div style={{ fontSize: t.data?.min != null ? '1rem' : '0.72rem', fontWeight: 700, color: t.data?.min != null ? '#e2e8f0' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                <div style={{ fontSize: t.data != null ? '1rem' : '0.72rem', fontWeight: 700, color: t.data != null ? '#e2e8f0' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                {runCount > 1 && (
+                  <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '1px' }}>{runCount} runs</div>
+                )}
               </button>
             )
           })}
         </div>
+        {/* Run breakdown — only shows phases with ≥2 runs */}
+        {primaryRows.some(t => (t.data?.runs.length ?? 0) > 1) && (
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem', fontSize: '0.72rem', color: '#94a3b8' }}>
+            {primaryRows.filter(t => (t.data?.runs.length ?? 0) > 1).map(t => (
+              <div key={t.key} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.35rem 0.65rem' }}>
+                <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.label}:</span>{' '}
+                {t.data!.runs.map((r, i) => (
+                  <span key={i}>
+                    R{i + 1} {r.min}m{!r.stop ? ' (active)' : ''}{i < t.data!.runs.length - 1 ? ' · ' : ''}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
         {/* Popup timers (appear once triggered) */}
         {activePopupRows.length > 0 && (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
