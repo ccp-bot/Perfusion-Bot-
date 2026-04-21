@@ -74,20 +74,21 @@ const EMPTY_CASE: Partial<CaseRecord> = {
 }
 
 const HOTKEYS: { label: string; color?: string }[] = [
-  { label: 'On Bypass', color: '#22c55e' },
-  { label: 'Off Bypass', color: '#e63946' },
-  { label: 'Aortic Clamp On', color: '#f59e0b' },
-  { label: 'Aortic Clamp Off', color: '#f59e0b' },
   { label: 'Cooling', color: '#3b82f6' },
   { label: 'Rewarming', color: '#ef4444' },
-  { label: 'DHCA Start', color: '#8b5cf6' },
-  { label: 'DHCA Stop', color: '#8b5cf6' },
-  { label: 'SACP Start', color: '#06b6d4' },
-  { label: 'SACP Stop', color: '#06b6d4' },
   { label: 'Flow down per SN', color: '#64748b' },
   { label: 'Flow up per SN', color: '#64748b' },
   { label: 'Weaning from CPB', color: '#eab308' },
 ]
+
+// Labels logged when a primary timer chip is tapped to start/stop.
+const PRIMARY_TIMER_LABELS: Record<'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra', { start: string; stop: string }> = {
+  cpb: { start: 'On Bypass', stop: 'Off Bypass' },
+  xclamp: { start: 'Aortic Clamp On', stop: 'Aortic Clamp Off' },
+  dhca: { start: 'DHCA Start', stop: 'DHCA Stop' },
+  sacp: { start: 'SACP Start', stop: 'SACP Stop' },
+  extra: { start: 'Extra Start', stop: 'Extra Stop' },
+}
 
 const COMMON_MEDS = [
   'Epinephrine', 'Norepinephrine', 'Phenylephrine', 'Calcium Chloride',
@@ -260,6 +261,12 @@ export default function ChartPage() {
     }
   }
 
+  async function toggleTimer(which: 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra') {
+    const labels = PRIMARY_TIMER_LABELS[which]
+    const running = timers[which]?.running ?? false
+    await logEvent('hotkey', running ? labels.stop : labels.start)
+  }
+
   async function deleteEvent(id: string) {
     if (!user) return
     if (!confirm('Delete this event?')) return
@@ -327,7 +334,10 @@ export default function ChartPage() {
     // DHCA: latest pair
     const dhca = makeTimer(findLatest('DHCA Start'), findLatest('DHCA Stop'))
 
-    return { cpb, xclamp, cp, reperfusion, cooling, rewarming, sacp, dhca }
+    // Extra: generic user-driven timer (tap to start/stop)
+    const extra = makeTimer(findLatest('Extra Start'), findLatest('Extra Stop'))
+
+    return { cpb, xclamp, cp, reperfusion, cooling, rewarming, sacp, dhca, extra }
   }, [events, now])
 
   const inputStyle: React.CSSProperties = {
@@ -362,8 +372,13 @@ export default function ChartPage() {
         .hotkey-btn { padding: 0.9rem 0.75rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #e2e8f0; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; text-align: center; }
         .hotkey-btn:hover { background: rgba(255,255,255,0.08); transform: translateY(-1px); }
         .hotkey-btn:active { transform: translateY(0); }
-        .timer-chip { display: inline-flex; flex-direction: column; align-items: center; padding: 0.5rem 0.9rem; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); min-width: 90px; }
+        .timer-chip { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; padding: 0.5rem 0.9rem; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); min-width: 100px; }
         .timer-chip.active { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3); }
+        .timer-chip.stopped { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); }
+        .timer-chip-btn { cursor: pointer; font-family: inherit; transition: all 0.15s ease; min-width: 110px; padding: 0.6rem 1rem; }
+        .timer-chip-btn:hover { background: rgba(255,255,255,0.08); transform: translateY(-1px); }
+        .timer-chip-btn.active:hover { background: rgba(34,197,94,0.18); }
+        .timer-chip-btn:active { transform: translateY(0); }
         @media (max-width: 768px) {
           .chart-header { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
           .chart-grid { grid-template-columns: 1fr 1fr !important; }
@@ -567,6 +582,7 @@ export default function ChartPage() {
             activeForm={activeForm}
             setActiveForm={setActiveForm}
             onHotkey={(label) => logEvent('hotkey', label)}
+            onToggleTimer={toggleTimer}
             onAddEvent={logEvent}
             onDeleteEvent={deleteEvent}
           />
@@ -579,7 +595,7 @@ export default function ChartPage() {
 // ----- Live chart component -----
 
 function LiveChart({
-  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onAddEvent, onDeleteEvent,
+  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent,
 }: {
   caseRecord: CaseRecord
   events: CaseEvent[]
@@ -592,49 +608,80 @@ function LiveChart({
     rewarming: { running: boolean; min: number } | null
     sacp: { running: boolean; min: number } | null
     dhca: { running: boolean; min: number } | null
+    extra: { running: boolean; min: number } | null
   }
   now: number
   activeForm: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null
   setActiveForm: (f: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null) => void
   onHotkey: (label: string) => void
+  onToggleTimer: (which: 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra') => Promise<void>
   onAddEvent: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
   onDeleteEvent: (id: string) => Promise<void>
 }) {
   const clockStr = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  type TimerRow = { key: string; label: string; data: { running: boolean; min: number } | null; alwaysShow: boolean }
-  const timerRows: TimerRow[] = [
-    { key: 'cpb', label: 'CPB', data: timers.cpb, alwaysShow: true },
-    { key: 'xclamp', label: 'X-Clamp', data: timers.xclamp, alwaysShow: true },
-    { key: 'cp', label: 'CP Timer', data: timers.cp, alwaysShow: false },
-    { key: 'reperfusion', label: 'Reperfusion', data: timers.reperfusion, alwaysShow: false },
-    { key: 'cooling', label: 'Cooling', data: timers.cooling, alwaysShow: false },
-    { key: 'rewarming', label: 'Rewarming', data: timers.rewarming, alwaysShow: false },
-    { key: 'sacp', label: 'SACP', data: timers.sacp, alwaysShow: false },
-    { key: 'dhca', label: 'DHCA', data: timers.dhca, alwaysShow: false },
+  type PrimaryKey = 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra'
+  const primaryRows: { key: PrimaryKey; label: string; data: { running: boolean; min: number } | null }[] = [
+    { key: 'cpb', label: 'CPB', data: timers.cpb },
+    { key: 'xclamp', label: 'X-Clamp', data: timers.xclamp },
+    { key: 'dhca', label: 'DHCA', data: timers.dhca },
+    { key: 'sacp', label: 'SACP', data: timers.sacp },
+    { key: 'extra', label: 'Extra', data: timers.extra },
   ]
+
+  const popupRows: { key: string; label: string; data: { running: boolean; min: number } | null }[] = [
+    { key: 'cp', label: 'CP Timer', data: timers.cp },
+    { key: 'reperfusion', label: 'Reperfusion', data: timers.reperfusion },
+    { key: 'cooling', label: 'Cooling', data: timers.cooling },
+    { key: 'rewarming', label: 'Rewarming', data: timers.rewarming },
+  ]
+  const activePopupRows = popupRows.filter(p => p.data)
 
   return (
     <>
       {/* Sticky top bar with timers */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#080b12', paddingBottom: '0.75rem', marginBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Primary clickable timer chips */}
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
           <div className="timer-chip">
             <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Clock</div>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{clockStr}</div>
           </div>
-          {timerRows.map(t => {
-            if (!t.data && !t.alwaysShow) return null
+          {primaryRows.map(t => {
             const running = t.data?.running ?? false
-            const value = t.data?.min != null ? `${t.data.min} min` : '—'
+            const started = t.data != null
+            const value = t.data?.min != null ? `${t.data.min} min` : 'Tap to start'
             return (
-              <div key={t.key} className={`timer-chip${running ? ' active' : ''}`}>
-                <div style={{ fontSize: '0.68rem', color: running ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t.label}</div>
-                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-              </div>
+              <button
+                key={t.key}
+                onClick={() => onToggleTimer(t.key)}
+                className={`timer-chip timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
+                type="button"
+              >
+                <div style={{ fontSize: '0.68rem', color: running ? '#22c55e' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {running && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
+                  {t.label}
+                </div>
+                <div style={{ fontSize: t.data?.min != null ? '1rem' : '0.72rem', fontWeight: 700, color: t.data?.min != null ? '#e2e8f0' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+              </button>
             )
           })}
         </div>
+        {/* Popup timers (appear once triggered) */}
+        {activePopupRows.length > 0 && (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
+            {activePopupRows.map(t => {
+              const running = t.data?.running ?? false
+              const value = t.data?.min != null ? `${t.data.min} min` : '—'
+              return (
+                <div key={t.key} className={`timer-chip${running ? ' active' : ''}`}>
+                  <div style={{ fontSize: '0.66rem', color: running ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t.label}</div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Hotkeys */}
