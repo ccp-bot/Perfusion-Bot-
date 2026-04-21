@@ -79,12 +79,12 @@ const EMPTY_CASE: Partial<CaseRecord> = {
   uf_volume_ml: null, urine_output_ml: null, notes: '', complications: '',
 }
 
-const HOTKEYS: { label: string; color?: string }[] = [
-  { label: 'Cooling', color: '#3b82f6' },
-  { label: 'Rewarming', color: '#ef4444' },
-  { label: 'Flow down per SN', color: '#64748b' },
-  { label: 'Flow up per SN', color: '#64748b' },
-  { label: 'Weaning from CPB', color: '#eab308' },
+const HOTKEYS: { label: string; color?: string; icon?: string }[] = [
+  { label: 'Cooling', color: '#3b82f6', icon: '❄️' },
+  { label: 'Rewarming', color: '#ef4444', icon: '🔥' },
+  { label: 'Flow down per SN', color: '#64748b', icon: '⬇️' },
+  { label: 'Flow up per SN', color: '#64748b', icon: '⬆️' },
+  { label: 'Weaning from CPB', color: '#eab308', icon: '📉' },
 ]
 
 // Labels logged when a primary timer chip is tapped to start/stop.
@@ -397,10 +397,16 @@ export default function ChartPage() {
         .timer-chip { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; padding: 0.5rem 0.9rem; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); min-width: 100px; }
         .timer-chip.active { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3); }
         .timer-chip.stopped { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); }
-        .timer-chip-btn { cursor: pointer; font-family: inherit; transition: all 0.15s ease; min-width: 110px; padding: 0.6rem 1rem; }
+        .timer-chip-btn { cursor: pointer; font-family: inherit; transition: all 0.15s ease; min-width: 150px; min-height: 80px; padding: 1rem 1.25rem; gap: 4px; }
+        .timer-chip-btn .tc-label { font-size: 0.8rem !important; }
+        .timer-chip-btn .tc-value { font-size: 1.5rem !important; }
+        .timer-chip-btn .tc-value-placeholder { font-size: 0.82rem !important; }
         .timer-chip-btn:hover { background: rgba(255,255,255,0.08); transform: translateY(-1px); }
         .timer-chip-btn.active:hover { background: rgba(34,197,94,0.18); }
         .timer-chip-btn:active { transform: translateY(0); }
+        @media (max-width: 768px) {
+          .timer-chip-btn { min-width: 44%; min-height: 76px; }
+        }
         @media (max-width: 768px) {
           .chart-header { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
           .chart-grid { grid-template-columns: 1fr 1fr !important; }
@@ -681,13 +687,13 @@ function LiveChart({
                 className={`timer-chip timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
                 type="button"
               >
-                <div style={{ fontSize: '0.68rem', color: running ? '#22c55e' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  {running && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
+                <div className="tc-label" style={{ fontSize: '0.68rem', color: running ? '#22c55e' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {running && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
                   {t.label}
                 </div>
-                <div style={{ fontSize: t.data != null ? '1rem' : '0.72rem', fontWeight: 700, color: t.data != null ? '#e2e8f0' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'} style={{ fontWeight: 700, color: t.data != null ? '#e2e8f0' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
                 {runCount > 1 && (
-                  <div style={{ fontSize: '0.62rem', color: '#94a3b8', marginTop: '1px' }}>{runCount} runs</div>
+                  <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{runCount} runs</div>
                 )}
               </button>
             )
@@ -734,9 +740,10 @@ function LiveChart({
               key={hk.label}
               onClick={() => onHotkey(hk.label)}
               className="hotkey-btn"
-              style={{ borderLeft: `3px solid ${hk.color || '#94a3b8'}` }}
+              style={{ borderLeft: `3px solid ${hk.color || '#94a3b8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
-              {hk.label}
+              {hk.icon && <span style={{ fontSize: '1.2rem', lineHeight: 1 }} aria-hidden>{hk.icon}</span>}
+              <span>{hk.label}</span>
             </button>
           ))}
         </div>
