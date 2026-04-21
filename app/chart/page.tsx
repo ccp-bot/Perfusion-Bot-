@@ -96,6 +96,28 @@ const PRIMARY_TIMER_LABELS: Record<'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra',
   extra: { start: 'Extra Start', stop: 'Extra Stop' },
 }
 
+const PHASE_COLORS: Record<string, string> = {
+  cpb: '#22c55e',
+  xclamp: '#f59e0b',
+  dhca: '#a855f7',
+  sacp: '#06b6d4',
+  extra: '#eab308',
+  cp: '#ec4899',
+  reperfusion: '#f97316',
+  cooling: '#3b82f6',
+  rewarming: '#ef4444',
+}
+
+const EVENT_TYPE_STYLES: Record<string, { color: string; icon: string }> = {
+  hotkey: { color: '#94a3b8', icon: '●' },
+  vitals: { color: '#22c55e', icon: '📊' },
+  med: { color: '#a855f7', icon: '💊' },
+  cp: { color: '#ec4899', icon: '❤️' },
+  blood: { color: '#ef4444', icon: '🩸' },
+  abg: { color: '#eab308', icon: '🧪' },
+  note: { color: '#64748b', icon: '📝' },
+}
+
 const COMMON_MEDS = [
   'Epinephrine', 'Norepinephrine', 'Phenylephrine', 'Calcium Chloride',
   'Sodium Bicarbonate', 'Mannitol', 'Lasix (Furosemide)', 'Insulin',
@@ -387,30 +409,167 @@ export default function ChartPage() {
   return (
     <div style={{ background: '#080b12', minHeight: '100vh', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif" }}>
       <style>{`
-        input::placeholder, textarea::placeholder { color: #4a5568; }
+        input::placeholder, textarea::placeholder { color: #475569; }
         input:focus, textarea:focus, select:focus { border-color: rgba(230,57,70,0.4) !important; }
         .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
-        .hotkey-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; }
-        .hotkey-btn { padding: 0.9rem 0.75rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #e2e8f0; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; text-align: center; }
-        .hotkey-btn:hover { background: rgba(255,255,255,0.08); transform: translateY(-1px); }
-        .hotkey-btn:active { transform: translateY(0); }
-        .timer-chip { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; padding: 0.5rem 0.9rem; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); min-width: 100px; }
-        .timer-chip.active { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3); }
-        .timer-chip.stopped { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); }
-        .timer-chip-btn { cursor: pointer; font-family: inherit; transition: all 0.15s ease; min-width: 150px; min-height: 80px; padding: 1rem 1.25rem; gap: 4px; }
-        .timer-chip-btn .tc-label { font-size: 0.8rem !important; }
-        .timer-chip-btn .tc-value { font-size: 1.5rem !important; }
-        .timer-chip-btn .tc-value-placeholder { font-size: 0.82rem !important; }
-        .timer-chip-btn:hover { background: rgba(255,255,255,0.08); transform: translateY(-1px); }
-        .timer-chip-btn.active:hover { background: rgba(34,197,94,0.18); }
-        .timer-chip-btn:active { transform: translateY(0); }
-        @media (max-width: 768px) {
-          .timer-chip-btn { min-width: 44%; min-height: 76px; }
+
+        /* Sticky frosted header */
+        .live-sticky {
+          position: sticky; top: 0; z-index: 10;
+          background: linear-gradient(180deg, rgba(8,11,18,0.95) 0%, rgba(8,11,18,0.8) 100%);
+          -webkit-backdrop-filter: blur(20px) saturate(180%);
+          backdrop-filter: blur(20px) saturate(180%);
+          padding: 0.9rem 0.25rem 0.9rem;
+          margin: 0 -0.25rem 1rem;
+          border-bottom: 1px solid rgba(255,255,255,0.06);
         }
+
+        /* Section card */
+        .live-card {
+          background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 16px;
+          padding: 1.1rem 1.2rem;
+          margin-bottom: 1rem;
+          box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
+        }
+        .live-card-title { font-size: 0.72rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
+        .live-card-title::before { content: ''; width: 3px; height: 14px; background: #e63946; border-radius: 2px; }
+
+        /* Hotkey pills */
+        .hotkey-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.65rem; }
+        .hotkey-btn {
+          position: relative;
+          padding: 1rem 1rem; border-radius: 14px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+          color: #e2e8f0; font-size: 0.9rem; font-weight: 600;
+          cursor: pointer; transition: all 0.18s ease; text-align: center;
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          font-family: inherit;
+        }
+        .hotkey-btn:hover { background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)); transform: translateY(-1px); border-color: rgba(255,255,255,0.14); }
+        .hotkey-btn:active { transform: translateY(0); }
+        .hotkey-icon { font-size: 1.35rem; line-height: 1; }
+
+        /* Timer chip base (for static chips — not used by primary anymore) */
+        .timer-chip {
+          display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 0.55rem 0.95rem; border-radius: 12px;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.07);
+          min-width: 110px;
+        }
+
+        /* Primary timer chip — tap to toggle */
+        .timer-chip-btn {
+          cursor: pointer; font-family: inherit;
+          transition: all 0.18s ease;
+          min-width: 160px; min-height: 92px;
+          padding: 1.1rem 1.3rem;
+          display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+          border-radius: 16px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+          border: 1px solid rgba(255,255,255,0.08);
+          color: #e2e8f0;
+          position: relative; overflow: hidden;
+        }
+        .timer-chip-btn::before {
+          content: ''; position: absolute; inset: 0; border-radius: inherit;
+          background: radial-gradient(circle at 50% 0%, var(--phase, rgba(255,255,255,0.05)) 0%, transparent 70%);
+          opacity: 0; transition: opacity 0.25s ease; pointer-events: none;
+        }
+        .timer-chip-btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.14); }
+        .timer-chip-btn:active { transform: translateY(0); }
+        .timer-chip-btn .tc-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
+        .timer-chip-btn .tc-value { font-size: 1.65rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+        .timer-chip-btn .tc-value-placeholder { font-size: 0.82rem; font-weight: 500; color: #475569; }
+        .timer-chip-btn .tc-runs { font-size: 0.68rem; color: #94a3b8; font-weight: 500; }
+
+        /* Running state: phase color + glow */
+        .timer-chip-btn.active {
+          border-color: color-mix(in srgb, var(--phase) 70%, rgba(255,255,255,0.08));
+          background: linear-gradient(180deg, color-mix(in srgb, var(--phase) 16%, transparent), color-mix(in srgb, var(--phase) 4%, transparent));
+          box-shadow: 0 0 24px color-mix(in srgb, var(--phase) 20%, transparent);
+        }
+        .timer-chip-btn.active::before { opacity: 0.4; }
+        .timer-chip-btn.active .tc-value { color: var(--phase); text-shadow: 0 0 24px color-mix(in srgb, var(--phase) 55%, transparent); }
+        .timer-chip-btn.active .tc-label { color: var(--phase); }
+        .pulse-dot {
+          width: 8px; height: 8px; border-radius: 50%;
+          background: var(--phase, #22c55e);
+          animation: pulseDot 1.6s ease-out infinite;
+        }
+        @keyframes pulseDot {
+          0% { box-shadow: 0 0 0 0 var(--phase); opacity: 1; }
+          70% { box-shadow: 0 0 0 10px transparent; opacity: 0.5; }
+          100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+        }
+
+        /* Stopped (finished) state */
+        .timer-chip-btn.stopped {
+          border-color: color-mix(in srgb, var(--phase) 25%, rgba(255,255,255,0.06));
+        }
+        .timer-chip-btn.stopped .tc-value { color: color-mix(in srgb, var(--phase) 55%, #e2e8f0); }
+
+        /* Popup timer chips (secondary row) */
+        .timer-pop {
+          display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 0.5rem 0.9rem; border-radius: 11px;
+          background: color-mix(in srgb, var(--phase, #64748b) 10%, rgba(255,255,255,0.02));
+          border: 1px solid color-mix(in srgb, var(--phase, #64748b) 30%, rgba(255,255,255,0.06));
+          min-width: 100px;
+          animation: popIn 0.25s ease-out;
+        }
+        .timer-pop .tp-label { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--phase, #94a3b8); }
+        .timer-pop .tp-value { font-size: 1.05rem; font-weight: 800; color: #e2e8f0; font-variant-numeric: tabular-nums; margin-top: 2px; }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+
+        /* Timeline entry */
+        .tl-entry {
+          display: flex; align-items: flex-start; gap: 0.9rem;
+          padding: 0.75rem 0.9rem; border-radius: 12px;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,0.04);
+          transition: all 0.15s ease;
+        }
+        .tl-entry:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
+        .tl-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; flex-shrink: 0; background: color-mix(in srgb, var(--tl-color, #64748b) 15%, transparent); border: 1px solid color-mix(in srgb, var(--tl-color, #64748b) 30%, transparent); }
+        .tl-time { font-size: 0.8rem; color: #94a3b8; font-variant-numeric: tabular-nums; min-width: 56px; padding-top: 7px; font-weight: 600; }
+        .tl-label { font-weight: 600; color: #e2e8f0; font-size: 0.92rem; }
+        .tl-details { font-size: 0.75rem; color: #64748b; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 0.6rem; }
+        .tl-delete { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 6px; opacity: 0.5; transition: all 0.15s ease; }
+        .tl-delete:hover { opacity: 1; color: #e63946; background: rgba(230,57,70,0.08); }
+
+        /* Clock chip */
+        .clock-chip {
+          padding: 0.6rem 0.95rem; border-radius: 12px;
+          background: rgba(255,255,255,0.02);
+          border: 1px dashed rgba(255,255,255,0.08);
+          display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+          min-width: 110px;
+        }
+        .clock-chip .cc-label { font-size: 0.66rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+        .clock-chip .cc-value { font-size: 1.1rem; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+        /* Add-entry tab pill */
+        .entry-tab {
+          padding: 0.55rem 1rem; border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.03);
+          color: #94a3b8; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+          font-family: inherit; transition: all 0.15s ease;
+          display: inline-flex; align-items: center; gap: 6px;
+        }
+        .entry-tab:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
+        .entry-tab.active { background: #e63946; color: white; border-color: #e63946; box-shadow: 0 0 20px rgba(230,57,70,0.3); }
+
         @media (max-width: 768px) {
           .chart-header { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
           .chart-grid { grid-template-columns: 1fr 1fr !important; }
           .hotkey-grid { grid-template-columns: 1fr 1fr !important; }
+          .timer-chip-btn { min-width: 46%; min-height: 84px; padding: 0.9rem 0.9rem; }
+          .timer-chip-btn .tc-value { font-size: 1.4rem; }
         }
       `}</style>
 
@@ -667,63 +826,66 @@ function LiveChart({
 
   return (
     <>
-      {/* Sticky top bar with timers */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#080b12', paddingBottom: '0.75rem', marginBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      {/* Sticky frosted top bar with timers */}
+      <div className="live-sticky">
         {/* Primary clickable timer chips */}
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
-          <div className="timer-chip">
-            <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Clock</div>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{clockStr}</div>
+        <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
+          <div className="clock-chip">
+            <div className="cc-label">Clock</div>
+            <div className="cc-value">{clockStr}</div>
           </div>
           {primaryRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
             const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
             const runCount = t.data?.runs.length ?? 0
+            const phase = PHASE_COLORS[t.key]
             return (
               <button
                 key={t.key}
                 onClick={() => onToggleTimer(t.key)}
-                className={`timer-chip timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
+                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
                 type="button"
+                style={{ ['--phase' as never]: phase }}
               >
-                <div className="tc-label" style={{ fontSize: '0.68rem', color: running ? '#22c55e' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {running && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
+                <div className="tc-label">
+                  {running && <span className="pulse-dot" />}
                   {t.label}
                 </div>
-                <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'} style={{ fontWeight: 700, color: t.data != null ? '#e2e8f0' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-                {runCount > 1 && (
-                  <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{runCount} runs</div>
-                )}
+                <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</div>
+                {runCount > 1 && <div className="tc-runs">{runCount} runs</div>}
               </button>
             )
           })}
         </div>
         {/* Run breakdown — only shows phases with ≥2 runs */}
         {primaryRows.some(t => (t.data?.runs.length ?? 0) > 1) && (
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem', fontSize: '0.72rem', color: '#94a3b8' }}>
-            {primaryRows.filter(t => (t.data?.runs.length ?? 0) > 1).map(t => (
-              <div key={t.key} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.35rem 0.65rem' }}>
-                <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{t.label}:</span>{' '}
-                {t.data!.runs.map((r, i) => (
-                  <span key={i}>
-                    R{i + 1} {r.min}m{!r.stop ? ' (active)' : ''}{i < t.data!.runs.length - 1 ? ' · ' : ''}
-                  </span>
-                ))}
-              </div>
-            ))}
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.7rem' }}>
+            {primaryRows.filter(t => (t.data?.runs.length ?? 0) > 1).map(t => {
+              const phase = PHASE_COLORS[t.key]
+              return (
+                <div key={t.key} style={{ background: `color-mix(in srgb, ${phase} 8%, rgba(255,255,255,0.02))`, border: `1px solid color-mix(in srgb, ${phase} 25%, rgba(255,255,255,0.06))`, borderRadius: '10px', padding: '0.45rem 0.8rem', fontSize: '0.74rem', color: '#cbd5e1' }}>
+                  <span style={{ color: phase, fontWeight: 700, marginRight: '6px' }}>{t.label}</span>
+                  {t.data!.runs.map((r, i) => (
+                    <span key={i} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      R{i + 1}: <strong style={{ color: '#e2e8f0' }}>{r.min}m</strong>{!r.stop ? <span style={{ color: phase }}> ●</span> : ''}{i < t.data!.runs.length - 1 ? ' · ' : ''}
+                    </span>
+                  ))}
+                </div>
+              )
+            })}
           </div>
         )}
         {/* Popup timers (appear once triggered) */}
         {activePopupRows.length > 0 && (
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.7rem' }}>
             {activePopupRows.map(t => {
-              const running = t.data?.running ?? false
+              const phase = PHASE_COLORS[t.key]
               const value = t.data?.min != null ? `${t.data.min} min` : '—'
               return (
-                <div key={t.key} className={`timer-chip${running ? ' active' : ''}`}>
-                  <div style={{ fontSize: '0.66rem', color: running ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t.label}</div>
-                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                <div key={t.key} className="timer-pop" style={{ ['--phase' as never]: phase }}>
+                  <div className="tp-label">{t.label}</div>
+                  <div className="tp-value">{value}</div>
                 </div>
               )
             })}
@@ -732,17 +894,17 @@ function LiveChart({
       </div>
 
       {/* Hotkeys */}
-      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
-        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#e63946', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Quick Events</div>
+      <div className="live-card">
+        <div className="live-card-title">Quick Events</div>
         <div className="hotkey-grid">
           {HOTKEYS.map(hk => (
             <button
               key={hk.label}
               onClick={() => onHotkey(hk.label)}
               className="hotkey-btn"
-              style={{ borderLeft: `3px solid ${hk.color || '#94a3b8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              style={{ borderLeft: `3px solid ${hk.color || '#94a3b8'}` }}
             >
-              {hk.icon && <span style={{ fontSize: '1.2rem', lineHeight: 1 }} aria-hidden>{hk.icon}</span>}
+              {hk.icon && <span className="hotkey-icon" style={{ color: hk.color }} aria-hidden>{hk.icon}</span>}
               <span>{hk.label}</span>
             </button>
           ))}
@@ -750,17 +912,24 @@ function LiveChart({
       </div>
 
       {/* Add-entry tabs */}
-      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
+      <div className="live-card">
+        <div className="live-card-title">Add Entry</div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: activeForm ? '1rem' : 0 }}>
-          {(['vitals', 'med', 'cp', 'blood', 'abg', 'note'] as const).map(k => (
-            <button
-              key={k}
-              onClick={() => setActiveForm(activeForm === k ? null : k)}
-              style={{ padding: '0.5rem 0.9rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: activeForm === k ? '#e63946' : 'rgba(255,255,255,0.04)', color: activeForm === k ? 'white' : '#94a3b8', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }}
-            >
-              + {k === 'cp' ? 'CP Dose' : k === 'abg' ? 'ABG' : k}
-            </button>
-          ))}
+          {(['vitals', 'med', 'cp', 'blood', 'abg', 'note'] as const).map(k => {
+            const iconMap: Record<string, string> = { vitals: '📊', med: '💊', cp: '❤️', blood: '🩸', abg: '🧪', note: '📝' }
+            const labelMap: Record<string, string> = { vitals: 'Vitals', med: 'Medication', cp: 'CP Dose', blood: 'Blood Product', abg: 'ABG', note: 'Note' }
+            return (
+              <button
+                key={k}
+                onClick={() => setActiveForm(activeForm === k ? null : k)}
+                className={`entry-tab${activeForm === k ? ' active' : ''}`}
+                type="button"
+              >
+                <span aria-hidden>{iconMap[k]}</span>
+                <span>{labelMap[k]}</span>
+              </button>
+            )
+          })}
         </div>
         {activeForm === 'vitals' && <VitalsForm onSubmit={(d) => { onAddEvent('vitals', 'Vitals', d); setActiveForm(null) }} />}
         {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `Med: ${d.name}`, d); setActiveForm(null) }} />}
@@ -771,24 +940,29 @@ function LiveChart({
       </div>
 
       {/* Timeline */}
-      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#e63946', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timeline ({events.length})</div>
+      <div className="live-card">
+        <div className="live-card-title">Timeline <span style={{ color: '#64748b', fontWeight: 500, letterSpacing: 0, textTransform: 'none', marginLeft: '6px' }}>· {events.length} {events.length === 1 ? 'event' : 'events'}</span></div>
         {events.length === 0 ? (
-          <div style={{ color: '#4a5568', fontSize: '0.85rem', padding: '1rem 0', textAlign: 'center' }}>No events yet. Tap a hotkey or add-entry button to log.</div>
+          <div style={{ color: '#475569', fontSize: '0.88rem', padding: '2rem 0', textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.4 }}>⏱️</div>
+            No events yet. Tap a timer above or a Quick Event to start logging.
+          </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            {[...events].reverse().map(e => (
-              <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.55rem 0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontVariantNumeric: 'tabular-nums', minWidth: '70px' }}>
-                  {new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[...events].reverse().map(e => {
+              const typeStyle = EVENT_TYPE_STYLES[e.event_type] || EVENT_TYPE_STYLES.hotkey
+              return (
+                <div key={e.id} className="tl-entry">
+                  <div className="tl-time">{new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                  <div className="tl-icon" style={{ ['--tl-color' as never]: typeStyle.color }} aria-hidden>{typeStyle.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="tl-label">{e.label}</div>
+                    {e.details && <EventDetails details={e.details} />}
+                  </div>
+                  <button onClick={() => onDeleteEvent(e.id)} className="tl-delete" title="Delete" aria-label="Delete event">×</button>
                 </div>
-                <div style={{ flex: 1, fontSize: '0.85rem', color: '#e2e8f0' }}>
-                  <div style={{ fontWeight: 500 }}>{e.label}</div>
-                  {e.details && <EventDetails details={e.details} />}
-                </div>
-                <button onClick={() => onDeleteEvent(e.id)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1rem', padding: '0 0.25rem' }} title="Delete">×</button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -800,9 +974,9 @@ function EventDetails({ details }: { details: Record<string, unknown> }) {
   const pairs = Object.entries(details).filter(([, v]) => v !== null && v !== undefined && v !== '')
   if (pairs.length === 0) return null
   return (
-    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+    <div className="tl-details">
       {pairs.map(([k, v]) => (
-        <span key={k}><span style={{ textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}</span>: {String(v)}</span>
+        <span key={k}><span style={{ textTransform: 'capitalize', color: '#94a3b8' }}>{k.replace(/_/g, ' ')}</span> <strong style={{ color: '#cbd5e1' }}>{String(v)}</strong></span>
       ))}
     </div>
   )
