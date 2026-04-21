@@ -271,36 +271,63 @@ export default function ChartPage() {
     setEditing(prev => ({ ...prev, [key]: value }))
   }
 
-  // Derive CPB/XClamp running timers from events
+  // Derive all phase timers from events. All timers freeze when Off Bypass is clicked.
   const timers = useMemo(() => {
     const findLatest = (label: string) =>
       [...events].reverse().find(e => e.label === label)?.event_time
-    const onBypass = findLatest('On Bypass')
-    const offBypass = findLatest('Off Bypass')
-    const clampOn = findLatest('Aortic Clamp On')
-    const clampOff = findLatest('Aortic Clamp Off')
-    const dhcaStart = findLatest('DHCA Start')
-    const dhcaStop = findLatest('DHCA Stop')
+    const findEarliest = (label: string) =>
+      events.find(e => e.label === label)?.event_time
+    const findNextAfter = (label: string, afterIso: string | undefined) => {
+      if (!afterIso) return undefined
+      const afterMs = new Date(afterIso).getTime()
+      return events.find(e => e.label === label && new Date(e.event_time).getTime() > afterMs)?.event_time
+    }
 
-    const mins = (startIso?: string, endIso?: string): number | null => {
+    const offBypass = findLatest('Off Bypass')
+    const offBypassMs = offBypass ? new Date(offBypass).getTime() : null
+
+    function makeTimer(startIso?: string, stopIso?: string): { running: boolean; min: number } | null {
       if (!startIso) return null
       const start = new Date(startIso).getTime()
-      const end = endIso ? new Date(endIso).getTime() : now
-      return Math.max(0, Math.floor((end - start) / 60000))
+      const stopMs = stopIso ? new Date(stopIso).getTime() : null
+
+      if (stopMs && stopMs > start) return { running: false, min: Math.max(0, Math.floor((stopMs - start) / 60000)) }
+      if (offBypassMs && offBypassMs > start) return { running: false, min: Math.max(0, Math.floor((offBypassMs - start) / 60000)) }
+      return { running: true, min: Math.max(0, Math.floor((now - start) / 60000)) }
     }
 
-    const cpbOn = !!onBypass && (!offBypass || new Date(offBypass).getTime() < new Date(onBypass).getTime())
-    const clampActive = !!clampOn && (!clampOff || new Date(clampOff).getTime() < new Date(clampOn).getTime())
-    const dhcaActive = !!dhcaStart && (!dhcaStop || new Date(dhcaStop).getTime() < new Date(dhcaStart).getTime())
+    // CPB: first On Bypass → Off Bypass
+    const cpb = makeTimer(findEarliest('On Bypass'), findLatest('Off Bypass'))
 
-    return {
-      cpbRunning: cpbOn,
-      cpbMin: cpbOn ? mins(onBypass) : (onBypass && offBypass ? mins(onBypass, offBypass) : null),
-      clampRunning: clampActive,
-      clampMin: clampActive ? mins(clampOn) : (clampOn && clampOff ? mins(clampOn, clampOff) : null),
-      dhcaRunning: dhcaActive,
-      dhcaMin: dhcaActive ? mins(dhcaStart) : (dhcaStart && dhcaStop ? mins(dhcaStart, dhcaStop) : null),
-    }
+    // X-Clamp: most recent clamp on / clamp off pair
+    const clampOn = findLatest('Aortic Clamp On')
+    const clampOff = findLatest('Aortic Clamp Off')
+    const xclamp = makeTimer(clampOn, clampOff)
+
+    // CP Timer: since most recent CP dose (any cp event)
+    const latestCp = [...events].reverse().find(e => e.event_type === 'cp')?.event_time
+    const cp = makeTimer(latestCp)
+
+    // Reperfusion: most recent Aortic Clamp Off → Off Bypass
+    const reperfusion = makeTimer(clampOff)
+
+    // Cooling: latest Cooling → next Rewarming after it
+    const latestCooling = findLatest('Cooling')
+    const coolingStop = findNextAfter('Rewarming', latestCooling)
+    const cooling = makeTimer(latestCooling, coolingStop)
+
+    // Rewarming: latest Rewarming → next Cooling after it (or Off Bypass)
+    const latestRewarming = findLatest('Rewarming')
+    const rewarmingStop = findNextAfter('Cooling', latestRewarming)
+    const rewarming = makeTimer(latestRewarming, rewarmingStop)
+
+    // SACP: latest pair
+    const sacp = makeTimer(findLatest('SACP Start'), findLatest('SACP Stop'))
+
+    // DHCA: latest pair
+    const dhca = makeTimer(findLatest('DHCA Start'), findLatest('DHCA Stop'))
+
+    return { cpb, xclamp, cp, reperfusion, cooling, rewarming, sacp, dhca }
   }, [events, now])
 
   const inputStyle: React.CSSProperties = {
@@ -556,7 +583,16 @@ function LiveChart({
 }: {
   caseRecord: CaseRecord
   events: CaseEvent[]
-  timers: { cpbRunning: boolean; cpbMin: number | null; clampRunning: boolean; clampMin: number | null; dhcaRunning: boolean; dhcaMin: number | null }
+  timers: {
+    cpb: { running: boolean; min: number } | null
+    xclamp: { running: boolean; min: number } | null
+    cp: { running: boolean; min: number } | null
+    reperfusion: { running: boolean; min: number } | null
+    cooling: { running: boolean; min: number } | null
+    rewarming: { running: boolean; min: number } | null
+    sacp: { running: boolean; min: number } | null
+    dhca: { running: boolean; min: number } | null
+  }
   now: number
   activeForm: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null
   setActiveForm: (f: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null) => void
@@ -566,29 +602,38 @@ function LiveChart({
 }) {
   const clockStr = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
+  type TimerRow = { key: string; label: string; data: { running: boolean; min: number } | null; alwaysShow: boolean }
+  const timerRows: TimerRow[] = [
+    { key: 'cpb', label: 'CPB', data: timers.cpb, alwaysShow: true },
+    { key: 'xclamp', label: 'X-Clamp', data: timers.xclamp, alwaysShow: true },
+    { key: 'cp', label: 'CP Timer', data: timers.cp, alwaysShow: false },
+    { key: 'reperfusion', label: 'Reperfusion', data: timers.reperfusion, alwaysShow: false },
+    { key: 'cooling', label: 'Cooling', data: timers.cooling, alwaysShow: false },
+    { key: 'rewarming', label: 'Rewarming', data: timers.rewarming, alwaysShow: false },
+    { key: 'sacp', label: 'SACP', data: timers.sacp, alwaysShow: false },
+    { key: 'dhca', label: 'DHCA', data: timers.dhca, alwaysShow: false },
+  ]
+
   return (
     <>
       {/* Sticky top bar with timers */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#080b12', paddingBottom: '0.75rem', marginBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <div className="timer-chip">
             <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Clock</div>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{clockStr}</div>
           </div>
-          <div className={`timer-chip${timers.cpbRunning ? ' active' : ''}`}>
-            <div style={{ fontSize: '0.68rem', color: timers.cpbRunning ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>CPB</div>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{timers.cpbMin != null ? `${timers.cpbMin} min` : '—'}</div>
-          </div>
-          <div className={`timer-chip${timers.clampRunning ? ' active' : ''}`}>
-            <div style={{ fontSize: '0.68rem', color: timers.clampRunning ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>X-Clamp</div>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{timers.clampMin != null ? `${timers.clampMin} min` : '—'}</div>
-          </div>
-          {(timers.dhcaMin != null || timers.dhcaRunning) && (
-            <div className={`timer-chip${timers.dhcaRunning ? ' active' : ''}`}>
-              <div style={{ fontSize: '0.68rem', color: timers.dhcaRunning ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>DHCA</div>
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{timers.dhcaMin} min</div>
-            </div>
-          )}
+          {timerRows.map(t => {
+            if (!t.data && !t.alwaysShow) return null
+            const running = t.data?.running ?? false
+            const value = t.data?.min != null ? `${t.data.min} min` : '—'
+            return (
+              <div key={t.key} className={`timer-chip${running ? ' active' : ''}`}>
+                <div style={{ fontSize: '0.68rem', color: running ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t.label}</div>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
