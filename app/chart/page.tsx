@@ -96,16 +96,17 @@ const PRIMARY_TIMER_LABELS: Record<'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra',
   extra: { start: 'Extra Start', stop: 'Extra Stop' },
 }
 
+// Primary timers are uniformly green when running; popup timers keep distinct text colors.
 const PHASE_COLORS: Record<string, string> = {
   cpb: '#22c55e',
-  xclamp: '#f59e0b',
-  dhca: '#a855f7',
-  sacp: '#06b6d4',
-  extra: '#eab308',
-  cp: '#ec4899',
-  reperfusion: '#f97316',
-  cooling: '#3b82f6',
-  rewarming: '#ef4444',
+  xclamp: '#22c55e',
+  dhca: '#22c55e',
+  sacp: '#22c55e',
+  extra: '#22c55e',
+  cp: '#eab308',         // cardioplegia timer: yellow
+  reperfusion: '#f97316', // orange
+  cooling: '#3b82f6',     // blue
+  rewarming: '#ef4444',   // red
 }
 
 const EVENT_TYPE_STYLES: Record<string, { color: string; icon: string }> = {
@@ -486,43 +487,37 @@ export default function ChartPage() {
         .timer-chip-btn .tc-value-placeholder { font-size: 0.82rem; font-weight: 500; color: #475569; }
         .timer-chip-btn .tc-runs { font-size: 0.68rem; color: #94a3b8; font-weight: 500; }
 
-        /* Running state: phase color + glow */
-        .timer-chip-btn.active {
-          border-color: color-mix(in srgb, var(--phase) 70%, rgba(255,255,255,0.08));
-          background: linear-gradient(180deg, color-mix(in srgb, var(--phase) 16%, transparent), color-mix(in srgb, var(--phase) 4%, transparent));
-          box-shadow: 0 0 24px color-mix(in srgb, var(--phase) 20%, transparent);
-        }
-        .timer-chip-btn.active::before { opacity: 0.4; }
-        .timer-chip-btn.active .tc-value { color: var(--phase); text-shadow: 0 0 24px color-mix(in srgb, var(--phase) 55%, transparent); }
-        .timer-chip-btn.active .tc-label { color: var(--phase); }
+        /* Running state: just green text, otherwise chip stays neutral */
+        .timer-chip-btn.active .tc-value { color: #22c55e; }
+        .timer-chip-btn.active .tc-label { color: #22c55e; }
         .pulse-dot {
           width: 8px; height: 8px; border-radius: 50%;
-          background: var(--phase, #22c55e);
+          background: #22c55e;
           animation: pulseDot 1.6s ease-out infinite;
         }
         @keyframes pulseDot {
-          0% { box-shadow: 0 0 0 0 var(--phase); opacity: 1; }
-          70% { box-shadow: 0 0 0 10px transparent; opacity: 0.5; }
+          0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.55); opacity: 1; }
+          70% { box-shadow: 0 0 0 9px transparent; opacity: 0.5; }
           100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
         }
 
-        /* Stopped (finished) state */
-        .timer-chip-btn.stopped {
-          border-color: color-mix(in srgb, var(--phase) 25%, rgba(255,255,255,0.06));
-        }
-        .timer-chip-btn.stopped .tc-value { color: color-mix(in srgb, var(--phase) 55%, #e2e8f0); }
+        /* Stopped state — stays neutral light gray */
+        .timer-chip-btn.stopped .tc-value { color: #cbd5e1; }
+        .timer-chip-btn.stopped .tc-label { color: #94a3b8; }
 
         /* Popup timer chips (secondary row) */
         .timer-pop {
           display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
-          padding: 0.5rem 0.9rem; border-radius: 11px;
-          background: color-mix(in srgb, var(--phase, #64748b) 10%, rgba(255,255,255,0.02));
-          border: 1px solid color-mix(in srgb, var(--phase, #64748b) 30%, rgba(255,255,255,0.06));
+          padding: 0.55rem 0.95rem; border-radius: 11px;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.07);
           min-width: 100px;
           animation: popIn 0.25s ease-out;
         }
-        .timer-pop .tp-label { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--phase, #94a3b8); }
-        .timer-pop .tp-value { font-size: 1.05rem; font-weight: 800; color: #e2e8f0; font-variant-numeric: tabular-nums; margin-top: 2px; }
+        .timer-pop .tp-label { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; }
+        .timer-pop .tp-value { font-size: 1.05rem; font-weight: 800; color: #94a3b8; font-variant-numeric: tabular-nums; margin-top: 2px; }
+        .timer-pop.running .tp-label { color: var(--phase, #94a3b8); }
+        .timer-pop.running .tp-value { color: var(--phase, #e2e8f0); }
         @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 
         /* Timeline entry */
@@ -881,9 +876,10 @@ function LiveChart({
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.7rem' }}>
             {activePopupRows.map(t => {
               const phase = PHASE_COLORS[t.key]
+              const running = t.data?.running ?? false
               const value = t.data?.min != null ? `${t.data.min} min` : '—'
               return (
-                <div key={t.key} className="timer-pop" style={{ ['--phase' as never]: phase }}>
+                <div key={t.key} className={`timer-pop${running ? ' running' : ''}`} style={{ ['--phase' as never]: phase }}>
                   <div className="tp-label">{t.label}</div>
                   <div className="tp-value">{value}</div>
                 </div>
