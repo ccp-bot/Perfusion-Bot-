@@ -1279,7 +1279,7 @@ export default function Home() {
           {SIDEBAR_ITEMS.map(item => (
             <button
               key={item.key}
-              onClick={() => { if (item.key === 'Schedule') { window.location.href = '/schedule'; return } openPanel(item.key); setSidebarOpen(false) }}
+              onClick={() => { if (item.key === 'Schedule') { window.location.href = '/schedule'; return } if (item.key === 'Charting') { window.location.href = '/chart'; return } openPanel(item.key); setSidebarOpen(false) }}
               className={`sidebar-btn${activePanel === item.key ? ' active' : ''}`}
               style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
             >
