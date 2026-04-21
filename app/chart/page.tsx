@@ -218,6 +218,27 @@ export default function ChartPage() {
     await loadEvents(c.id)
   }
 
+  async function quickStartCase() {
+    if (!user) return
+    const res = await fetch('/api/cases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: user.id,
+        userEmail: user.email,
+        case_date: new Date().toISOString().slice(0, 10),
+        procedure: 'Untitled case',
+      }),
+    })
+    const data = await res.json()
+    if (data.error || !data.case) {
+      alert('Could not start case: ' + (data.error || 'unknown'))
+      return
+    }
+    setCases(prev => [data.case, ...prev])
+    await startLive(data.case)
+  }
+
   async function logEvent(eventType: string, label: string, details?: Record<string, unknown>) {
     if (!user || !liveCase) return
     const res = await fetch('/api/case-events', {
@@ -340,7 +361,10 @@ export default function ChartPage() {
             </div>
           </div>
           {view === 'list' && (
-            <button onClick={startNew} style={{ background: '#e63946', border: 'none', color: 'white', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>+ New Case</button>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button onClick={quickStartCase} style={{ background: '#22c55e', border: 'none', color: 'white', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>⚡ Quick Start</button>
+              <button onClick={startNew} style={{ background: '#e63946', border: 'none', color: 'white', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>+ New Case</button>
+            </div>
           )}
           {view === 'form' && (
             <button onClick={() => { setView('list'); setEditing(EMPTY_CASE) }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.6rem 1rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
@@ -362,7 +386,8 @@ export default function ChartPage() {
             ) : cases.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#4a5568' }}>
                 <div style={{ fontSize: '1rem', marginBottom: '0.5rem', color: '#94a3b8' }}>No cases yet</div>
-                <div style={{ fontSize: '0.85rem' }}>Click "+ New Case" to start charting.</div>
+                <div style={{ fontSize: '0.85rem', marginBottom: '1.25rem' }}>Hit Quick Start to begin charting right now, or create a full case first.</div>
+                <button onClick={quickStartCase} style={{ background: '#22c55e', border: 'none', color: 'white', padding: '0.75rem 1.5rem', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>⚡ Quick Start Case</button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
