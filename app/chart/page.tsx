@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 
 type CaseRecord = {
@@ -51,6 +51,16 @@ type CaseRecord = {
   created_at?: string
 }
 
+type CaseEvent = {
+  id: string
+  case_id: string
+  event_time: string
+  event_type: string // 'hotkey' | 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note'
+  label?: string | null
+  details?: Record<string, unknown> | null
+  created_at?: string
+}
+
 const EMPTY_CASE: Partial<CaseRecord> = {
   case_number: '', patient_initials: '', age: null, sex: '', case_date: new Date().toISOString().slice(0, 10),
   procedure: '', surgeon: '', anesthesiologist: '', weight_kg: null, height_cm: null, bsa: null,
@@ -63,14 +73,46 @@ const EMPTY_CASE: Partial<CaseRecord> = {
   uf_volume_ml: null, urine_output_ml: null, notes: '', complications: '',
 }
 
+const HOTKEYS: { label: string; color?: string }[] = [
+  { label: 'On Bypass', color: '#22c55e' },
+  { label: 'Off Bypass', color: '#e63946' },
+  { label: 'Aortic Clamp On', color: '#f59e0b' },
+  { label: 'Aortic Clamp Off', color: '#f59e0b' },
+  { label: 'Cooling', color: '#3b82f6' },
+  { label: 'Rewarming', color: '#ef4444' },
+  { label: 'DHCA Start', color: '#8b5cf6' },
+  { label: 'DHCA Stop', color: '#8b5cf6' },
+  { label: 'SACP Start', color: '#06b6d4' },
+  { label: 'SACP Stop', color: '#06b6d4' },
+  { label: 'Flow down per SN', color: '#64748b' },
+  { label: 'Flow up per SN', color: '#64748b' },
+  { label: 'Weaning from CPB', color: '#eab308' },
+]
+
+const COMMON_MEDS = [
+  'Epinephrine', 'Norepinephrine', 'Phenylephrine', 'Calcium Chloride',
+  'Sodium Bicarbonate', 'Mannitol', 'Lasix (Furosemide)', 'Insulin',
+  'Magnesium', 'Vasopressin', 'Lidocaine', 'Heparin', 'Protamine',
+]
+
+const CP_TYPES = ['Del Nido', 'Buckberg', 'Custodiol (HTK)', 'Microplegia', 'Other']
+const CP_ROUTES = ['Antegrade', 'Retrograde', 'Ostial', 'Aortic Root']
+const BLOOD_PRODUCTS = ['PRBC', 'FFP', 'Platelets', 'Cryo', 'Cell Saver']
+
 export default function ChartPage() {
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [cases, setCases] = useState<CaseRecord[]>([])
-  const [view, setView] = useState<'list' | 'form'>('list')
+  const [view, setView] = useState<'list' | 'form' | 'live'>('list')
   const [editing, setEditing] = useState<Partial<CaseRecord>>(EMPTY_CASE)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // Live chart state
+  const [liveCase, setLiveCase] = useState<CaseRecord | null>(null)
+  const [events, setEvents] = useState<CaseEvent[]>([])
+  const [now, setNow] = useState(Date.now())
+  const [activeForm, setActiveForm] = useState<'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null>(null)
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -88,6 +130,13 @@ export default function ChartPage() {
     if (user) loadCases()
   }, [user])
 
+  // Clock tick for live timers
+  useEffect(() => {
+    if (view !== 'live') return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [view])
+
   async function loadCases() {
     if (!user) return
     setLoading(true)
@@ -95,6 +144,13 @@ export default function ChartPage() {
     const data = await res.json()
     setCases(data.cases || [])
     setLoading(false)
+  }
+
+  async function loadEvents(caseId: string) {
+    if (!user) return
+    const res = await fetch(`/api/case-events?caseId=${caseId}&userId=${user.id}`)
+    const data = await res.json()
+    setEvents(data.events || [])
   }
 
   function minsBetween(start?: string | null, end?: string | null): number | null {
@@ -117,7 +173,6 @@ export default function ChartPage() {
     payload.cpb_total_min = minsBetween(editing.cpb_start, editing.cpb_end)
     payload.xclamp_total_min = minsBetween(editing.xclamp_start, editing.xclamp_end)
 
-    // Strip empty strings to null to avoid type errors in numeric cols
     for (const k of Object.keys(payload)) {
       if (payload[k] === '') payload[k] = null
     }
@@ -156,9 +211,76 @@ export default function ChartPage() {
     setView('form')
   }
 
+  async function startLive(c: CaseRecord) {
+    setLiveCase(c)
+    setEvents([])
+    setView('live')
+    await loadEvents(c.id)
+  }
+
+  async function logEvent(eventType: string, label: string, details?: Record<string, unknown>) {
+    if (!user || !liveCase) return
+    const res = await fetch('/api/case-events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        caseId: liveCase.id,
+        userId: user.id,
+        eventType,
+        label,
+        details: details || null,
+      }),
+    })
+    const data = await res.json()
+    if (data.event) {
+      setEvents(prev => [...prev, data.event])
+    } else if (data.error) {
+      alert('Failed to log: ' + data.error)
+    }
+  }
+
+  async function deleteEvent(id: string) {
+    if (!user) return
+    if (!confirm('Delete this event?')) return
+    await fetch(`/api/case-events?id=${id}&userId=${user.id}`, { method: 'DELETE' })
+    setEvents(prev => prev.filter(e => e.id !== id))
+  }
+
   function set<K extends keyof CaseRecord>(key: K, value: CaseRecord[K]) {
     setEditing(prev => ({ ...prev, [key]: value }))
   }
+
+  // Derive CPB/XClamp running timers from events
+  const timers = useMemo(() => {
+    const findLatest = (label: string) =>
+      [...events].reverse().find(e => e.label === label)?.event_time
+    const onBypass = findLatest('On Bypass')
+    const offBypass = findLatest('Off Bypass')
+    const clampOn = findLatest('Aortic Clamp On')
+    const clampOff = findLatest('Aortic Clamp Off')
+    const dhcaStart = findLatest('DHCA Start')
+    const dhcaStop = findLatest('DHCA Stop')
+
+    const mins = (startIso?: string, endIso?: string): number | null => {
+      if (!startIso) return null
+      const start = new Date(startIso).getTime()
+      const end = endIso ? new Date(endIso).getTime() : now
+      return Math.max(0, Math.floor((end - start) / 60000))
+    }
+
+    const cpbOn = !!onBypass && (!offBypass || new Date(offBypass).getTime() < new Date(onBypass).getTime())
+    const clampActive = !!clampOn && (!clampOff || new Date(clampOff).getTime() < new Date(clampOn).getTime())
+    const dhcaActive = !!dhcaStart && (!dhcaStop || new Date(dhcaStop).getTime() < new Date(dhcaStart).getTime())
+
+    return {
+      cpbRunning: cpbOn,
+      cpbMin: cpbOn ? mins(onBypass) : (onBypass && offBypass ? mins(onBypass, offBypass) : null),
+      clampRunning: clampActive,
+      clampMin: clampActive ? mins(clampOn) : (clampOn && clampOff ? mins(clampOn, clampOff) : null),
+      dhcaRunning: dhcaActive,
+      dhcaMin: dhcaActive ? mins(dhcaStart) : (dhcaStart && dhcaStop ? mins(dhcaStart, dhcaStop) : null),
+    }
+  }, [events, now])
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '0.55rem 0.7rem', borderRadius: '8px',
@@ -188,36 +310,51 @@ export default function ChartPage() {
         input::placeholder, textarea::placeholder { color: #4a5568; }
         input:focus, textarea:focus, select:focus { border-color: rgba(230,57,70,0.4) !important; }
         .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
+        .hotkey-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; }
+        .hotkey-btn { padding: 0.9rem 0.75rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #e2e8f0; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s ease; text-align: center; }
+        .hotkey-btn:hover { background: rgba(255,255,255,0.08); transform: translateY(-1px); }
+        .hotkey-btn:active { transform: translateY(0); }
+        .timer-chip { display: inline-flex; flex-direction: column; align-items: center; padding: 0.5rem 0.9rem; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); min-width: 90px; }
+        .timer-chip.active { background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3); }
         @media (max-width: 768px) {
           .chart-header { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
           .chart-grid { grid-template-columns: 1fr 1fr !important; }
+          .hotkey-grid { grid-template-columns: 1fr 1fr !important; }
         }
       `}</style>
 
-      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '1.5rem 1.5rem 4rem' }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem 1.5rem 4rem' }}>
         {/* Header */}
         <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <button onClick={() => window.location.href = '/'} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.4rem 0.75rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>← Home</button>
+            <button onClick={() => { if (view === 'live' || view === 'form') { setView('list'); setEditing(EMPTY_CASE); setLiveCase(null) } else { window.location.href = '/' } }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.4rem 0.75rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
+              ← {view === 'list' ? 'Home' : 'Back'}
+            </button>
             <div>
               <div style={{ fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
                 <span style={{ color: '#e63946' }}>COR</span> Charting
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#4a5568' }}>Case log — private to you</div>
+              <div style={{ fontSize: '0.75rem', color: '#4a5568' }}>
+                {view === 'live' && liveCase ? `${liveCase.procedure || 'Case'} · ${liveCase.case_date || ''}` : 'Case log — private to you'}
+              </div>
             </div>
           </div>
-          {view === 'list' ? (
+          {view === 'list' && (
             <button onClick={startNew} style={{ background: '#e63946', border: 'none', color: 'white', padding: '0.6rem 1rem', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>+ New Case</button>
-          ) : (
+          )}
+          {view === 'form' && (
             <button onClick={() => { setView('list'); setEditing(EMPTY_CASE) }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.6rem 1rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
           )}
         </div>
 
-        {/* PHI disclaimer */}
-        <div style={{ background: 'rgba(230,57,70,0.06)', border: '1px solid rgba(230,57,70,0.2)', borderRadius: '10px', padding: '0.6rem 0.9rem', marginBottom: '1.5rem', fontSize: '0.75rem', color: '#f59e9e' }}>
-          ⚠ Do not enter patient names, MRN, or date of birth. Use case # or initials only until HIPAA compliance is in place.
-        </div>
+        {/* PHI disclaimer (hidden during live to save space) */}
+        {view !== 'live' && (
+          <div style={{ background: 'rgba(230,57,70,0.06)', border: '1px solid rgba(230,57,70,0.2)', borderRadius: '10px', padding: '0.6rem 0.9rem', marginBottom: '1.5rem', fontSize: '0.75rem', color: '#f59e9e' }}>
+            ⚠ Do not enter patient names, MRN, or date of birth. Use case # or initials only until HIPAA compliance is in place.
+          </div>
+        )}
 
+        {/* LIST VIEW */}
         {view === 'list' && (
           <>
             {loading ? (
@@ -230,7 +367,7 @@ export default function ChartPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {cases.map(c => (
-                  <div key={c.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+                  <div key={c.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
                         <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#e2e8f0' }}>
@@ -246,7 +383,8 @@ export default function ChartPage() {
                         {c.xclamp_total_min != null && <span>XC {c.xclamp_total_min}min</span>}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button onClick={() => startLive(c)} style={{ background: '#22c55e', border: 'none', color: 'white', padding: '0.45rem 0.8rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>● Live Chart</button>
                       <button onClick={() => startEdit(c)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.4rem 0.75rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem' }}>Edit</button>
                       <button onClick={() => deleteCase(c.id)} style={{ background: 'transparent', border: '1px solid rgba(230,57,70,0.3)', color: '#e63946', padding: '0.4rem 0.75rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem' }}>Delete</button>
                     </div>
@@ -257,9 +395,9 @@ export default function ChartPage() {
           </>
         )}
 
+        {/* FORM VIEW (unchanged summary form) */}
         {view === 'form' && (
           <>
-            {/* Case info */}
             <div style={sectionStyle}>
               <div style={sectionTitle}>Case Info</div>
               <div className="chart-grid">
@@ -281,7 +419,6 @@ export default function ChartPage() {
               </div>
             </div>
 
-            {/* Times */}
             <div style={sectionStyle}>
               <div style={sectionTitle}>Bypass Times</div>
               <div className="chart-grid">
@@ -292,11 +429,10 @@ export default function ChartPage() {
                 <div><label style={labelStyle}>Circ Arrest (min)</label><input style={inputStyle} type="number" value={editing.circ_arrest_min ?? ''} onChange={e => set('circ_arrest_min', e.target.value === '' ? null : Number(e.target.value))} /></div>
               </div>
               <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>
-                Totals calculated automatically on save: CPB = {minsBetween(editing.cpb_start, editing.cpb_end) ?? '—'} min · X-Clamp = {minsBetween(editing.xclamp_start, editing.xclamp_end) ?? '—'} min
+                Totals calculated on save: CPB = {minsBetween(editing.cpb_start, editing.cpb_end) ?? '—'} min · X-Clamp = {minsBetween(editing.xclamp_start, editing.xclamp_end) ?? '—'} min
               </div>
             </div>
 
-            {/* Circuit */}
             <div style={sectionStyle}>
               <div style={sectionTitle}>Circuit</div>
               <div className="chart-grid">
@@ -304,20 +440,18 @@ export default function ChartPage() {
                 <div><label style={labelStyle}>Arterial Cannula</label><input style={inputStyle} value={editing.arterial_cannula || ''} onChange={e => set('arterial_cannula', e.target.value)} /></div>
                 <div><label style={labelStyle}>Venous Cannula</label><input style={inputStyle} value={editing.venous_cannula || ''} onChange={e => set('venous_cannula', e.target.value)} /></div>
                 <div><label style={labelStyle}>Prime Volume (mL)</label><input style={inputStyle} type="number" value={editing.prime_volume_ml ?? ''} onChange={e => set('prime_volume_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Prime Composition</label><input style={inputStyle} value={editing.prime_composition || ''} onChange={e => set('prime_composition', e.target.value)} placeholder="e.g. Plasmalyte 1500mL + Heparin 5000u + Mannitol 25g" /></div>
+                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Prime Composition</label><input style={inputStyle} value={editing.prime_composition || ''} onChange={e => set('prime_composition', e.target.value)} /></div>
               </div>
             </div>
 
-            {/* Cardioplegia */}
             <div style={sectionStyle}>
               <div style={sectionTitle}>Cardioplegia</div>
               <div className="chart-grid">
-                <div><label style={labelStyle}>Type</label><input style={inputStyle} value={editing.cardioplegia_type || ''} onChange={e => set('cardioplegia_type', e.target.value)} placeholder="Del Nido, Buckberg, Custodiol" /></div>
+                <div><label style={labelStyle}>Type</label><input style={inputStyle} value={editing.cardioplegia_type || ''} onChange={e => set('cardioplegia_type', e.target.value)} /></div>
                 <div><label style={labelStyle}>Total Volume (mL)</label><input style={inputStyle} type="number" value={editing.cardioplegia_volume_ml ?? ''} onChange={e => set('cardioplegia_volume_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
               </div>
             </div>
 
-            {/* Labs */}
             <div style={sectionStyle}>
               <div style={sectionTitle}>Labs</div>
               <div className="chart-grid">
@@ -331,7 +465,6 @@ export default function ChartPage() {
               </div>
             </div>
 
-            {/* Meds */}
             <div style={sectionStyle}>
               <div style={sectionTitle}>Heparin / Protamine</div>
               <div className="chart-grid">
@@ -340,7 +473,6 @@ export default function ChartPage() {
               </div>
             </div>
 
-            {/* Blood products */}
             <div style={sectionStyle}>
               <div style={sectionTitle}>Blood Products & Volumes</div>
               <div className="chart-grid">
@@ -354,7 +486,6 @@ export default function ChartPage() {
               </div>
             </div>
 
-            {/* Notes */}
             <div style={sectionStyle}>
               <div style={sectionTitle}>Notes</div>
               <label style={labelStyle}>Case notes</label>
@@ -365,7 +496,6 @@ export default function ChartPage() {
               </div>
             </div>
 
-            {/* Save */}
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button onClick={() => { setView('list'); setEditing(EMPTY_CASE) }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.7rem 1.25rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
               <button onClick={saveCase} disabled={saving} style={{ background: saving ? '#2d3748' : '#e63946', border: 'none', color: 'white', padding: '0.7rem 1.5rem', borderRadius: '10px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}>
@@ -374,7 +504,332 @@ export default function ChartPage() {
             </div>
           </>
         )}
+
+        {/* LIVE VIEW */}
+        {view === 'live' && liveCase && (
+          <LiveChart
+            caseRecord={liveCase}
+            events={events}
+            timers={timers}
+            now={now}
+            activeForm={activeForm}
+            setActiveForm={setActiveForm}
+            onHotkey={(label) => logEvent('hotkey', label)}
+            onAddEvent={logEvent}
+            onDeleteEvent={deleteEvent}
+          />
+        )}
       </div>
     </div>
+  )
+}
+
+// ----- Live chart component -----
+
+function LiveChart({
+  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onAddEvent, onDeleteEvent,
+}: {
+  caseRecord: CaseRecord
+  events: CaseEvent[]
+  timers: { cpbRunning: boolean; cpbMin: number | null; clampRunning: boolean; clampMin: number | null; dhcaRunning: boolean; dhcaMin: number | null }
+  now: number
+  activeForm: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null
+  setActiveForm: (f: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null) => void
+  onHotkey: (label: string) => void
+  onAddEvent: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
+  onDeleteEvent: (id: string) => Promise<void>
+}) {
+  const clockStr = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+  return (
+    <>
+      {/* Sticky top bar with timers */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: '#080b12', paddingBottom: '0.75rem', marginBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="timer-chip">
+            <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Clock</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{clockStr}</div>
+          </div>
+          <div className={`timer-chip${timers.cpbRunning ? ' active' : ''}`}>
+            <div style={{ fontSize: '0.68rem', color: timers.cpbRunning ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>CPB</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{timers.cpbMin != null ? `${timers.cpbMin} min` : '—'}</div>
+          </div>
+          <div className={`timer-chip${timers.clampRunning ? ' active' : ''}`}>
+            <div style={{ fontSize: '0.68rem', color: timers.clampRunning ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>X-Clamp</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{timers.clampMin != null ? `${timers.clampMin} min` : '—'}</div>
+          </div>
+          {(timers.dhcaMin != null || timers.dhcaRunning) && (
+            <div className={`timer-chip${timers.dhcaRunning ? ' active' : ''}`}>
+              <div style={{ fontSize: '0.68rem', color: timers.dhcaRunning ? '#22c55e' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>DHCA</div>
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums' }}>{timers.dhcaMin} min</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Hotkeys */}
+      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
+        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#e63946', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Quick Events</div>
+        <div className="hotkey-grid">
+          {HOTKEYS.map(hk => (
+            <button
+              key={hk.label}
+              onClick={() => onHotkey(hk.label)}
+              className="hotkey-btn"
+              style={{ borderLeft: `3px solid ${hk.color || '#94a3b8'}` }}
+            >
+              {hk.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Add-entry tabs */}
+      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: activeForm ? '1rem' : 0 }}>
+          {(['vitals', 'med', 'cp', 'blood', 'abg', 'note'] as const).map(k => (
+            <button
+              key={k}
+              onClick={() => setActiveForm(activeForm === k ? null : k)}
+              style={{ padding: '0.5rem 0.9rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: activeForm === k ? '#e63946' : 'rgba(255,255,255,0.04)', color: activeForm === k ? 'white' : '#94a3b8', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize' }}
+            >
+              + {k === 'cp' ? 'CP Dose' : k === 'abg' ? 'ABG' : k}
+            </button>
+          ))}
+        </div>
+        {activeForm === 'vitals' && <VitalsForm onSubmit={(d) => { onAddEvent('vitals', 'Vitals', d); setActiveForm(null) }} />}
+        {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `Med: ${d.name}`, d); setActiveForm(null) }} />}
+        {activeForm === 'cp' && <CpForm onSubmit={(d) => { onAddEvent('cp', `CP: ${d.type} ${d.volume}mL ${d.route}`, d); setActiveForm(null) }} />}
+        {activeForm === 'blood' && <BloodForm onSubmit={(d) => { onAddEvent('blood', `${d.product} ${d.amount}${d.product === 'Cell Saver' ? 'mL' : 'u'}`, d); setActiveForm(null) }} />}
+        {activeForm === 'abg' && <AbgForm onSubmit={(d) => { onAddEvent('abg', 'ABG', d); setActiveForm(null) }} />}
+        {activeForm === 'note' && <NoteForm onSubmit={(d) => { onAddEvent('note', 'Note', d); setActiveForm(null) }} />}
+      </div>
+
+      {/* Timeline */}
+      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#e63946', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Timeline ({events.length})</div>
+        {events.length === 0 ? (
+          <div style={{ color: '#4a5568', fontSize: '0.85rem', padding: '1rem 0', textAlign: 'center' }}>No events yet. Tap a hotkey or add-entry button to log.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {[...events].reverse().map(e => (
+              <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.55rem 0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontVariantNumeric: 'tabular-nums', minWidth: '70px' }}>
+                  {new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <div style={{ flex: 1, fontSize: '0.85rem', color: '#e2e8f0' }}>
+                  <div style={{ fontWeight: 500 }}>{e.label}</div>
+                  {e.details && <EventDetails details={e.details} />}
+                </div>
+                <button onClick={() => onDeleteEvent(e.id)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1rem', padding: '0 0.25rem' }} title="Delete">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+function EventDetails({ details }: { details: Record<string, unknown> }) {
+  const pairs = Object.entries(details).filter(([, v]) => v !== null && v !== undefined && v !== '')
+  if (pairs.length === 0) return null
+  return (
+    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+      {pairs.map(([k, v]) => (
+        <span key={k}><span style={{ textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}</span>: {String(v)}</span>
+      ))}
+    </div>
+  )
+}
+
+// ----- Quick-add forms -----
+
+const formStyle: React.CSSProperties = {
+  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.6rem', alignItems: 'end'
+}
+const inpStyle: React.CSSProperties = {
+  width: '100%', padding: '0.5rem 0.65rem', borderRadius: '8px',
+  border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)',
+  color: '#e2e8f0', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box'
+}
+const lblStyle: React.CSSProperties = {
+  fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem', display: 'block'
+}
+const submitStyle: React.CSSProperties = {
+  padding: '0.55rem 1rem', borderRadius: '8px', border: 'none', background: '#e63946', color: 'white', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer'
+}
+
+function VitalsForm({ onSubmit }: { onSubmit: (d: Record<string, unknown>) => void }) {
+  const [v, setV] = useState<Record<string, string>>({})
+  const upd = (k: string, val: string) => setV(prev => ({ ...prev, [k]: val }))
+  const submit = () => {
+    const clean: Record<string, unknown> = {}
+    for (const [k, val] of Object.entries(v)) if (val !== '') clean[k] = val
+    onSubmit(clean)
+    setV({})
+  }
+  return (
+    <>
+      <div style={formStyle}>
+        <div><label style={lblStyle}>MAP</label><input style={inpStyle} inputMode="decimal" value={v.map || ''} onChange={e => upd('map', e.target.value)} /></div>
+        <div><label style={lblStyle}>CVP</label><input style={inpStyle} inputMode="decimal" value={v.cvp || ''} onChange={e => upd('cvp', e.target.value)} /></div>
+        <div><label style={lblStyle}>Flow L/min</label><input style={inpStyle} inputMode="decimal" value={v.flow || ''} onChange={e => upd('flow', e.target.value)} /></div>
+        <div><label style={lblStyle}>Temp Blood</label><input style={inpStyle} inputMode="decimal" value={v.temp_blood || ''} onChange={e => upd('temp_blood', e.target.value)} /></div>
+        <div><label style={lblStyle}>Temp Bladder</label><input style={inpStyle} inputMode="decimal" value={v.temp_bladder || ''} onChange={e => upd('temp_bladder', e.target.value)} /></div>
+        <div><label style={lblStyle}>SvO2</label><input style={inpStyle} inputMode="decimal" value={v.svo2 || ''} onChange={e => upd('svo2', e.target.value)} /></div>
+        <div><label style={lblStyle}>HCT</label><input style={inpStyle} inputMode="decimal" value={v.hct || ''} onChange={e => upd('hct', e.target.value)} /></div>
+        <div><label style={lblStyle}>ACT</label><input style={inpStyle} inputMode="decimal" value={v.act || ''} onChange={e => upd('act', e.target.value)} /></div>
+        <div><label style={lblStyle}>FiO2</label><input style={inpStyle} inputMode="decimal" value={v.fio2 || ''} onChange={e => upd('fio2', e.target.value)} /></div>
+        <div><label style={lblStyle}>Sweep</label><input style={inpStyle} inputMode="decimal" value={v.sweep || ''} onChange={e => upd('sweep', e.target.value)} /></div>
+        <div><label style={lblStyle}>Urine</label><input style={inpStyle} inputMode="decimal" value={v.urine || ''} onChange={e => upd('urine', e.target.value)} /></div>
+      </div>
+      <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log Vitals</button></div>
+    </>
+  )
+}
+
+function MedForm({ onSubmit }: { onSubmit: (d: { name: string; dose: string; unit: string }) => void }) {
+  const [name, setName] = useState('')
+  const [custom, setCustom] = useState('')
+  const [dose, setDose] = useState('')
+  const [unit, setUnit] = useState('mcg')
+  const submit = () => {
+    const finalName = name === '__custom' ? custom : name
+    if (!finalName) return
+    onSubmit({ name: finalName, dose, unit })
+    setName(''); setCustom(''); setDose('')
+  }
+  return (
+    <>
+      <div style={formStyle}>
+        <div>
+          <label style={lblStyle}>Med</label>
+          <select style={inpStyle} value={name} onChange={e => setName(e.target.value)}>
+            <option value="">—</option>
+            {COMMON_MEDS.map(m => <option key={m} value={m}>{m}</option>)}
+            <option value="__custom">Other...</option>
+          </select>
+        </div>
+        {name === '__custom' && (
+          <div><label style={lblStyle}>Name</label><input style={inpStyle} value={custom} onChange={e => setCustom(e.target.value)} /></div>
+        )}
+        <div><label style={lblStyle}>Dose</label><input style={inpStyle} inputMode="decimal" value={dose} onChange={e => setDose(e.target.value)} /></div>
+        <div>
+          <label style={lblStyle}>Unit</label>
+          <select style={inpStyle} value={unit} onChange={e => setUnit(e.target.value)}>
+            <option>mcg</option><option>mg</option><option>g</option><option>units</option><option>mL</option><option>mEq</option>
+          </select>
+        </div>
+      </div>
+      <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log Med</button></div>
+    </>
+  )
+}
+
+function CpForm({ onSubmit }: { onSubmit: (d: { type: string; volume: string; route: string; temp: string }) => void }) {
+  const [type, setType] = useState(CP_TYPES[0])
+  const [volume, setVolume] = useState('')
+  const [route, setRoute] = useState(CP_ROUTES[0])
+  const [temp, setTemp] = useState('')
+  const submit = () => {
+    if (!volume) return
+    onSubmit({ type, volume, route, temp })
+    setVolume(''); setTemp('')
+  }
+  return (
+    <>
+      <div style={formStyle}>
+        <div>
+          <label style={lblStyle}>Type</label>
+          <select style={inpStyle} value={type} onChange={e => setType(e.target.value)}>
+            {CP_TYPES.map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <div><label style={lblStyle}>Volume mL</label><input style={inpStyle} inputMode="decimal" value={volume} onChange={e => setVolume(e.target.value)} /></div>
+        <div>
+          <label style={lblStyle}>Route</label>
+          <select style={inpStyle} value={route} onChange={e => setRoute(e.target.value)}>
+            {CP_ROUTES.map(r => <option key={r}>{r}</option>)}
+          </select>
+        </div>
+        <div><label style={lblStyle}>Temp °C</label><input style={inpStyle} inputMode="decimal" value={temp} onChange={e => setTemp(e.target.value)} /></div>
+      </div>
+      <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log CP Dose</button></div>
+    </>
+  )
+}
+
+function BloodForm({ onSubmit }: { onSubmit: (d: { product: string; amount: string }) => void }) {
+  const [product, setProduct] = useState(BLOOD_PRODUCTS[0])
+  const [amount, setAmount] = useState('')
+  const submit = () => {
+    if (!amount) return
+    onSubmit({ product, amount })
+    setAmount('')
+  }
+  return (
+    <>
+      <div style={formStyle}>
+        <div>
+          <label style={lblStyle}>Product</label>
+          <select style={inpStyle} value={product} onChange={e => setProduct(e.target.value)}>
+            {BLOOD_PRODUCTS.map(p => <option key={p}>{p}</option>)}
+          </select>
+        </div>
+        <div><label style={lblStyle}>{product === 'Cell Saver' ? 'mL' : 'Units'}</label><input style={inpStyle} inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+      </div>
+      <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log Blood Product</button></div>
+    </>
+  )
+}
+
+function AbgForm({ onSubmit }: { onSubmit: (d: Record<string, unknown>) => void }) {
+  const [v, setV] = useState<Record<string, string>>({})
+  const upd = (k: string, val: string) => setV(prev => ({ ...prev, [k]: val }))
+  const submit = () => {
+    const clean: Record<string, unknown> = {}
+    for (const [k, val] of Object.entries(v)) if (val !== '') clean[k] = val
+    onSubmit(clean)
+    setV({})
+  }
+  return (
+    <>
+      <div style={formStyle}>
+        <div><label style={lblStyle}>pH</label><input style={inpStyle} inputMode="decimal" value={v.ph || ''} onChange={e => upd('ph', e.target.value)} /></div>
+        <div><label style={lblStyle}>pCO2</label><input style={inpStyle} inputMode="decimal" value={v.pco2 || ''} onChange={e => upd('pco2', e.target.value)} /></div>
+        <div><label style={lblStyle}>pO2</label><input style={inpStyle} inputMode="decimal" value={v.po2 || ''} onChange={e => upd('po2', e.target.value)} /></div>
+        <div><label style={lblStyle}>HCO3</label><input style={inpStyle} inputMode="decimal" value={v.hco3 || ''} onChange={e => upd('hco3', e.target.value)} /></div>
+        <div><label style={lblStyle}>BE</label><input style={inpStyle} inputMode="decimal" value={v.be || ''} onChange={e => upd('be', e.target.value)} /></div>
+        <div><label style={lblStyle}>K+</label><input style={inpStyle} inputMode="decimal" value={v.k || ''} onChange={e => upd('k', e.target.value)} /></div>
+        <div><label style={lblStyle}>iCa</label><input style={inpStyle} inputMode="decimal" value={v.ica || ''} onChange={e => upd('ica', e.target.value)} /></div>
+        <div><label style={lblStyle}>HCT</label><input style={inpStyle} inputMode="decimal" value={v.hct || ''} onChange={e => upd('hct', e.target.value)} /></div>
+        <div><label style={lblStyle}>HGB</label><input style={inpStyle} inputMode="decimal" value={v.hgb || ''} onChange={e => upd('hgb', e.target.value)} /></div>
+        <div><label style={lblStyle}>Glucose</label><input style={inpStyle} inputMode="decimal" value={v.glucose || ''} onChange={e => upd('glucose', e.target.value)} /></div>
+        <div><label style={lblStyle}>Lactate</label><input style={inpStyle} inputMode="decimal" value={v.lactate || ''} onChange={e => upd('lactate', e.target.value)} /></div>
+        <div><label style={lblStyle}>SvO2</label><input style={inpStyle} inputMode="decimal" value={v.svo2 || ''} onChange={e => upd('svo2', e.target.value)} /></div>
+      </div>
+      <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log ABG</button></div>
+    </>
+  )
+}
+
+function NoteForm({ onSubmit }: { onSubmit: (d: { text: string }) => void }) {
+  const [text, setText] = useState('')
+  const submit = () => {
+    if (!text.trim()) return
+    onSubmit({ text })
+    setText('')
+  }
+  return (
+    <>
+      <textarea
+        style={{ ...inpStyle, minHeight: '60px', resize: 'vertical', fontFamily: 'inherit' }}
+        placeholder="Type a note..."
+        value={text}
+        onChange={e => setText(e.target.value)}
+      />
+      <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log Note</button></div>
+    </>
   )
 }
