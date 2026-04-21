@@ -536,16 +536,36 @@ export default function ChartPage() {
         .tl-delete { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 6px; opacity: 0.5; transition: all 0.15s ease; }
         .tl-delete:hover { opacity: 1; color: #e63946; background: rgba(230,57,70,0.08); }
 
-        /* Clock chip */
-        .clock-chip {
-          padding: 0.6rem 0.95rem; border-radius: 12px;
-          background: rgba(255,255,255,0.02);
-          border: 1px dashed rgba(255,255,255,0.08);
-          display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
-          min-width: 110px;
+        /* Small corner clock (top-right of sticky) */
+        .sticky-clock {
+          position: absolute; top: 10px; right: 14px;
+          display: flex; align-items: baseline; gap: 6px;
+          font-size: 0.82rem; color: #94a3b8;
+          font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
         }
-        .clock-chip .cc-label { font-size: 0.66rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
-        .clock-chip .cc-value { font-size: 1.1rem; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; margin-top: 2px; }
+        .sticky-clock .sc-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 700; }
+        .sticky-clock .sc-value { font-weight: 700; color: #cbd5e1; }
+
+        /* Run history tables */
+        .run-tables { display: flex; gap: 0.65rem; flex-wrap: wrap; margin-top: 0.75rem; }
+        .run-table-card {
+          background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 12px;
+          padding: 0.65rem 0.9rem 0.75rem;
+          min-width: 220px;
+          flex: 1 1 220px;
+          max-width: 340px;
+        }
+        .rt-title { font-size: 0.7rem; font-weight: 700; color: #e2e8f0; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 6px; }
+        .rt-title-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--phase, #22c55e); }
+        .rt-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        .rt-table th { text-align: left; color: #64748b; font-weight: 600; padding: 0.2rem 0.5rem 0.35rem 0; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; }
+        .rt-table th:last-child { text-align: right; padding-right: 0; }
+        .rt-table td { color: #cbd5e1; padding: 0.28rem 0.5rem 0.28rem 0; font-variant-numeric: tabular-nums; }
+        .rt-table td:last-child { text-align: right; font-weight: 600; padding-right: 0; }
+        .rt-active { color: #22c55e; font-weight: 600; font-size: 0.7rem; margin-left: 4px; }
+        .rt-total td { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.45rem !important; color: #e2e8f0; font-weight: 700; }
 
         /* Add-entry tab pill */
         .entry-tab {
@@ -819,16 +839,21 @@ function LiveChart({
   ]
   const activePopupRows = popupRows.filter(p => p.data)
 
+  const formatT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
+  const runTableRows = primaryRows.filter(t => (t.data?.runs.length ?? 0) > 0)
+
   return (
     <>
       {/* Sticky frosted top bar with timers */}
       <div className="live-sticky">
+        {/* Small corner clock */}
+        <div className="sticky-clock">
+          <span className="sc-label">Clock</span>
+          <span className="sc-value">{clockStr}</span>
+        </div>
+
         {/* Primary clickable timer chips */}
         <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
-          <div className="clock-chip">
-            <div className="cc-label">Clock</div>
-            <div className="cc-value">{clockStr}</div>
-          </div>
           {primaryRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
@@ -853,24 +878,42 @@ function LiveChart({
             )
           })}
         </div>
-        {/* Run breakdown — only shows phases with ≥2 runs */}
-        {primaryRows.some(t => (t.data?.runs.length ?? 0) > 1) && (
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.7rem' }}>
-            {primaryRows.filter(t => (t.data?.runs.length ?? 0) > 1).map(t => {
+
+        {/* Run history tables — shown per timer with ≥1 run */}
+        {runTableRows.length > 0 && (
+          <div className="run-tables">
+            {runTableRows.map(t => {
               const phase = PHASE_COLORS[t.key]
               return (
-                <div key={t.key} style={{ background: `color-mix(in srgb, ${phase} 8%, rgba(255,255,255,0.02))`, border: `1px solid color-mix(in srgb, ${phase} 25%, rgba(255,255,255,0.06))`, borderRadius: '10px', padding: '0.45rem 0.8rem', fontSize: '0.74rem', color: '#cbd5e1' }}>
-                  <span style={{ color: phase, fontWeight: 700, marginRight: '6px' }}>{t.label}</span>
-                  {t.data!.runs.map((r, i) => (
-                    <span key={i} style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      R{i + 1}: <strong style={{ color: '#e2e8f0' }}>{r.min}m</strong>{!r.stop ? <span style={{ color: phase }}> ●</span> : ''}{i < t.data!.runs.length - 1 ? ' · ' : ''}
-                    </span>
-                  ))}
+                <div key={t.key} className="run-table-card">
+                  <div className="rt-title" style={{ ['--phase' as never]: phase }}>
+                    <span className="rt-title-dot" />
+                    {t.label}
+                  </div>
+                  <table className="rt-table">
+                    <thead>
+                      <tr><th>Start</th><th>Stop</th><th>Duration</th></tr>
+                    </thead>
+                    <tbody>
+                      {t.data!.runs.map((r, i) => (
+                        <tr key={i}>
+                          <td>{formatT(r.start)}</td>
+                          <td>{r.stop ? formatT(r.stop) : '—'}</td>
+                          <td>{r.min}m{!r.stop && <span className="rt-active">● active</span>}</td>
+                        </tr>
+                      ))}
+                      <tr className="rt-total">
+                        <td colSpan={2}>Total</td>
+                        <td>{t.data!.totalMin}m</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               )
             })}
           </div>
         )}
+
         {/* Popup timers (appear once triggered) */}
         {activePopupRows.length > 0 && (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.7rem' }}>
