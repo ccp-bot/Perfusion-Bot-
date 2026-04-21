@@ -536,36 +536,38 @@ export default function ChartPage() {
         .tl-delete { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 6px; opacity: 0.5; transition: all 0.15s ease; }
         .tl-delete:hover { opacity: 1; color: #e63946; background: rgba(230,57,70,0.08); }
 
-        /* Small corner clock (top-right of sticky) */
-        .sticky-clock {
-          position: absolute; top: 10px; right: 14px;
-          display: flex; align-items: baseline; gap: 6px;
-          font-size: 0.82rem; color: #94a3b8;
-          font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
-        }
-        .sticky-clock .sc-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 700; }
-        .sticky-clock .sc-value { font-weight: 700; color: #cbd5e1; }
+        /* Header clock (top-right, live mode) */
+        .header-clock { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+        .header-clock .hc-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: #64748b; font-weight: 700; }
+        .header-clock .hc-value { font-size: 1.05rem; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 
-        /* Run history tables */
-        .run-tables { display: flex; gap: 0.65rem; flex-wrap: wrap; margin-top: 0.75rem; }
+        /* Primary columns: each column = one timer chip + its run table */
+        .primary-grid {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 0.65rem;
+          align-items: start;
+        }
+        .primary-col { display: flex; flex-direction: column; gap: 0.5rem; }
+        .primary-col .timer-chip-btn { width: 100%; min-width: 0; }
+
+        /* Run history card (inside a column) */
         .run-table-card {
           background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
           border: 1px solid rgba(255,255,255,0.07);
           border-radius: 12px;
-          padding: 0.65rem 0.9rem 0.75rem;
-          min-width: 220px;
-          flex: 1 1 220px;
-          max-width: 340px;
+          padding: 0.6rem 0.75rem 0.7rem;
+          width: 100%;
         }
-        .rt-title { font-size: 0.7rem; font-weight: 700; color: #e2e8f0; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 6px; }
+        .rt-title { font-size: 0.7rem; font-weight: 700; color: #e2e8f0; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.45rem; padding-bottom: 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 6px; }
         .rt-title-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--phase, #22c55e); }
-        .rt-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-        .rt-table th { text-align: left; color: #64748b; font-weight: 600; padding: 0.2rem 0.5rem 0.35rem 0; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; }
+        .rt-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+        .rt-table th { text-align: left; color: #64748b; font-weight: 600; padding: 0.15rem 0.4rem 0.3rem 0; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; }
         .rt-table th:last-child { text-align: right; padding-right: 0; }
-        .rt-table td { color: #cbd5e1; padding: 0.28rem 0.5rem 0.28rem 0; font-variant-numeric: tabular-nums; }
+        .rt-table td { color: #cbd5e1; padding: 0.22rem 0.4rem 0.22rem 0; font-variant-numeric: tabular-nums; }
         .rt-table td:last-child { text-align: right; font-weight: 600; padding-right: 0; }
-        .rt-active { color: #22c55e; font-weight: 600; font-size: 0.7rem; margin-left: 4px; }
-        .rt-total td { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.45rem !important; color: #e2e8f0; font-weight: 700; }
+        .rt-active { color: #22c55e; font-weight: 600; font-size: 0.64rem; margin-left: 4px; }
+        .rt-total td { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.4rem !important; color: #e2e8f0; font-weight: 700; }
 
         /* Add-entry tab pill */
         .entry-tab {
@@ -579,12 +581,16 @@ export default function ChartPage() {
         .entry-tab:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
         .entry-tab.active { background: #e63946; color: white; border-color: #e63946; box-shadow: 0 0 20px rgba(230,57,70,0.3); }
 
-        @media (max-width: 768px) {
+        @media (max-width: 900px) {
+          .primary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+        @media (max-width: 600px) {
           .chart-header { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
           .chart-grid { grid-template-columns: 1fr 1fr !important; }
           .hotkey-grid { grid-template-columns: 1fr 1fr !important; }
-          .timer-chip-btn { min-width: 46%; min-height: 84px; padding: 0.9rem 0.9rem; }
-          .timer-chip-btn .tc-value { font-size: 1.4rem; }
+          .primary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .timer-chip-btn { min-height: 82px; padding: 0.85rem 0.75rem; }
+          .timer-chip-btn .tc-value { font-size: 1.3rem; }
         }
       `}</style>
 
@@ -612,6 +618,12 @@ export default function ChartPage() {
           )}
           {view === 'form' && (
             <button onClick={() => { setView('list'); setEditing(EMPTY_CASE) }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.6rem 1rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
+          )}
+          {view === 'live' && (
+            <div className="header-clock">
+              <div className="hc-label">Clock</div>
+              <div className="hc-value">{new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+            </div>
           )}
         </div>
 
@@ -820,8 +832,6 @@ function LiveChart({
   onAddEvent: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
   onDeleteEvent: (id: string) => Promise<void>
 }) {
-  const clockStr = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-
   type PrimaryKey = 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra'
   const primaryRows: { key: PrimaryKey; label: string; data: PhaseData | null }[] = [
     { key: 'cpb', label: 'CPB', data: timers.cpb },
@@ -840,79 +850,65 @@ function LiveChart({
   const activePopupRows = popupRows.filter(p => p.data)
 
   const formatT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
-  const runTableRows = primaryRows.filter(t => (t.data?.runs.length ?? 0) > 0)
 
   return (
     <>
       {/* Sticky frosted top bar with timers */}
       <div className="live-sticky">
-        {/* Small corner clock */}
-        <div className="sticky-clock">
-          <span className="sc-label">Clock</span>
-          <span className="sc-value">{clockStr}</span>
-        </div>
-
-        {/* Primary clickable timer chips */}
-        <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
+        {/* Primary columns: each timer chip stacks over its run-history table */}
+        <div className="primary-grid">
           {primaryRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
             const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
             const runCount = t.data?.runs.length ?? 0
             const phase = PHASE_COLORS[t.key]
+            const hasRuns = (t.data?.runs.length ?? 0) > 0
             return (
-              <button
-                key={t.key}
-                onClick={() => onToggleTimer(t.key)}
-                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
-                type="button"
-                style={{ ['--phase' as never]: phase }}
-              >
-                <div className="tc-label">
-                  {running && <span className="pulse-dot" />}
-                  {t.label}
-                </div>
-                <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</div>
-                {runCount > 1 && <div className="tc-runs">{runCount} runs</div>}
-              </button>
+              <div key={t.key} className="primary-col">
+                <button
+                  onClick={() => onToggleTimer(t.key)}
+                  className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
+                  type="button"
+                  style={{ ['--phase' as never]: phase }}
+                >
+                  <div className="tc-label">
+                    {running && <span className="pulse-dot" />}
+                    {t.label}
+                  </div>
+                  <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</div>
+                  {runCount > 1 && <div className="tc-runs">{runCount} runs</div>}
+                </button>
+                {hasRuns && (
+                  <div className="run-table-card" style={{ ['--phase' as never]: phase }}>
+                    <div className="rt-title">
+                      <span className="rt-title-dot" />
+                      {t.label}
+                    </div>
+                    <table className="rt-table">
+                      <thead>
+                        <tr><th>Start</th><th>Stop</th><th>Duration</th></tr>
+                      </thead>
+                      <tbody>
+                        {t.data!.runs.map((r, i) => (
+                          <tr key={i}>
+                            <td>{formatT(r.start)}</td>
+                            <td>{r.stop ? formatT(r.stop) : '—'}</td>
+                            <td>{r.min}m{!r.stop && <span className="rt-active">●</span>}</td>
+                          </tr>
+                        ))}
+                        <tr className="rt-total">
+                          <td colSpan={2}>Total</td>
+                          <td>{t.data!.totalMin}m</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )
           })}
         </div>
-
-        {/* Run history tables — shown per timer with ≥1 run */}
-        {runTableRows.length > 0 && (
-          <div className="run-tables">
-            {runTableRows.map(t => {
-              const phase = PHASE_COLORS[t.key]
-              return (
-                <div key={t.key} className="run-table-card">
-                  <div className="rt-title" style={{ ['--phase' as never]: phase }}>
-                    <span className="rt-title-dot" />
-                    {t.label}
-                  </div>
-                  <table className="rt-table">
-                    <thead>
-                      <tr><th>Start</th><th>Stop</th><th>Duration</th></tr>
-                    </thead>
-                    <tbody>
-                      {t.data!.runs.map((r, i) => (
-                        <tr key={i}>
-                          <td>{formatT(r.start)}</td>
-                          <td>{r.stop ? formatT(r.stop) : '—'}</td>
-                          <td>{r.min}m{!r.stop && <span className="rt-active">● active</span>}</td>
-                        </tr>
-                      ))}
-                      <tr className="rt-total">
-                        <td colSpan={2}>Total</td>
-                        <td>{t.data!.totalMin}m</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )
-            })}
-          </div>
-        )}
 
         {/* Popup timers (appear once triggered) */}
         {activePopupRows.length > 0 && (
