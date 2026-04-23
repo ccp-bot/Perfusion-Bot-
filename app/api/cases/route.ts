@@ -64,7 +64,11 @@ export async function POST(req: NextRequest) {
 // PATCH /api/cases — update a case
 export async function PATCH(req: NextRequest) {
   const body = await req.json()
-  const { id, userId, ...updates } = body
+  // Strip client-only fields that aren't columns on `cases` so Supabase
+  // doesn't reject with "column not found" (userEmail / groupId are only
+  // used on create; the DB columns are user_email / group_id).
+  const { id, userId, userEmail: _userEmail, groupId: _groupId, ...updates } = body
+  void _userEmail; void _groupId
 
   if (!id || !userId) return NextResponse.json({ error: 'Missing id or userId' }, { status: 400 })
 
