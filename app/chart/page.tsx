@@ -506,8 +506,7 @@ export default function ChartPage() {
           margin-bottom: 1rem;
           box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
         }
-        .live-card-title { font-size: 0.72rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
-        .live-card-title::before { content: ''; width: 3px; height: 14px; background: #e63946; border-radius: 2px; }
+        .live-card-title { font-size: 1.15rem; font-weight: 700; color: #e2e8f0; margin-bottom: 1rem; letter-spacing: -0.01em; }
 
         /* Hotkey pills — one line */
         .hotkey-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.55rem; }
@@ -1188,7 +1187,7 @@ function LiveChart({
 
       {/* Timeline */}
       <div className="live-card">
-        <div className="live-card-title">Timeline <span style={{ color: '#64748b', fontWeight: 500, letterSpacing: 0, textTransform: 'none', marginLeft: '6px' }}>· {events.length} {events.length === 1 ? 'event' : 'events'}</span></div>
+        <div className="live-card-title">Timeline <span style={{ color: '#64748b', fontWeight: 500, fontSize: '0.85rem', marginLeft: '8px' }}>· {events.length} {events.length === 1 ? 'event' : 'events'}</span></div>
         {events.length === 0 ? (
           <div style={{ color: '#475569', fontSize: '0.88rem', padding: '2rem 0', textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.4 }}>⏱️</div>
