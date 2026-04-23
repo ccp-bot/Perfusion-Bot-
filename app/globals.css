@@ -25,6 +25,19 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Make native <select> dropdown panels match the dark UI. */
+select {
+  color-scheme: dark;
+}
+select option {
+  background-color: #0d1117;
+  color: #e2e8f0;
+}
+select option:checked {
+  background-color: #1e293b;
+  color: #ffffff;
+}
+
 @media print {
   @page {
     size: landscape;
