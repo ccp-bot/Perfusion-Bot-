@@ -788,7 +788,7 @@ export default function ChartPage() {
         {/* PHI disclaimer (hidden during live to save space) */}
         {view !== 'live' && (
           <div style={{ background: 'rgba(230,57,70,0.06)', border: '1px solid rgba(230,57,70,0.2)', borderRadius: '10px', padding: '0.6rem 0.9rem', marginBottom: '1.5rem', fontSize: '0.75rem', color: '#f59e9e' }}>
-            ⚠ Do not enter patient names, MRN, or date of birth. Use case # or initials only until HIPAA compliance is in place.
+            ⚠ This app is not yet HIPAA compliant. Avoid storing real patient data until BAAs and compliance safeguards are in place.
           </div>
         )}
 
@@ -815,7 +815,7 @@ export default function ChartPage() {
                         {c.case_date && <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{c.case_date}</div>}
                       </div>
                       <div style={{ fontSize: '0.78rem', color: '#64748b', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        {c.case_number && <span>Case #{c.case_number}</span>}
+                        {c.case_number && <span>MRN {c.case_number}</span>}
                         {c.patient_initials && <span>{c.patient_initials}</span>}
                         {c.surgeon && <span>Dr. {c.surgeon}</span>}
                         {c.cpb_total_min != null && <span>CPB {c.cpb_total_min}min</span>}
@@ -840,8 +840,8 @@ export default function ChartPage() {
             <div style={sectionStyle}>
               <div style={sectionTitle}>Case Info</div>
               <div className="chart-grid">
-                <div><label style={labelStyle}>Case #</label><input style={inputStyle} value={editing.case_number || ''} onChange={e => set('case_number', e.target.value)} /></div>
-                <div><label style={labelStyle}>Patient Initials</label><input style={inputStyle} maxLength={5} value={editing.patient_initials || ''} onChange={e => set('patient_initials', e.target.value)} placeholder="e.g. J.D." /></div>
+                <div><label style={labelStyle}>MRN</label><input style={inputStyle} value={editing.case_number || ''} onChange={e => set('case_number', e.target.value)} /></div>
+                <div><label style={labelStyle}>Patient Last Name</label><input style={inputStyle} value={editing.patient_initials || ''} onChange={e => set('patient_initials', e.target.value)} placeholder="e.g. Smith" /></div>
                 <div><label style={labelStyle}>Date</label><input style={inputStyle} type="date" value={editing.case_date || ''} onChange={e => set('case_date', e.target.value)} /></div>
                 <div><label style={labelStyle}>Age</label><input style={inputStyle} type="number" value={editing.age ?? ''} onChange={e => set('age', e.target.value === '' ? null : Number(e.target.value))} /></div>
                 <div><label style={labelStyle}>Sex</label>
@@ -859,20 +859,6 @@ export default function ChartPage() {
             </div>
 
             <div style={sectionStyle}>
-              <div style={sectionTitle}>Bypass Times</div>
-              <div className="chart-grid">
-                <div><label style={labelStyle}>CPB Start</label><input style={inputStyle} type="time" value={editing.cpb_start || ''} onChange={e => set('cpb_start', e.target.value)} /></div>
-                <div><label style={labelStyle}>CPB End</label><input style={inputStyle} type="time" value={editing.cpb_end || ''} onChange={e => set('cpb_end', e.target.value)} /></div>
-                <div><label style={labelStyle}>X-Clamp On</label><input style={inputStyle} type="time" value={editing.xclamp_start || ''} onChange={e => set('xclamp_start', e.target.value)} /></div>
-                <div><label style={labelStyle}>X-Clamp Off</label><input style={inputStyle} type="time" value={editing.xclamp_end || ''} onChange={e => set('xclamp_end', e.target.value)} /></div>
-                <div><label style={labelStyle}>Circ Arrest (min)</label><input style={inputStyle} type="number" value={editing.circ_arrest_min ?? ''} onChange={e => set('circ_arrest_min', e.target.value === '' ? null : Number(e.target.value))} /></div>
-              </div>
-              <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>
-                Totals calculated on save: CPB = {minsBetween(editing.cpb_start, editing.cpb_end) ?? '—'} min · X-Clamp = {minsBetween(editing.xclamp_start, editing.xclamp_end) ?? '—'} min
-              </div>
-            </div>
-
-            <div style={sectionStyle}>
               <div style={sectionTitle}>Circuit</div>
               <div className="chart-grid">
                 <div><label style={labelStyle}>Oxygenator</label><input style={inputStyle} value={editing.oxygenator || ''} onChange={e => set('oxygenator', e.target.value)} /></div>
@@ -884,54 +870,10 @@ export default function ChartPage() {
             </div>
 
             <div style={sectionStyle}>
-              <div style={sectionTitle}>Cardioplegia</div>
-              <div className="chart-grid">
-                <div><label style={labelStyle}>Type</label><input style={inputStyle} value={editing.cardioplegia_type || ''} onChange={e => set('cardioplegia_type', e.target.value)} /></div>
-                <div><label style={labelStyle}>Total Volume (mL)</label><input style={inputStyle} type="number" value={editing.cardioplegia_volume_ml ?? ''} onChange={e => set('cardioplegia_volume_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
-              </div>
-            </div>
-
-            <div style={sectionStyle}>
-              <div style={sectionTitle}>Labs</div>
-              <div className="chart-grid">
-                <div><label style={labelStyle}>Pre HCT</label><input style={inputStyle} type="number" step="0.1" value={editing.pre_hct ?? ''} onChange={e => set('pre_hct', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Pre ACT</label><input style={inputStyle} type="number" value={editing.pre_act ?? ''} onChange={e => set('pre_act', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Low HCT on CPB</label><input style={inputStyle} type="number" step="0.1" value={editing.low_hct ?? ''} onChange={e => set('low_hct', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Peak ACT</label><input style={inputStyle} type="number" value={editing.peak_act ?? ''} onChange={e => set('peak_act', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Post HCT</label><input style={inputStyle} type="number" step="0.1" value={editing.post_hct ?? ''} onChange={e => set('post_hct', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Final K+</label><input style={inputStyle} type="number" step="0.1" value={editing.final_k ?? ''} onChange={e => set('final_k', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Final Glucose</label><input style={inputStyle} type="number" value={editing.final_glucose ?? ''} onChange={e => set('final_glucose', e.target.value === '' ? null : Number(e.target.value))} /></div>
-              </div>
-            </div>
-
-            <div style={sectionStyle}>
               <div style={sectionTitle}>Heparin / Protamine</div>
               <div className="chart-grid">
                 <div><label style={labelStyle}>Heparin Total (units)</label><input style={inputStyle} type="number" value={editing.heparin_total_units ?? ''} onChange={e => set('heparin_total_units', e.target.value === '' ? null : Number(e.target.value))} /></div>
                 <div><label style={labelStyle}>Protamine (mg)</label><input style={inputStyle} type="number" value={editing.protamine_mg ?? ''} onChange={e => set('protamine_mg', e.target.value === '' ? null : Number(e.target.value))} /></div>
-              </div>
-            </div>
-
-            <div style={sectionStyle}>
-              <div style={sectionTitle}>Blood Products & Volumes</div>
-              <div className="chart-grid">
-                <div><label style={labelStyle}>PRBC (units)</label><input style={inputStyle} type="number" value={editing.prbc_units ?? 0} onChange={e => set('prbc_units', e.target.value === '' ? 0 : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>FFP (units)</label><input style={inputStyle} type="number" value={editing.ffp_units ?? 0} onChange={e => set('ffp_units', e.target.value === '' ? 0 : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Platelets (units)</label><input style={inputStyle} type="number" value={editing.platelets_units ?? 0} onChange={e => set('platelets_units', e.target.value === '' ? 0 : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Cryo (units)</label><input style={inputStyle} type="number" value={editing.cryo_units ?? 0} onChange={e => set('cryo_units', e.target.value === '' ? 0 : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Cell Saver (mL)</label><input style={inputStyle} type="number" value={editing.cell_saver_ml ?? 0} onChange={e => set('cell_saver_ml', e.target.value === '' ? 0 : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>UF Volume (mL)</label><input style={inputStyle} type="number" value={editing.uf_volume_ml ?? ''} onChange={e => set('uf_volume_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Urine Output (mL)</label><input style={inputStyle} type="number" value={editing.urine_output_ml ?? ''} onChange={e => set('urine_output_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
-              </div>
-            </div>
-
-            <div style={sectionStyle}>
-              <div style={sectionTitle}>Notes</div>
-              <label style={labelStyle}>Case notes</label>
-              <textarea style={{ ...inputStyle, minHeight: '80px', resize: 'vertical', fontFamily: 'inherit' }} value={editing.notes || ''} onChange={e => set('notes', e.target.value)} />
-              <div style={{ marginTop: '0.75rem' }}>
-                <label style={labelStyle}>Complications / Events</label>
-                <textarea style={{ ...inputStyle, minHeight: '60px', resize: 'vertical', fontFamily: 'inherit' }} value={editing.complications || ''} onChange={e => set('complications', e.target.value)} />
               </div>
             </div>
 
