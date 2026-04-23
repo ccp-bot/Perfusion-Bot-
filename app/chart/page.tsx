@@ -6,11 +6,13 @@ import { supabase } from '../lib/supabase'
 type CaseRecord = {
   id: string
   case_number?: string | null
-  patient_initials?: string | null
+  patient_initials?: string | null        // last name
+  patient_first_name?: string | null      // first name
   age?: number | null
   sex?: string | null
   case_date?: string | null
-  procedure?: string | null
+  procedure?: string | null               // displayed as "Case Type"
+  allergies?: string | null
   surgeon?: string | null
   anesthesiologist?: string | null
   weight_kg?: number | null
@@ -68,8 +70,8 @@ type CaseEvent = {
 }
 
 const EMPTY_CASE: Partial<CaseRecord> = {
-  case_number: '', patient_initials: '', age: null, sex: '', case_date: new Date().toISOString().slice(0, 10),
-  procedure: '', surgeon: '', anesthesiologist: '', weight_kg: null, height_cm: null, bsa: null,
+  case_number: '', patient_initials: '', patient_first_name: '', age: null, sex: '', case_date: new Date().toISOString().slice(0, 10),
+  procedure: '', allergies: '', surgeon: '', anesthesiologist: '', weight_kg: null, height_cm: null, bsa: null,
   cpb_start: '', cpb_end: '', xclamp_start: '', xclamp_end: '', circ_arrest_min: null,
   oxygenator: '', arterial_cannula: '', venous_cannula: '', prime_composition: '', prime_volume_ml: null,
   cardioplegia_type: '', cardioplegia_volume_ml: null,
@@ -921,42 +923,42 @@ export default function ChartPage() {
         .entry-tab:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
         .entry-tab.active { background: #e63946; color: white; border-color: #e63946; box-shadow: 0 0 20px rgba(230,57,70,0.3); }
 
-        /* Patient info bar (live mode) */
+        /* Patient info stack (live mode) — no box outline, stacked rows */
         .patient-bar {
-          display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
-          gap: 0.35rem;
-          padding: 0.7rem 0.9rem;
-          background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 14px;
-          box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
+          display: flex; flex-direction: column; gap: 0.1rem;
+          padding: 0.35rem 0.3rem;
+          background: transparent; border: none; box-shadow: none;
         }
-        .patient-field {
-          display: flex; flex-direction: column; gap: 2px;
-          padding: 0.15rem 0.55rem;
-          border-right: 1px solid rgba(255,255,255,0.05);
+        .pb-row {
+          display: flex; align-items: center; gap: 0.35rem;
+          flex-wrap: wrap;
+          min-height: 28px;
         }
-        .patient-field:last-child { border-right: none; }
-        .patient-field-label {
-          font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em;
-          color: #64748b; font-weight: 700;
+        .pb-label {
+          font-size: 0.66rem; color: #64748b; font-weight: 700;
+          text-transform: uppercase; letter-spacing: 0.08em;
+          flex-shrink: 0;
         }
-        .patient-field-input {
-          background: transparent; border: none; outline: none;
-          color: #e2e8f0; font-size: 1rem; font-weight: 600;
-          padding: 2px 0; font-family: inherit;
-          border-bottom: 1px solid transparent;
-          transition: border-color 0.15s ease, color 0.15s ease;
-          width: 100%; box-sizing: border-box;
+        .pb-unit  { font-size: 0.7rem; color: #64748b; font-weight: 500; margin-left: -2px; }
+        .pb-sep   { color: #334155; font-weight: 600; padding: 0 0.15rem; }
+        .pb-comma { color: #64748b; font-weight: 600; margin-left: -3px; }
+        .pb-input {
+          background: transparent; border: 1px solid transparent;
+          border-radius: 6px; padding: 2px 6px;
+          color: #e2e8f0; font-size: 0.95rem; font-weight: 600;
+          font-family: inherit; outline: none;
           font-variant-numeric: tabular-nums;
+          min-width: 0;
+          transition: border-color 0.15s ease, background 0.15s ease;
         }
-        .patient-field-input:hover { border-bottom-color: rgba(255,255,255,0.12); }
-        .patient-field-input:focus { border-bottom-color: rgba(230,57,70,0.5); color: #fff; }
-        .patient-field-input::placeholder { color: #475569; font-weight: 500; }
-        .patient-field-input::-webkit-outer-spin-button,
-        .patient-field-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .patient-field-input[type=number] { -moz-appearance: textfield; }
+        .pb-input:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
+        .pb-input:focus { background: rgba(255,255,255,0.06); border-color: rgba(230,57,70,0.4); color: #fff; }
+        .pb-input::placeholder { color: #475569; font-style: italic; font-weight: 500; }
+        .pb-input[type=number] { -moz-appearance: textfield; width: 58px; text-align: right; }
+        .pb-input::-webkit-outer-spin-button,
+        .pb-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .pb-input.flex { flex: 1; min-width: 140px; }
+        .pb-input.name { width: 150px; }
 
         /* Vent bar (stacked Sweep + FiO2 sliders) */
         .vent-bar {
@@ -1213,6 +1215,7 @@ export default function ChartPage() {
               <div className="chart-grid">
                 <div><label style={labelStyle}>MRN</label><input style={inputStyle} value={editing.case_number || ''} onChange={e => set('case_number', e.target.value)} /></div>
                 <div><label style={labelStyle}>Patient Last Name</label><input style={inputStyle} value={editing.patient_initials || ''} onChange={e => set('patient_initials', e.target.value)} placeholder="e.g. Smith" /></div>
+                <div><label style={labelStyle}>Patient First Name</label><input style={inputStyle} value={editing.patient_first_name || ''} onChange={e => set('patient_first_name', e.target.value)} placeholder="e.g. John" /></div>
                 <div><label style={labelStyle}>Date</label><input style={inputStyle} type="date" value={editing.case_date || ''} onChange={e => set('case_date', e.target.value)} /></div>
                 <div><label style={labelStyle}>Age</label><input style={inputStyle} type="number" value={editing.age ?? ''} onChange={e => set('age', e.target.value === '' ? null : Number(e.target.value))} /></div>
                 <div><label style={labelStyle}>Sex</label>
@@ -1223,7 +1226,8 @@ export default function ChartPage() {
                 <div><label style={labelStyle}>Weight (kg)</label><input style={inputStyle} type="number" step="0.1" value={editing.weight_kg ?? ''} onChange={e => set('weight_kg', e.target.value === '' ? null : Number(e.target.value))} /></div>
                 <div><label style={labelStyle}>Height (cm)</label><input style={inputStyle} type="number" step="0.1" value={editing.height_cm ?? ''} onChange={e => set('height_cm', e.target.value === '' ? null : Number(e.target.value))} /></div>
                 <div><label style={labelStyle}>BSA (m²)</label><input style={inputStyle} type="number" step="0.01" value={editing.bsa ?? ''} onChange={e => set('bsa', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Procedure</label><input style={inputStyle} value={editing.procedure || ''} onChange={e => set('procedure', e.target.value)} placeholder="e.g. CABG x3, AVR, MVR, Type-A" /></div>
+                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Case Type</label><input style={inputStyle} value={editing.procedure || ''} onChange={e => set('procedure', e.target.value)} placeholder="e.g. CABG x3, AVR, MVR, Type-A" /></div>
+                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Allergies</label><input style={inputStyle} value={editing.allergies || ''} onChange={e => set('allergies', e.target.value)} placeholder="e.g. None known, PCN, Latex" /></div>
                 <div><label style={labelStyle}>Surgeon</label><input style={inputStyle} value={editing.surgeon || ''} onChange={e => set('surgeon', e.target.value)} /></div>
                 <div><label style={labelStyle}>Anesthesiologist</label><input style={inputStyle} value={editing.anesthesiologist || ''} onChange={e => set('anesthesiologist', e.target.value)} /></div>
               </div>
@@ -1474,41 +1478,82 @@ function LiveChart({
           </div>
         </div>
 
-        {/* Right side — Row 1: Patient header spans cols 2-3 */}
+        {/* Right side — Row 1: Patient info stack (no box) */}
         <div className="patient-bar">
-          <PatientField
-            label="Patient Name"
-            value={caseRecord.patient_initials || ''}
-            placeholder="Last name"
-            onCommit={(v) => onUpdateCase({ patient_initials: v || null })}
-          />
-          <PatientField
-            label="MRN"
-            value={caseRecord.case_number || ''}
-            placeholder="—"
-            onCommit={(v) => onUpdateCase({ case_number: v || null })}
-          />
-          <PatientField
-            label="Height (cm)"
-            value={caseRecord.height_cm != null ? String(caseRecord.height_cm) : ''}
-            placeholder="—"
-            numeric
-            onCommit={(v) => onUpdateCase({ height_cm: v === '' ? null : Number(v) })}
-          />
-          <PatientField
-            label="Weight (kg)"
-            value={caseRecord.weight_kg != null ? String(caseRecord.weight_kg) : ''}
-            placeholder="—"
-            numeric
-            onCommit={(v) => onUpdateCase({ weight_kg: v === '' ? null : Number(v) })}
-          />
-          <PatientField
-            label="BSA (m²)"
-            value={caseRecord.bsa != null ? String(caseRecord.bsa) : ''}
-            placeholder="—"
-            numeric
-            onCommit={(v) => onUpdateCase({ bsa: v === '' ? null : Number(v) })}
-          />
+          {/* MRN */}
+          <div className="pb-row">
+            <span className="pb-label">MRN:</span>
+            <InlineEdit
+              value={caseRecord.case_number || ''}
+              placeholder="—"
+              onCommit={(v) => onUpdateCase({ case_number: v || null })}
+            />
+          </div>
+          {/* Last, First */}
+          <div className="pb-row">
+            <InlineEdit
+              className="name"
+              value={caseRecord.patient_initials || ''}
+              placeholder="Last"
+              onCommit={(v) => onUpdateCase({ patient_initials: v || null })}
+            />
+            <span className="pb-comma">,</span>
+            <InlineEdit
+              className="name"
+              value={caseRecord.patient_first_name || ''}
+              placeholder="First"
+              onCommit={(v) => onUpdateCase({ patient_first_name: v || null })}
+            />
+          </div>
+          {/* Ht · Wt · BSA */}
+          <div className="pb-row">
+            <span className="pb-label">Ht:</span>
+            <InlineEdit
+              value={caseRecord.height_cm != null ? String(caseRecord.height_cm) : ''}
+              placeholder="—"
+              numeric
+              onCommit={(v) => onUpdateCase({ height_cm: v === '' ? null : Number(v) })}
+            />
+            <span className="pb-unit">cm</span>
+            <span className="pb-sep">·</span>
+            <span className="pb-label">Wt:</span>
+            <InlineEdit
+              value={caseRecord.weight_kg != null ? String(caseRecord.weight_kg) : ''}
+              placeholder="—"
+              numeric
+              onCommit={(v) => onUpdateCase({ weight_kg: v === '' ? null : Number(v) })}
+            />
+            <span className="pb-unit">kg</span>
+            <span className="pb-sep">·</span>
+            <span className="pb-label">BSA:</span>
+            <InlineEdit
+              value={caseRecord.bsa != null ? String(caseRecord.bsa) : ''}
+              placeholder="—"
+              numeric
+              onCommit={(v) => onUpdateCase({ bsa: v === '' ? null : Number(v) })}
+            />
+            <span className="pb-unit">m²</span>
+          </div>
+          {/* Case Type */}
+          <div className="pb-row">
+            <span className="pb-label">Case Type:</span>
+            <InlineEdit
+              className="flex"
+              value={caseRecord.procedure || ''}
+              placeholder="—"
+              onCommit={(v) => onUpdateCase({ procedure: v || null })}
+            />
+          </div>
+          {/* Allergies */}
+          <div className="pb-row">
+            <span className="pb-label">Allergies:</span>
+            <InlineEdit
+              className="flex"
+              value={caseRecord.allergies || ''}
+              placeholder="None known"
+              onCommit={(v) => onUpdateCase({ allergies: v || null })}
+            />
+          </div>
         </div>
 
         {/* Right side — Row 2: Ventilation bar spans cols 2-3 */}
@@ -1843,31 +1888,28 @@ function EditableRunTime({ value, onCommit }: { value: string; onCommit: (iso: s
   )
 }
 
-function PatientField({
-  label, value, placeholder, numeric, onCommit,
+function InlineEdit({
+  value, placeholder, numeric, className, onCommit,
 }: {
-  label: string
   value: string
   placeholder?: string
   numeric?: boolean
+  className?: string
   onCommit: (v: string) => void
 }) {
   const [v, setV] = useState(value)
   useEffect(() => { setV(value) }, [value])
   return (
-    <div className="patient-field">
-      <span className="patient-field-label">{label}</span>
-      <input
-        className="patient-field-input"
-        type={numeric ? 'number' : 'text'}
-        inputMode={numeric ? 'decimal' : 'text'}
-        value={v}
-        placeholder={placeholder}
-        onChange={e => setV(e.target.value)}
-        onBlur={() => { if (v !== value) onCommit(v) }}
-        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      />
-    </div>
+    <input
+      className={`pb-input${className ? ` ${className}` : ''}`}
+      type={numeric ? 'number' : 'text'}
+      inputMode={numeric ? 'decimal' : 'text'}
+      value={v}
+      placeholder={placeholder}
+      onChange={e => setV(e.target.value)}
+      onBlur={() => { if (v !== value) onCommit(v) }}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+    />
   )
 }
 
