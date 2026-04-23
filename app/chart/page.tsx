@@ -789,10 +789,10 @@ export default function ChartPage() {
         .tl-label { font-weight: 700; color: #e2e8f0; font-size: 0.95rem; letter-spacing: 0.01em; flex-shrink: 0; }
         .tl-sep { color: #475569; font-weight: 500; flex-shrink: 0; user-select: none; }
         .tl-duration {
-          font-size: 0.72rem; font-weight: 700; color: #22c55e;
-          background: rgba(34,197,94,0.1);
-          border: 1px solid rgba(34,197,94,0.25);
-          border-radius: 6px; padding: 2px 7px;
+          font-size: 0.85rem; font-weight: 700; color: #e2e8f0;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 6px; padding: 2px 8px;
           font-variant-numeric: tabular-nums;
           letter-spacing: 0.02em; flex-shrink: 0;
         }
