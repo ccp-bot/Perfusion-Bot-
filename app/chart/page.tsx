@@ -117,6 +117,7 @@ const EVENT_TYPE_STYLES: Record<string, { color: string; icon: string }> = {
   blood: { color: '#ef4444', icon: '🩸' },
   abg: { color: '#eab308', icon: '🧪' },
   note: { color: '#64748b', icon: '📝' },
+  vent: { color: '#06b6d4', icon: '🌬️' },
 }
 
 const COMMON_MEDS = [
@@ -566,6 +567,49 @@ export default function ChartPage() {
         .tl-delete { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #94a3b8; cursor: pointer; font-size: 1rem; padding: 4px 10px; border-radius: 8px; opacity: 0.85; transition: all 0.15s ease; line-height: 1; align-self: center; }
         .tl-delete:hover { opacity: 1; color: #e63946; background: rgba(230,57,70,0.08); border-color: rgba(230,57,70,0.25); }
 
+        /* Sweep / FiO2 sliders (under Extra column) */
+        .vent-card {
+          background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
+          border: 1px solid rgba(255,255,255,0.07);
+          border-radius: 12px;
+          padding: 0.75rem 0.85rem 0.85rem;
+          width: 100%;
+          display: flex; flex-direction: column; gap: 0.9rem;
+        }
+        .vent-row { display: flex; flex-direction: column; gap: 0.45rem; }
+        .vent-head { display: flex; justify-content: space-between; align-items: baseline; }
+        .vent-lbl { font-size: 0.72rem; font-weight: 700; color: #e2e8f0; text-transform: uppercase; letter-spacing: 0.06em; }
+        .vent-unit { font-size: 0.62rem; color: #64748b; font-weight: 600; letter-spacing: 0.06em; }
+        .vent-range {
+          -webkit-appearance: none; appearance: none;
+          width: 100%; height: 6px; border-radius: 3px;
+          background: rgba(255,255,255,0.08);
+          cursor: pointer; outline: none;
+        }
+        .vent-range::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none;
+          width: 20px; height: 20px; border-radius: 50%;
+          background: #06b6d4; cursor: pointer;
+          border: 2px solid #080b12;
+          box-shadow: 0 0 10px rgba(6,182,212,0.4);
+        }
+        .vent-range::-moz-range-thumb {
+          width: 20px; height: 20px; border-radius: 50%;
+          background: #06b6d4; cursor: pointer;
+          border: 2px solid #080b12;
+          box-shadow: 0 0 10px rgba(6,182,212,0.4);
+        }
+        .vent-num {
+          width: 100%; padding: 0.45rem 0.6rem; border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.04);
+          color: #e2e8f0; font-size: 0.92rem; font-weight: 600;
+          font-variant-numeric: tabular-nums;
+          text-align: center; font-family: inherit; outline: none;
+          box-sizing: border-box;
+        }
+        .vent-num:focus { border-color: rgba(6,182,212,0.45); }
+
         /* Timeline event note input */
         .tl-note-input {
           width: 100%; margin-top: 4px;
@@ -949,6 +993,9 @@ function LiveChart({
                     </table>
                   </div>
                 )}
+                {t.key === 'extra' && (
+                  <VentSliders events={events} onLog={onAddEvent} />
+                )}
               </div>
             )
           })}
@@ -1075,6 +1122,103 @@ function EventDetails({ details }: { details: Record<string, unknown> }) {
       {pairs.map(([k, v]) => (
         <span key={k}><span style={{ textTransform: 'capitalize', color: '#94a3b8' }}>{k.replace(/_/g, ' ')}</span> <strong style={{ color: '#cbd5e1' }}>{String(v)}</strong></span>
       ))}
+    </div>
+  )
+}
+
+function VentSliders({
+  events, onLog,
+}: {
+  events: CaseEvent[]
+  onLog: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
+}) {
+  const latestFromEvents = (key: string, fallback: number): number => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const d = events[i].details as Record<string, unknown> | null | undefined
+      if (d && typeof d[key] === 'number') return d[key] as number
+    }
+    return fallback
+  }
+  const initSweep = latestFromEvents('sweep', 0)
+  const initFio2 = latestFromEvents('fio2', 21)
+
+  const [sweep, setSweep] = useState<number>(initSweep)
+  const [fio2, setFio2] = useState<number>(initFio2)
+  useEffect(() => { setSweep(initSweep) }, [initSweep])
+  useEffect(() => { setFio2(initFio2) }, [initFio2])
+
+  const commitSweep = (raw: number) => {
+    if (isNaN(raw)) return
+    const val = Math.max(0, Math.min(11, Math.round(raw * 10) / 10))
+    setSweep(val)
+    if (val !== initSweep) onLog('vent', `Sweep ${val.toFixed(1)} LPM`, { sweep: val })
+  }
+  const commitFio2 = (raw: number) => {
+    if (isNaN(raw)) return
+    const val = Math.max(21, Math.min(100, Math.round(raw)))
+    setFio2(val)
+    if (val !== initFio2) onLog('vent', `FiO2 ${val}%`, { fio2: val })
+  }
+
+  return (
+    <div className="vent-card">
+      <div className="vent-row">
+        <div className="vent-head">
+          <span className="vent-lbl">Sweep</span>
+          <span className="vent-unit">LPM</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={11}
+          step={0.1}
+          value={sweep}
+          onChange={e => setSweep(Number(e.target.value))}
+          onMouseUp={e => commitSweep(Number((e.target as HTMLInputElement).value))}
+          onTouchEnd={e => commitSweep(Number((e.target as HTMLInputElement).value))}
+          className="vent-range"
+        />
+        <input
+          type="number"
+          min={0}
+          max={11}
+          step={0.1}
+          value={sweep}
+          onChange={e => setSweep(e.target.value === '' ? 0 : Number(e.target.value))}
+          onBlur={e => commitSweep(Number(e.target.value))}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+          className="vent-num"
+        />
+      </div>
+
+      <div className="vent-row">
+        <div className="vent-head">
+          <span className="vent-lbl">FiO₂</span>
+          <span className="vent-unit">%</span>
+        </div>
+        <input
+          type="range"
+          min={21}
+          max={100}
+          step={1}
+          value={fio2}
+          onChange={e => setFio2(Number(e.target.value))}
+          onMouseUp={e => commitFio2(Number((e.target as HTMLInputElement).value))}
+          onTouchEnd={e => commitFio2(Number((e.target as HTMLInputElement).value))}
+          className="vent-range"
+        />
+        <input
+          type="number"
+          min={21}
+          max={100}
+          step={1}
+          value={fio2}
+          onChange={e => setFio2(e.target.value === '' ? 21 : Number(e.target.value))}
+          onBlur={e => commitFio2(Number(e.target.value))}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+          className="vent-num"
+        />
+      </div>
     </div>
   )
 }
