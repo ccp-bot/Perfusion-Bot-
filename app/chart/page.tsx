@@ -153,6 +153,15 @@ const DETAIL_KEY_ORDER = [
   'text',
 ]
 
+// Detail keys to hide per event type because they are already in the title.
+// e.g. "Med: Epinephrine" repeats `name`; "PRBC 1u" repeats `product`/`amount`.
+const REDUNDANT_DETAIL_KEYS: Record<string, string[]> = {
+  med: ['name'],
+  blood: ['product', 'amount'],
+  cp: ['type', 'volume', 'route'],
+  vent: ['sweep', 'fio2'],
+}
+
 const COMMON_MEDS = [
   'Epinephrine', 'Norepinephrine', 'Phenylephrine', 'Calcium Chloride',
   'Sodium Bicarbonate', 'Mannitol', 'Lasix (Furosemide)', 'Insulin',
@@ -1433,7 +1442,7 @@ function LiveChart({
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {events.map(e => {
+                {[...events].reverse().map(e => {
                   const typeStyle = EVENT_TYPE_STYLES[e.event_type] || EVENT_TYPE_STYLES.hotkey
                   const labelIcon = e.event_type === 'hotkey' && e.label ? HOTKEY_LABEL_ICONS[e.label] : undefined
                   const displayIcon = labelIcon || typeStyle.icon
@@ -1452,7 +1461,7 @@ function LiveChart({
                           <span className="tl-sep">:</span>
                           <EventNote eventId={e.id} initial={currentNote} onSave={onUpdateEventNote} />
                         </div>
-                        {e.details && <EventDetails details={e.details} />}
+                        {e.details && <EventDetails details={e.details} eventType={e.event_type} />}
                       </div>
                       <button onClick={() => onDeleteEvent(e.id)} className="tl-delete" title="Delete event" aria-label="Delete event">×</button>
                     </div>
@@ -1612,11 +1621,16 @@ function LiveChart({
   )
 }
 
-function EventDetails({ details }: { details: Record<string, unknown> }) {
+function EventDetails({ details, eventType }: { details: Record<string, unknown>; eventType?: string }) {
   // Skip the "note" key — it renders via EventNote inline with the title.
-  // Sort by DETAIL_KEY_ORDER so meds read Name → Dose → Unit (jsonb returns
-  // keys alphabetically).
-  const pairs = Object.entries(details).filter(([k, v]) => k !== 'note' && v !== null && v !== undefined && v !== '')
+  // Also skip keys that are already represented in the event title
+  // (e.g. `name` on a med, `product`/`amount` on a blood event) so the
+  // second line is not redundant. Sort by DETAIL_KEY_ORDER so meds read
+  // Dose → Unit (jsonb returns keys alphabetically).
+  const redundant = eventType ? (REDUNDANT_DETAIL_KEYS[eventType] || []) : []
+  const pairs = Object.entries(details).filter(([k, v]) =>
+    k !== 'note' && !redundant.includes(k) && v !== null && v !== undefined && v !== ''
+  )
   pairs.sort(([a], [b]) => {
     const ai = DETAIL_KEY_ORDER.indexOf(a)
     const bi = DETAIL_KEY_ORDER.indexOf(b)
