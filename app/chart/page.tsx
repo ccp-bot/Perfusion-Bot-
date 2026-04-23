@@ -451,21 +451,22 @@ export default function ChartPage() {
         .live-card-title { font-size: 0.72rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.9rem; text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
         .live-card-title::before { content: ''; width: 3px; height: 14px; background: #e63946; border-radius: 2px; }
 
-        /* Hotkey pills */
-        .hotkey-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.65rem; }
+        /* Hotkey pills — one line */
+        .hotkey-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.55rem; }
         .hotkey-btn {
           position: relative;
-          padding: 1rem 1rem; border-radius: 14px;
+          padding: 0.85rem 0.75rem; border-radius: 14px;
           border: 1px solid rgba(255,255,255,0.08);
           background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
-          color: #e2e8f0; font-size: 0.9rem; font-weight: 600;
+          color: #e2e8f0; font-size: 0.82rem; font-weight: 600;
           cursor: pointer; transition: all 0.18s ease; text-align: center;
-          display: flex; align-items: center; justify-content: center; gap: 10px;
-          font-family: inherit;
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          font-family: inherit; min-width: 0;
         }
         .hotkey-btn:hover { background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)); transform: translateY(-1px); border-color: rgba(255,255,255,0.14); }
         .hotkey-btn:active { transform: translateY(0); }
-        .hotkey-icon { font-size: 1.35rem; line-height: 1; }
+        .hotkey-btn > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hotkey-icon { font-size: 1.25rem; line-height: 1; flex-shrink: 0; }
 
         /* Timer chip base (for static chips — not used by primary anymore) */
         .timer-chip {
@@ -582,23 +583,33 @@ export default function ChartPage() {
         .vent-unit { font-size: 0.62rem; color: #64748b; font-weight: 600; letter-spacing: 0.06em; }
         .vent-range {
           -webkit-appearance: none; appearance: none;
-          width: 100%; height: 6px; border-radius: 3px;
-          background: rgba(255,255,255,0.08);
+          width: 100%; height: 8px; border-radius: 4px;
+          background: linear-gradient(to right,
+            #06b6d4 0%, #06b6d4 var(--pct, 0%),
+            rgba(255,255,255,0.1) var(--pct, 0%), rgba(255,255,255,0.1) 100%);
           cursor: pointer; outline: none;
+          box-shadow: 0 0 12px rgba(6,182,212,0.15);
         }
         .vent-range::-webkit-slider-thumb {
           -webkit-appearance: none; appearance: none;
-          width: 20px; height: 20px; border-radius: 50%;
+          width: 22px; height: 22px; border-radius: 50%;
           background: #06b6d4; cursor: pointer;
-          border: 2px solid #080b12;
-          box-shadow: 0 0 10px rgba(6,182,212,0.4);
+          border: 3px solid #080b12;
+          box-shadow: 0 0 14px rgba(6,182,212,0.6);
         }
         .vent-range::-moz-range-thumb {
-          width: 20px; height: 20px; border-radius: 50%;
+          width: 22px; height: 22px; border-radius: 50%;
           background: #06b6d4; cursor: pointer;
-          border: 2px solid #080b12;
-          box-shadow: 0 0 10px rgba(6,182,212,0.4);
+          border: 3px solid #080b12;
+          box-shadow: 0 0 14px rgba(6,182,212,0.6);
         }
+        .vent-range::-moz-range-track {
+          height: 8px; border-radius: 4px;
+          background: linear-gradient(to right,
+            #06b6d4 0%, #06b6d4 var(--pct, 0%),
+            rgba(255,255,255,0.1) var(--pct, 0%), rgba(255,255,255,0.1) 100%);
+        }
+        .vent-head .vent-current { font-size: 0.78rem; font-weight: 700; color: #06b6d4; font-variant-numeric: tabular-nums; }
         .vent-num {
           width: 100%; padding: 0.45rem 0.6rem; border-radius: 8px;
           border: 1px solid rgba(255,255,255,0.1);
@@ -669,11 +680,12 @@ export default function ChartPage() {
 
         @media (max-width: 900px) {
           .primary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+          .hotkey-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
         }
         @media (max-width: 600px) {
           .chart-header { flex-direction: column !important; align-items: flex-start !important; gap: 0.75rem !important; }
           .chart-grid { grid-template-columns: 1fr 1fr !important; }
-          .hotkey-grid { grid-template-columns: 1fr 1fr !important; }
+          .hotkey-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .primary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .timer-chip-btn { min-height: 82px; padding: 0.85rem 0.75rem; }
           .timer-chip-btn .tc-value { font-size: 1.3rem; }
@@ -1028,7 +1040,6 @@ function LiveChart({
               key={hk.label}
               onClick={() => onHotkey(hk.label)}
               className="hotkey-btn"
-              style={{ borderLeft: `3px solid ${hk.color || '#94a3b8'}` }}
             >
               {hk.icon && <span className="hotkey-icon" style={{ color: hk.color }} aria-hidden>{hk.icon}</span>}
               <span>{hk.label}</span>
@@ -1037,7 +1048,6 @@ function LiveChart({
           <button
             onClick={() => { setActiveForm('note'); setTimeout(() => document.getElementById('quick-note-textarea')?.focus(), 50) }}
             className="hotkey-btn"
-            style={{ borderLeft: '3px solid #a855f7' }}
             type="button"
           >
             <span className="hotkey-icon" style={{ color: '#a855f7' }} aria-hidden>📝</span>
@@ -1160,12 +1170,15 @@ function VentSliders({
     if (val !== initFio2) onLog('vent', `FiO2 ${val}%`, { fio2: val })
   }
 
+  const sweepPct = (Math.max(0, Math.min(11, sweep)) / 11) * 100
+  const fio2Pct = ((Math.max(21, Math.min(100, fio2)) - 21) / (100 - 21)) * 100
+
   return (
     <div className="vent-card">
       <div className="vent-row">
         <div className="vent-head">
           <span className="vent-lbl">Sweep</span>
-          <span className="vent-unit">LPM</span>
+          <span className="vent-current">{sweep.toFixed(1)} <span className="vent-unit">LPM</span></span>
         </div>
         <input
           type="range"
@@ -1177,6 +1190,7 @@ function VentSliders({
           onMouseUp={e => commitSweep(Number((e.target as HTMLInputElement).value))}
           onTouchEnd={e => commitSweep(Number((e.target as HTMLInputElement).value))}
           className="vent-range"
+          style={{ ['--pct' as never]: `${sweepPct}%` }}
         />
         <input
           type="number"
@@ -1194,7 +1208,7 @@ function VentSliders({
       <div className="vent-row">
         <div className="vent-head">
           <span className="vent-lbl">FiO₂</span>
-          <span className="vent-unit">%</span>
+          <span className="vent-current">{fio2}<span className="vent-unit">%</span></span>
         </div>
         <input
           type="range"
@@ -1206,6 +1220,7 @@ function VentSliders({
           onMouseUp={e => commitFio2(Number((e.target as HTMLInputElement).value))}
           onTouchEnd={e => commitFio2(Number((e.target as HTMLInputElement).value))}
           className="vent-range"
+          style={{ ['--pct' as never]: `${fio2Pct}%` }}
         />
         <input
           type="number"
