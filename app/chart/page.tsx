@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { Fragment, useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 
 type CaseRecord = {
@@ -601,18 +601,20 @@ export default function ChartPage() {
           min-width: 110px;
         }
 
-        /* Primary timer chip — tap to toggle */
+        /* Primary timer chip — tap to toggle. Horizontal: [LABEL | value] */
         .timer-chip-btn {
           cursor: pointer; font-family: inherit;
           transition: all 0.18s ease;
-          min-width: 160px; min-height: 92px;
-          padding: 1.1rem 1.3rem;
-          display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-          border-radius: 16px;
+          min-width: 0; min-height: 68px;
+          padding: 0.75rem 1rem;
+          display: flex; flex-direction: row; align-items: center; justify-content: flex-start;
+          gap: 0.95rem;
+          border-radius: 14px;
           background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
           border: 1px solid rgba(255,255,255,0.08);
           color: #e2e8f0;
           position: relative; overflow: hidden;
+          width: 100%; text-align: left;
         }
         .timer-chip-btn::before {
           content: ''; position: absolute; inset: 0; border-radius: inherit;
@@ -621,14 +623,33 @@ export default function ChartPage() {
         }
         .timer-chip-btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.14); }
         .timer-chip-btn:active { transform: translateY(0); }
-        .timer-chip-btn .tc-label { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
-        .timer-chip-btn .tc-value { font-size: 1.65rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-        .timer-chip-btn .tc-value-placeholder { font-size: 0.82rem; font-weight: 500; color: #475569; }
-        .timer-chip-btn .tc-runs { font-size: 0.68rem; color: #94a3b8; font-weight: 500; }
+        .timer-chip-btn .tc-label {
+          font-size: 1.05rem; font-weight: 800; letter-spacing: 0.05em;
+          text-transform: uppercase; color: #cbd5e1;
+          display: flex; align-items: center; gap: 7px;
+          padding-right: 0.95rem;
+          border-right: 2px solid rgba(255,255,255,0.18);
+          line-height: 1; min-width: 58px;
+          transition: color 0.18s ease, border-color 0.18s ease;
+        }
+        .timer-chip-btn .tc-value {
+          font-size: 1.55rem; font-weight: 800; letter-spacing: -0.01em;
+          font-variant-numeric: tabular-nums; line-height: 1;
+          transition: color 0.18s ease;
+        }
+        .timer-chip-btn .tc-value-placeholder {
+          font-size: 0.9rem; font-weight: 500; color: #475569; font-style: italic;
+        }
+        .timer-chip-btn .tc-runs {
+          font-size: 0.6rem; color: #94a3b8; font-weight: 700;
+          letter-spacing: 0.08em; text-transform: uppercase;
+          margin-left: 0.45rem; padding: 2px 6px;
+          border-radius: 999px; background: rgba(255,255,255,0.06);
+        }
 
-        /* Running state: green text + pulsing border ring */
+        /* Running state: green text + divider + pulsing border ring */
         .timer-chip-btn.active .tc-value { color: #22c55e; }
-        .timer-chip-btn.active .tc-label { color: #22c55e; }
+        .timer-chip-btn.active .tc-label { color: #22c55e; border-right-color: rgba(34,197,94,0.45); }
         .timer-chip-btn.active {
           border-color: rgba(34,197,94,0.5) !important;
           animation: chipLivePulse 2.2s ease-in-out infinite;
@@ -651,7 +672,7 @@ export default function ChartPage() {
 
         /* Stopped state — stays neutral light gray */
         .timer-chip-btn.stopped .tc-value { color: #cbd5e1; }
-        .timer-chip-btn.stopped .tc-label { color: #94a3b8; }
+        .timer-chip-btn.stopped .tc-label { color: #94a3b8; border-right-color: rgba(148,163,184,0.2); }
 
         /* Popup timer chips (secondary row) */
         .timer-pop {
@@ -937,44 +958,39 @@ export default function ChartPage() {
         .col-main .live-card:last-child { margin-bottom: 0; }
         .patient-bar { grid-column: 2 / span 2; grid-row: 1; }
         .vent-bar { grid-column: 2 / span 2; grid-row: 2; }
-        .col-timers {
-          grid-column: 2; grid-row: 3;
-          display: flex; flex-direction: column; gap: 0.6rem;
+
+        /* Right side row 3 — timer+log pairs. Each timer chip is immediately
+           followed by its own run-history log table in the adjacent cell. */
+        .timer-rows {
+          grid-column: 2 / span 2; grid-row: 3;
+          display: grid;
+          grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+          gap: 0.55rem 0.6rem;
+          align-content: start;
           position: sticky; top: 1rem;
           min-width: 0;
         }
-        .col-timers .timer-chip-btn {
-          width: 100%; min-width: 0;
-          min-height: 82px; padding: 0.9rem 0.9rem;
-        }
-        .col-timers .timer-chip-btn .tc-value { font-size: 1.45rem; }
-        .col-logs {
-          grid-column: 3; grid-row: 3;
-          display: flex; flex-direction: column; gap: 0.55rem;
-          position: sticky; top: 1rem;
-          min-width: 0;
-        }
-        .col-logs-empty {
-          color: #475569; font-size: 0.78rem; text-align: center;
-          padding: 1.25rem 0.5rem;
-          border: 1px dashed rgba(255,255,255,0.08);
+        /* Cells that span both columns (Extra chip, popup-timer row) */
+        .tr-full { grid-column: 1 / span 2; }
+        /* Compact placeholder shown in the log cell before a timer has any runs */
+        .tr-log-empty {
+          display: flex; align-items: center; justify-content: center;
+          color: #475569; font-size: 0.72rem;
+          padding: 0.5rem 0.7rem;
+          border: 1px dashed rgba(255,255,255,0.06);
           border-radius: 12px;
-          background: rgba(255,255,255,0.015);
+          background: rgba(255,255,255,0.01);
+          font-style: italic;
+          min-width: 0;
         }
-        .popup-col { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.3rem; }
-        .popup-col .timer-pop { width: 100%; min-width: 0; }
+        .popup-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.2rem; }
 
         @media (max-width: 1100px) {
           .main-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
-          .col-main, .patient-bar, .vent-bar, .col-timers, .col-logs {
+          .col-main, .patient-bar, .vent-bar, .timer-rows {
             grid-column: 1; grid-row: auto;
           }
-          .col-timers, .col-logs { position: static; }
-          .col-timers { flex-direction: row; flex-wrap: wrap; }
-          .col-timers .timer-chip-btn { flex: 1 1 160px; }
-          .popup-col { flex-direction: row; flex-wrap: wrap; flex: 1 1 100%; }
-          .col-logs { flex-direction: row; flex-wrap: wrap; }
-          .col-logs .run-table-card { flex: 1 1 240px; }
+          .timer-rows { position: static; }
         }
         @media (max-width: 700px) {
           .patient-bar { grid-template-columns: 1fr 1fr; gap: 0.4rem; }
@@ -1232,8 +1248,6 @@ function LiveChart({
 
   const formatT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
 
-  const logRows = primaryRows.filter(t => (t.data?.runs.length ?? 0) > 0)
-
   return (
     <>
       {/* Main grid — col 1 spans all rows; patient + vent bars span cols 2-3 */}
@@ -1364,57 +1378,38 @@ function LiveChart({
         {/* Right side — Row 2: Ventilation bar spans cols 2-3 */}
         <VentBar events={events} onLog={onAddEvent} />
 
-        {/* Right side — Row 3 Col 2: Primary timers (stacked) + active popup timers */}
-        <div className="col-timers">
+        {/* Right side — Row 3: chip + log pairs (each chip next to its own log) */}
+        <div className="timer-rows">
           {primaryRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
             const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
             const runCount = t.data?.runs.length ?? 0
             const phase = PHASE_COLORS[t.key]
-            return (
+            const isExtra = t.key === 'extra'
+            const hasRuns = (t.data?.runs.length ?? 0) > 0
+
+            const chip = (
               <button
-                key={t.key}
+                key={`${t.key}-chip`}
                 onClick={() => onToggleTimer(t.key)}
-                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
+                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}${isExtra ? ' tr-full' : ''}`}
                 type="button"
                 style={{ ['--phase' as never]: phase }}
               >
-                <div className="tc-label">
+                <span className="tc-label">
                   {running && <span className="pulse-dot" />}
                   {t.label}
-                </div>
-                <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</div>
-                {runCount > 1 && <div className="tc-runs">{runCount} runs</div>}
+                </span>
+                <span className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</span>
+                {runCount > 1 && <span className="tc-runs">{runCount} runs</span>}
               </button>
             )
-          })}
 
-          {activePopupRows.length > 0 && (
-            <div className="popup-col">
-              {activePopupRows.map(t => {
-                const phase = PHASE_COLORS[t.key]
-                const running = t.data?.running ?? false
-                const value = t.data?.min != null ? `${t.data.min} min` : '—'
-                return (
-                  <div key={t.key} className={`timer-pop${running ? ' running' : ''}`} style={{ ['--phase' as never]: phase }}>
-                    <div className="tp-label">{t.label}</div>
-                    <div className="tp-value">{value}</div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+            if (isExtra) return <Fragment key={t.key}>{chip}</Fragment>
 
-        {/* Column 3 — Run-history logs for each timer */}
-        <div className="col-logs">
-          {logRows.length === 0 ? (
-            <div className="col-logs-empty">Timer logs will appear here</div>
-          ) : logRows.map(t => {
-            const phase = PHASE_COLORS[t.key]
-            return (
-              <div key={t.key} className="run-table-card" style={{ ['--phase' as never]: phase }}>
+            const logCell = hasRuns ? (
+              <div key={`${t.key}-log`} className="run-table-card" style={{ ['--phase' as never]: phase }}>
                 <div className="rt-title">
                   <span className="rt-title-dot" />
                   {t.label}
@@ -1460,8 +1455,33 @@ function LiveChart({
                   </tbody>
                 </table>
               </div>
+            ) : (
+              <div key={`${t.key}-log`} className="tr-log-empty">No runs yet</div>
+            )
+
+            return (
+              <Fragment key={t.key}>
+                {chip}
+                {logCell}
+              </Fragment>
             )
           })}
+
+          {activePopupRows.length > 0 && (
+            <div className="tr-full popup-row">
+              {activePopupRows.map(t => {
+                const phase = PHASE_COLORS[t.key]
+                const running = t.data?.running ?? false
+                const value = t.data?.min != null ? `${t.data.min} min` : '—'
+                return (
+                  <div key={t.key} className={`timer-pop${running ? ' running' : ''}`} style={{ ['--phase' as never]: phase }}>
+                    <div className="tp-label">{t.label}</div>
+                    <div className="tp-value">{value}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </>
