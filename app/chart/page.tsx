@@ -840,6 +840,7 @@ export default function ChartPage() {
         .header-clock { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
         .header-clock .hc-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: #64748b; font-weight: 700; }
         .header-clock .hc-value { font-size: 1.05rem; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+        .header-clock .hc-date { font-size: 0.72rem; color: #64748b; font-weight: 500; letter-spacing: 0.02em; margin-top: 2px; }
 
         /* Primary columns: each column = one timer chip + its run table */
         .primary-grid {
@@ -1150,6 +1151,7 @@ export default function ChartPage() {
           {view === 'live' && (
             <div className="header-clock">
               <div className="hc-value">{new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+              <div className="hc-date">{new Date(now).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
             </div>
           )}
         </div>
