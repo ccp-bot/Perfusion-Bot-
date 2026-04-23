@@ -954,16 +954,18 @@ export default function ChartPage() {
         .rt-row-delete:hover { opacity: 1; color: #e63946; border-color: rgba(230,57,70,0.35); background: rgba(230,57,70,0.08); }
         .rt-table th.rt-actions-col, .rt-table td.rt-actions-col { width: 24px; text-align: right !important; padding-right: 0 !important; }
 
-        /* Add-entry tab pill */
+        /* Add-entry tab pill — sized to match .hotkey-btn */
         .entry-tab {
-          padding: 0.55rem 1rem; border-radius: 999px;
-          border: 1px solid rgba(255,255,255,0.1);
-          background: rgba(255,255,255,0.03);
-          color: #94a3b8; font-size: 0.82rem; font-weight: 600; cursor: pointer;
-          font-family: inherit; transition: all 0.15s ease;
-          display: inline-flex; align-items: center; gap: 6px;
+          padding: 0.85rem 0.75rem; border-radius: 14px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+          color: #e2e8f0; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+          font-family: inherit; transition: all 0.18s ease;
+          display: inline-flex; align-items: center; justify-content: center; gap: 8px;
         }
-        .entry-tab:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
+        .entry-tab > span:first-child { font-size: 1.25rem; line-height: 1; flex-shrink: 0; }
+        .entry-tab:hover { background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)); transform: translateY(-1px); border-color: rgba(255,255,255,0.14); }
+        .entry-tab:active { transform: translateY(0); }
         .entry-tab.active { background: #e63946; color: white; border-color: #e63946; box-shadow: 0 0 20px rgba(230,57,70,0.3); }
 
         /* Patient info stack (live mode) — no box outline, stacked rows */
