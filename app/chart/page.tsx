@@ -807,12 +807,9 @@ export default function ChartPage() {
         .tl-label { font-weight: 700; color: #e2e8f0; font-size: 0.95rem; letter-spacing: 0.01em; flex-shrink: 0; }
         .tl-sep { color: #475569; font-weight: 500; flex-shrink: 0; user-select: none; }
         .tl-duration {
-          font-size: 0.85rem; font-weight: 700; color: #e2e8f0;
-          background: rgba(255,255,255,0.06);
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 6px; padding: 2px 8px;
+          font-size: 0.95rem; font-weight: 700; color: #e2e8f0;
           font-variant-numeric: tabular-nums;
-          letter-spacing: 0.02em; flex-shrink: 0;
+          letter-spacing: 0.01em; flex-shrink: 0;
         }
         .tl-details { font-size: 0.75rem; color: #64748b; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 0.6rem; }
         .tl-delete { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #94a3b8; cursor: pointer; font-size: 1rem; padding: 4px 10px; border-radius: 8px; opacity: 0.85; transition: all 0.15s ease; line-height: 1; align-self: center; }
@@ -1565,10 +1562,10 @@ function LiveChart({
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="tl-title-row">
                           <span className="tl-label">{displayEventLabel(e)}</span>
-                          {stopDurations[e.id] != null && (
-                            <span className="tl-duration">{stopDurations[e.id]} min</span>
-                          )}
                           <span className="tl-sep">:</span>
+                          {stopDurations[e.id] != null && (
+                            <span className="tl-duration">{stopDurations[e.id]}min</span>
+                          )}
                           <EventNote eventId={e.id} initial={currentNote} onSave={onUpdateEventNote} />
                         </div>
                         {e.details && <EventDetails details={e.details} eventType={e.event_type} />}
