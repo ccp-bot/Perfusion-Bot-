@@ -1433,7 +1433,7 @@ function LiveChart({
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {[...events].reverse().map(e => {
+                {events.map(e => {
                   const typeStyle = EVENT_TYPE_STYLES[e.event_type] || EVENT_TYPE_STYLES.hotkey
                   const labelIcon = e.event_type === 'hotkey' && e.label ? HOTKEY_LABEL_ICONS[e.label] : undefined
                   const displayIcon = labelIcon || typeStyle.icon
@@ -1442,7 +1442,9 @@ function LiveChart({
                     : ''
                   return (
                     <div key={e.id} className="tl-entry">
-                      <div className="tl-time">{new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      <div className="tl-time">
+                        <EditableRunTime value={e.event_time} onCommit={(iso) => onUpdateEventTime(e.id, iso)} />
+                      </div>
                       <div className="tl-icon" style={{ ['--tl-color' as never]: typeStyle.color }} aria-hidden>{displayIcon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="tl-title-row">
