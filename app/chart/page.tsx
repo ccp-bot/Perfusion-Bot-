@@ -711,7 +711,7 @@ export default function ChartPage() {
         .live-card-title { font-size: 1.15rem; font-weight: 700; color: #e2e8f0; margin-bottom: 1rem; letter-spacing: -0.01em; }
 
         /* Hotkey pills — one line */
-        .hotkey-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.55rem; }
+        .hotkey-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.55rem; }
         .hotkey-btn {
           position: relative;
           padding: 0.85rem 0.75rem; border-radius: 14px;
