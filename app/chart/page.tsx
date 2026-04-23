@@ -181,6 +181,9 @@ export default function ChartPage() {
   const [view, setView] = useState<'list' | 'form' | 'live'>('list')
   const [editing, setEditing] = useState<Partial<CaseRecord>>(EMPTY_CASE)
   const [saving, setSaving] = useState(false)
+  // When true, saving/cancelling the form returns to the live view of the
+  // current live case instead of going to the list.
+  const [editingReturnsToLive, setEditingReturnsToLive] = useState(false)
   const [loading, setLoading] = useState(false)
 
   // Live chart state
@@ -295,7 +298,14 @@ export default function ChartPage() {
       return
     }
     await loadCases()
-    setView('list')
+    if (editingReturnsToLive && data.case) {
+      // Came from the live chart — return to it with fresh case data.
+      setLiveCase(data.case)
+      setView('live')
+      setEditingReturnsToLive(false)
+    } else {
+      setView('list')
+    }
     setEditing(EMPTY_CASE)
   }
 
@@ -338,6 +348,13 @@ export default function ChartPage() {
     setEvents([])
     setView('live')
     await loadEvents(c.id)
+  }
+
+  function openLiveCaseDetails() {
+    if (!liveCase) return
+    setEditing({ ...liveCase })
+    setEditingReturnsToLive(true)
+    setView('form')
   }
 
   async function quickStartCase() {
@@ -959,6 +976,17 @@ export default function ChartPage() {
         .pb-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .pb-input.flex { flex: 1; min-width: 140px; }
         .pb-input.name { width: 150px; }
+        .pb-open-details {
+          background: transparent; border: 1px solid rgba(255,255,255,0.1);
+          color: #94a3b8; font-family: inherit; font-size: 0.72rem;
+          font-weight: 600; letter-spacing: 0.02em;
+          padding: 4px 10px; border-radius: 8px; cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .pb-open-details:hover {
+          color: #e2e8f0; background: rgba(230,57,70,0.08);
+          border-color: rgba(230,57,70,0.35);
+        }
 
         /* Vent bar (stacked Sweep + FiO2 sliders) */
         .vent-bar {
@@ -1129,7 +1157,15 @@ export default function ChartPage() {
         {/* Header */}
         <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <button onClick={() => { if (view === 'live' || view === 'form') { setView('list'); setEditing(EMPTY_CASE); setLiveCase(null) } else { window.location.href = '/' } }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.4rem 0.75rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
+            <button onClick={() => {
+              if (view === 'form' && editingReturnsToLive) {
+                setView('live'); setEditing(EMPTY_CASE); setEditingReturnsToLive(false)
+              } else if (view === 'live' || view === 'form') {
+                setView('list'); setEditing(EMPTY_CASE); setLiveCase(null); setEditingReturnsToLive(false)
+              } else {
+                window.location.href = '/'
+              }
+            }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.4rem 0.75rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
               ← {view === 'list' ? 'Home' : 'Back'}
             </button>
             <div>
@@ -1148,7 +1184,11 @@ export default function ChartPage() {
             </div>
           )}
           {view === 'form' && (
-            <button onClick={() => { setView('list'); setEditing(EMPTY_CASE) }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.6rem 1rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
+            <button onClick={() => {
+              if (editingReturnsToLive) { setView('live'); setEditingReturnsToLive(false) }
+              else setView('list')
+              setEditing(EMPTY_CASE)
+            }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.6rem 1rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
           )}
           {view === 'live' && (
             <div className="header-clock">
@@ -1253,7 +1293,11 @@ export default function ChartPage() {
             </div>
 
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-              <button onClick={() => { setView('list'); setEditing(EMPTY_CASE) }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.7rem 1.25rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
+              <button onClick={() => {
+                if (editingReturnsToLive) { setView('live'); setEditingReturnsToLive(false) }
+                else setView('list')
+                setEditing(EMPTY_CASE)
+              }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.7rem 1.25rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
               <button onClick={saveCase} disabled={saving} style={{ background: saving ? '#2d3748' : '#e63946', border: 'none', color: 'white', padding: '0.7rem 1.5rem', borderRadius: '10px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}>
                 {saving ? 'Saving...' : editing.id ? 'Update Case' : 'Save Case'}
               </button>
@@ -1278,6 +1322,7 @@ export default function ChartPage() {
             onUpdateEventTime={updateEventTime}
             onDeleteRun={deleteRun}
             onUpdateCase={updateCase}
+            onOpenDetails={openLiveCaseDetails}
           />
         )}
       </div>
@@ -1316,7 +1361,7 @@ export default function ChartPage() {
 // ----- Live chart component -----
 
 function LiveChart({
-  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent, onUpdateEventNote, onUpdateEventTime, onDeleteRun, onUpdateCase,
+  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent, onUpdateEventNote, onUpdateEventTime, onDeleteRun, onUpdateCase, onOpenDetails,
 }: {
   caseRecord: CaseRecord
   events: CaseEvent[]
@@ -1344,6 +1389,7 @@ function LiveChart({
   onUpdateEventTime: (id: string, eventTime: string) => Promise<void>
   onDeleteRun: (startId: string, stopId?: string) => Promise<void>
   onUpdateCase: (patches: Partial<CaseRecord>) => Promise<void>
+  onOpenDetails: () => void
 }) {
   type PrimaryKey = TimerKey
 
@@ -1553,6 +1599,12 @@ function LiveChart({
               placeholder="None known"
               onCommit={(v) => onUpdateCase({ allergies: v || null })}
             />
+          </div>
+          {/* Open full case details (opens the New Case form pre-filled) */}
+          <div className="pb-row" style={{ marginTop: '0.2rem' }}>
+            <button type="button" className="pb-open-details" onClick={onOpenDetails}>
+              Open full case details →
+            </button>
           </div>
         </div>
 
