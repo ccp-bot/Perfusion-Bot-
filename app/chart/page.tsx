@@ -1372,14 +1372,6 @@ export default function ChartPage() {
               inputStyle={inputStyle}
             />
 
-            <div style={sectionStyle}>
-              <div style={sectionTitle}>Heparin / Protamine</div>
-              <div className="chart-grid">
-                <div><label style={labelStyle}>Heparin Total (units)</label><input style={inputStyle} type="number" value={editing.heparin_total_units ?? ''} onChange={e => set('heparin_total_units', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Protamine (mg)</label><input style={inputStyle} type="number" value={editing.protamine_mg ?? ''} onChange={e => set('protamine_mg', e.target.value === '' ? null : Number(e.target.value))} /></div>
-              </div>
-            </div>
-
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button onClick={() => {
                 if (editingReturnsToLive) { setView('live'); setEditingReturnsToLive(false) }
