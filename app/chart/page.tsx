@@ -110,7 +110,7 @@ const PHASE_COLORS: Record<string, string> = {
 }
 
 const EVENT_TYPE_STYLES: Record<string, { color: string; icon: string }> = {
-  hotkey: { color: '#94a3b8', icon: '●' },
+  hotkey: { color: '#94a3b8', icon: '⏱️' },
   vitals: { color: '#22c55e', icon: '📊' },
   med: { color: '#a855f7', icon: '💊' },
   cp: { color: '#ec4899', icon: '❤️' },
@@ -119,6 +119,26 @@ const EVENT_TYPE_STYLES: Record<string, { color: string; icon: string }> = {
   note: { color: '#64748b', icon: '📝' },
   vent: { color: '#06b6d4', icon: '🌬️' },
 }
+
+// Label-specific icon overrides for hotkey-type events (so Cooling/Rewarming
+// use their own pictograms instead of the generic stopwatch).
+const HOTKEY_LABEL_ICONS: Record<string, string> = {
+  'Cooling': '❄️',
+  'Rewarming': '🔥',
+  'Flow down per SN': '⬇️',
+  'Flow up per SN': '⬆️',
+  'Weaning from CPB': '📉',
+}
+
+// Preferred display order for event detail keys; unknown keys fall to the end.
+const DETAIL_KEY_ORDER = [
+  'name', 'dose', 'unit',
+  'type', 'volume', 'route', 'temp',
+  'product', 'amount',
+  'map', 'cvp', 'flow', 'temp_blood', 'temp_bladder', 'svo2', 'hct', 'act', 'fio2', 'sweep', 'urine',
+  'ph', 'pco2', 'po2', 'hco3', 'be', 'k', 'ica', 'hgb', 'glucose', 'lactate',
+  'text',
+]
 
 const COMMON_MEDS = [
   'Epinephrine', 'Norepinephrine', 'Phenylephrine', 'Calcium Chloride',
@@ -1278,13 +1298,15 @@ function LiveChart({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {[...events].reverse().map(e => {
                   const typeStyle = EVENT_TYPE_STYLES[e.event_type] || EVENT_TYPE_STYLES.hotkey
+                  const labelIcon = e.event_type === 'hotkey' && e.label ? HOTKEY_LABEL_ICONS[e.label] : undefined
+                  const displayIcon = labelIcon || typeStyle.icon
                   const currentNote = (e.details && typeof e.details === 'object' && typeof (e.details as Record<string, unknown>).note === 'string')
                     ? ((e.details as Record<string, unknown>).note as string)
                     : ''
                   return (
                     <div key={e.id} className="tl-entry">
                       <div className="tl-time">{new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                      <div className="tl-icon" style={{ ['--tl-color' as never]: typeStyle.color }} aria-hidden>{typeStyle.icon}</div>
+                      <div className="tl-icon" style={{ ['--tl-color' as never]: typeStyle.color }} aria-hidden>{displayIcon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="tl-title-row">
                           <span className="tl-label">{e.label}</span>
@@ -1447,8 +1469,18 @@ function LiveChart({
 }
 
 function EventDetails({ details }: { details: Record<string, unknown> }) {
-  // Skip the "note" key — it renders via EventNote below
+  // Skip the "note" key — it renders via EventNote inline with the title.
+  // Sort by DETAIL_KEY_ORDER so meds read Name → Dose → Unit (jsonb returns
+  // keys alphabetically).
   const pairs = Object.entries(details).filter(([k, v]) => k !== 'note' && v !== null && v !== undefined && v !== '')
+  pairs.sort(([a], [b]) => {
+    const ai = DETAIL_KEY_ORDER.indexOf(a)
+    const bi = DETAIL_KEY_ORDER.indexOf(b)
+    if (ai === -1 && bi === -1) return a.localeCompare(b)
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  })
   if (pairs.length === 0) return null
   return (
     <div className="tl-details">
