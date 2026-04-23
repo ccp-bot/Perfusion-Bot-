@@ -79,21 +79,32 @@ const EMPTY_CASE: Partial<CaseRecord> = {
   uf_volume_ml: null, urine_output_ml: null, notes: '', complications: '',
 }
 
-const HOTKEYS: { label: string; color?: string; icon?: string }[] = [
+type TimerKey = 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra' | 'rcp' | 'muf'
+
+const HOTKEYS: { label: string; color?: string; icon?: string; timerKey?: TimerKey }[] = [
+  // Single-shot quick events
   { label: 'Cooling', color: '#3b82f6', icon: '❄️' },
   { label: 'Rewarming', color: '#ef4444', icon: '🔥' },
   { label: 'Flow down per SN', color: '#64748b', icon: '⬇️' },
   { label: 'Flow up per SN', color: '#64748b', icon: '⬆️' },
   { label: 'Weaning from CPB', color: '#eab308', icon: '📉' },
+  // Timer-toggle quick events — start/stop a run every tap, show a chip + log
+  { label: 'DHCA', color: '#22c55e', icon: '⏱️', timerKey: 'dhca' },
+  { label: 'SACP', color: '#22c55e', icon: '⏱️', timerKey: 'sacp' },
+  { label: 'RCP', color: '#22c55e', icon: '⏱️', timerKey: 'rcp' },
+  { label: 'MUF', color: '#22c55e', icon: '⏱️', timerKey: 'muf' },
+  { label: 'Extra', color: '#22c55e', icon: '⏱️', timerKey: 'extra' },
 ]
 
 // Labels logged when a primary timer chip is tapped to start/stop.
-const PRIMARY_TIMER_LABELS: Record<'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra', { start: string; stop: string }> = {
+const PRIMARY_TIMER_LABELS: Record<TimerKey, { start: string; stop: string }> = {
   cpb: { start: 'On Bypass', stop: 'Off Bypass' },
   xclamp: { start: 'Aortic Clamp On', stop: 'Aortic Clamp Off' },
   dhca: { start: 'DHCA Start', stop: 'DHCA Stop' },
   sacp: { start: 'SACP Start', stop: 'SACP Stop' },
   extra: { start: 'Extra Start', stop: 'Extra Stop' },
+  rcp: { start: 'RCP Start', stop: 'RCP Stop' },
+  muf: { start: 'MUF Start', stop: 'MUF Stop' },
 }
 
 // Primary timers are uniformly green when running; popup timers keep distinct text colors.
@@ -103,6 +114,8 @@ const PHASE_COLORS: Record<string, string> = {
   dhca: '#22c55e',
   sacp: '#22c55e',
   extra: '#22c55e',
+  rcp: '#22c55e',
+  muf: '#22c55e',
   cp: '#eab308',         // cardioplegia timer: yellow
   reperfusion: '#f97316', // orange
   cooling: '#3b82f6',     // blue
@@ -353,15 +366,15 @@ export default function ChartPage() {
     }
   }
 
-  async function toggleTimer(which: 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra') {
+  async function toggleTimer(which: TimerKey) {
     const labels = PRIMARY_TIMER_LABELS[which]
     const running = timers[which]?.running ?? false
     await logEvent('hotkey', running ? labels.stop : labels.start)
 
     // Coming off bypass stops everything: close out any other running primary
-    // timers so they don't keep counting past CPB end.
+    // or quick-event timer so nothing keeps counting past CPB end.
     if (which === 'cpb' && running) {
-      const others: Array<'xclamp' | 'dhca' | 'sacp' | 'extra'> = ['xclamp', 'dhca', 'sacp', 'extra']
+      const others: Array<Exclude<TimerKey, 'cpb'>> = ['xclamp', 'dhca', 'sacp', 'extra', 'rcp', 'muf']
       for (const o of others) {
         if (timers[o]?.running) {
           await logEvent('hotkey', PRIMARY_TIMER_LABELS[o].stop)
@@ -483,6 +496,8 @@ export default function ChartPage() {
     const dhca = computePhase('DHCA Start', 'DHCA Stop')
     const sacp = computePhase('SACP Start', 'SACP Stop')
     const extra = computePhase('Extra Start', 'Extra Stop')
+    const rcp = computePhase('RCP Start', 'RCP Stop')
+    const muf = computePhase('MUF Start', 'MUF Stop')
 
     // CP Timer: since most recent CP dose event
     const latestCp = [...events].reverse().find(e => e.event_type === 'cp')?.event_time
@@ -501,7 +516,7 @@ export default function ChartPage() {
     const rewarmingStop = findNextAfter('Cooling', latestRewarming)
     const rewarming = makeTimer(latestRewarming, rewarmingStop)
 
-    return { cpb, xclamp, cp, reperfusion, cooling, rewarming, sacp, dhca, extra }
+    return { cpb, xclamp, cp, reperfusion, cooling, rewarming, sacp, dhca, extra, rcp, muf }
   }, [events, now])
 
   const inputStyle: React.CSSProperties = {
@@ -602,6 +617,14 @@ export default function ChartPage() {
         .hotkey-btn:active { transform: translateY(0); }
         .hotkey-btn > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .hotkey-icon { font-size: 1.25rem; line-height: 1; flex-shrink: 0; }
+        /* Quick Event timer button — running state */
+        .hotkey-btn.hotkey-active {
+          border-color: rgba(34,197,94,0.55);
+          background: linear-gradient(180deg, rgba(34,197,94,0.1), rgba(34,197,94,0.03));
+          color: #22c55e;
+          box-shadow: 0 0 0 1px rgba(34,197,94,0.25), 0 0 16px rgba(34,197,94,0.12);
+        }
+        .hotkey-btn.hotkey-active:hover { background: linear-gradient(180deg, rgba(34,197,94,0.14), rgba(34,197,94,0.05)); }
 
         /* Timer chip base (for static chips — not used by primary anymore) */
         .timer-chip {
@@ -678,7 +701,9 @@ export default function ChartPage() {
           100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
         }
 
-        /* Stopped state — stays neutral light gray */
+        /* Stopped state — shadowed so completed runs recede visually */
+        .timer-chip-btn.stopped { opacity: 0.62; }
+        .timer-chip-btn.stopped:hover { opacity: 1; }
         .timer-chip-btn.stopped .tc-value { color: #cbd5e1; }
         .timer-chip-btn.stopped .tc-label { color: #94a3b8; border-right-color: rgba(148,163,184,0.2); }
 
@@ -1224,12 +1249,14 @@ function LiveChart({
     sacp: PhaseData | null
     dhca: PhaseData | null
     extra: PhaseData | null
+    rcp: PhaseData | null
+    muf: PhaseData | null
   }
   now: number
   activeForm: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null
   setActiveForm: (f: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null) => void
   onHotkey: (label: string) => void
-  onToggleTimer: (which: 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra') => Promise<void>
+  onToggleTimer: (which: TimerKey) => Promise<void>
   onAddEvent: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
   onDeleteEvent: (id: string) => Promise<void>
   onUpdateEventNote: (id: string, note: string) => Promise<void>
@@ -1237,14 +1264,28 @@ function LiveChart({
   onDeleteRun: (startId: string, stopId?: string) => Promise<void>
   onUpdateCase: (patches: Partial<CaseRecord>) => Promise<void>
 }) {
-  type PrimaryKey = 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra'
-  const primaryRows: { key: PrimaryKey; label: string; data: PhaseData | null }[] = [
+  type PrimaryKey = TimerKey
+  // Always pinned at the top of the timer column.
+  const pinnedRows: { key: PrimaryKey; label: string; data: PhaseData | null }[] = [
     { key: 'cpb', label: 'CPB', data: timers.cpb },
     { key: 'xclamp', label: 'X-Clamp', data: timers.xclamp },
-    { key: 'dhca', label: 'DHCA', data: timers.dhca },
-    { key: 'sacp', label: 'SACP', data: timers.sacp },
-    { key: 'extra', label: 'Extra', data: timers.extra },
   ]
+  // Quick-event timers only appear once started; running ones float above
+  // stopped ones so the caller always sees active timers first.
+  const quickRows = ([
+    { key: 'dhca' as PrimaryKey, label: 'DHCA', data: timers.dhca },
+    { key: 'sacp' as PrimaryKey, label: 'SACP', data: timers.sacp },
+    { key: 'rcp' as PrimaryKey, label: 'RCP', data: timers.rcp },
+    { key: 'muf' as PrimaryKey, label: 'MUF', data: timers.muf },
+    { key: 'extra' as PrimaryKey, label: 'Extra', data: timers.extra },
+  ])
+    .filter(r => r.data != null)
+    .sort((a, b) => {
+      const ar = a.data?.running ? 1 : 0
+      const br = b.data?.running ? 1 : 0
+      return br - ar
+    })
+  const primaryRows = [...pinnedRows, ...quickRows]
 
   const popupRows: { key: string; label: string; data: { running: boolean; min: number } | null }[] = [
     { key: 'cp', label: 'CP Timer', data: timers.cp },
@@ -1265,12 +1306,21 @@ function LiveChart({
           <div className="live-card">
             <div className="live-card-title">Quick Events</div>
             <div className="hotkey-grid">
-              {HOTKEYS.map(hk => (
-                <button key={hk.label} onClick={() => onHotkey(hk.label)} className="hotkey-btn">
-                  {hk.icon && <span className="hotkey-icon" style={{ color: hk.color }} aria-hidden>{hk.icon}</span>}
-                  <span>{hk.label}</span>
-                </button>
-              ))}
+              {HOTKEYS.map(hk => {
+                const running = hk.timerKey ? timers[hk.timerKey]?.running : false
+                return (
+                  <button
+                    key={hk.label}
+                    onClick={() => hk.timerKey ? onToggleTimer(hk.timerKey) : onHotkey(hk.label)}
+                    className={`hotkey-btn${running ? ' hotkey-active' : ''}`}
+                    type="button"
+                  >
+                    {running && <span className="pulse-dot" style={{ marginRight: '2px' }} />}
+                    {hk.icon && <span className="hotkey-icon" style={{ color: hk.color }} aria-hidden>{hk.icon}</span>}
+                    <span>{hk.label}</span>
+                  </button>
+                )
+              })}
               <button
                 onClick={() => { setActiveForm('note'); setTimeout(() => document.getElementById('quick-note-textarea')?.focus(), 50) }}
                 className="hotkey-btn"
