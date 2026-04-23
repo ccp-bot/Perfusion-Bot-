@@ -1265,35 +1265,41 @@ function LiveChart({
   onUpdateCase: (patches: Partial<CaseRecord>) => Promise<void>
 }) {
   type PrimaryKey = TimerKey
-  // Always pinned at the top of the timer column.
+  // Unified row shape for the timer column. Phase rows (CPB, X-Clamp, quick
+  // timers) carry a PhaseData with runs for the log table. Popup rows (CP,
+  // Reperfusion, Cooling, Rewarming) are derived from events and have no
+  // editable run history, so they render as a chip only.
+  type TimerRow =
+    | { kind: 'phase'; key: PrimaryKey; label: string; data: PhaseData; running: boolean; totalMin: number; phaseColor: string }
+    | { kind: 'popup'; key: string; label: string; data: { running: boolean; min: number }; running: boolean; totalMin: number; phaseColor: string }
+
+  const phaseRow = (key: PrimaryKey, label: string, d: PhaseData | null): TimerRow | null =>
+    d ? { kind: 'phase', key, label, data: d, running: d.running, totalMin: d.totalMin, phaseColor: PHASE_COLORS[key] } : null
+  const popupRow = (key: string, label: string, d: { running: boolean; min: number } | null): TimerRow | null =>
+    d ? { kind: 'popup', key, label, data: d, running: d.running, totalMin: d.min, phaseColor: PHASE_COLORS[key] } : null
+
+  // Pinned primary timers: chips always render, log only once there are runs.
   const pinnedRows: { key: PrimaryKey; label: string; data: PhaseData | null }[] = [
     { key: 'cpb', label: 'CPB', data: timers.cpb },
     { key: 'xclamp', label: 'X-Clamp', data: timers.xclamp },
   ]
-  // Quick-event timers only appear once started; running ones float above
-  // stopped ones so the caller always sees active timers first.
-  const quickRows = ([
-    { key: 'dhca' as PrimaryKey, label: 'DHCA', data: timers.dhca },
-    { key: 'sacp' as PrimaryKey, label: 'SACP', data: timers.sacp },
-    { key: 'rcp' as PrimaryKey, label: 'RCP', data: timers.rcp },
-    { key: 'muf' as PrimaryKey, label: 'MUF', data: timers.muf },
-    { key: 'extra' as PrimaryKey, label: 'Extra', data: timers.extra },
-  ])
-    .filter(r => r.data != null)
-    .sort((a, b) => {
-      const ar = a.data?.running ? 1 : 0
-      const br = b.data?.running ? 1 : 0
-      return br - ar
-    })
-  const primaryRows = [...pinnedRows, ...quickRows]
 
-  const popupRows: { key: string; label: string; data: { running: boolean; min: number } | null }[] = [
-    { key: 'cp', label: 'CP Timer', data: timers.cp },
-    { key: 'reperfusion', label: 'Reperfusion', data: timers.reperfusion },
-    { key: 'cooling', label: 'Cooling', data: timers.cooling },
-    { key: 'rewarming', label: 'Rewarming', data: timers.rewarming },
+  // Everything else — quick-event timers AND the derived popup timers — is
+  // lazy (only shows once there is data) and is sorted so running ones float
+  // above stopped ones.
+  const extraRows: TimerRow[] = [
+    phaseRow('dhca', 'DHCA', timers.dhca),
+    phaseRow('sacp', 'SACP', timers.sacp),
+    phaseRow('rcp', 'RCP', timers.rcp),
+    phaseRow('muf', 'MUF', timers.muf),
+    phaseRow('extra', 'Extra', timers.extra),
+    popupRow('cp', 'CP Timer', timers.cp),
+    popupRow('reperfusion', 'Reperfusion', timers.reperfusion),
+    popupRow('cooling', 'Cooling', timers.cooling),
+    popupRow('rewarming', 'Rewarming', timers.rewarming),
   ]
-  const activePopupRows = popupRows.filter(p => p.data)
+    .filter((r): r is TimerRow => r != null)
+    .sort((a, b) => (b.running ? 1 : 0) - (a.running ? 1 : 0))
 
   const formatT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
 
@@ -1436,105 +1442,101 @@ function LiveChart({
         {/* Right side — Row 2: Ventilation bar spans cols 2-3 */}
         <VentBar events={events} onLog={onAddEvent} />
 
-        {/* Right side — Row 3: chip + log pairs (each chip next to its own log) */}
+        {/* Right side — Row 3: chip + log pairs (each chip next to its own log).
+            Pinned timers always render. Everything else lazy-renders once it
+            has data, with running timers floating above stopped ones. Popup
+            timers (CP / Reperfusion / Cooling / Rewarming) are derived and
+            have no editable log, so they render as a single chip spanning
+            both columns. */}
         <div className="timer-rows">
-          {primaryRows.map(t => {
+          {pinnedRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
             const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
             const phase = PHASE_COLORS[t.key]
             const hasRuns = (t.data?.runs.length ?? 0) > 0
+            return (
+              <Fragment key={t.key}>
+                <button
+                  onClick={() => onToggleTimer(t.key)}
+                  className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
+                  type="button"
+                  style={{ ['--phase' as never]: phase }}
+                >
+                  <span className="tc-label">
+                    {running && <span className="pulse-dot" />}
+                    {t.label}
+                  </span>
+                  <span className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</span>
+                </button>
+                {hasRuns ? (
+                  <PhaseLogCard
+                    label={t.label}
+                    phase={phase}
+                    data={t.data!}
+                    onUpdateEventTime={onUpdateEventTime}
+                    onDeleteRun={onDeleteRun}
+                    formatT={formatT}
+                  />
+                ) : (
+                  <div className="tr-log-empty">No runs yet</div>
+                )}
+              </Fragment>
+            )
+          })}
 
-            const chip = (
-              <button
-                key={`${t.key}-chip`}
-                onClick={() => onToggleTimer(t.key)}
-                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
-                type="button"
-                style={{ ['--phase' as never]: phase }}
+          {extraRows.map(t => {
+            if (t.kind === 'phase') {
+              const running = t.running
+              const value = `${t.totalMin} min`
+              const hasRuns = t.data.runs.length > 0
+              return (
+                <Fragment key={t.key}>
+                  <button
+                    onClick={() => onToggleTimer(t.key as TimerKey)}
+                    className={`timer-chip-btn${running ? ' active' : ''}${!running ? ' stopped' : ''}`}
+                    type="button"
+                    style={{ ['--phase' as never]: t.phaseColor }}
+                  >
+                    <span className="tc-label">
+                      {running && <span className="pulse-dot" />}
+                      {t.label}
+                    </span>
+                    <span className="tc-value">{value}</span>
+                  </button>
+                  {hasRuns ? (
+                    <PhaseLogCard
+                      label={t.label}
+                      phase={t.phaseColor}
+                      data={t.data}
+                      onUpdateEventTime={onUpdateEventTime}
+                      onDeleteRun={onDeleteRun}
+                      formatT={formatT}
+                    />
+                  ) : (
+                    <div className="tr-log-empty">No runs yet</div>
+                  )}
+                </Fragment>
+              )
+            }
+            // Popup row — read-only chip spanning both columns (no log).
+            const running = t.running
+            const value = `${t.totalMin} min`
+            return (
+              <div
+                key={t.key}
+                className={`timer-chip-btn tr-full${running ? ' active' : ' stopped'}`}
+                style={{ ['--phase' as never]: t.phaseColor, cursor: 'default' }}
+                aria-label={`${t.label} timer`}
               >
                 <span className="tc-label">
                   {running && <span className="pulse-dot" />}
                   {t.label}
                 </span>
-                <span className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</span>
-              </button>
-            )
-
-            const logCell = hasRuns ? (
-              <div key={`${t.key}-log`} className="run-table-card" style={{ ['--phase' as never]: phase }}>
-                <div className="rt-title">
-                  <span className="rt-title-dot" />
-                  {t.label}
-                </div>
-                <table className="rt-table">
-                  <thead>
-                    <tr>
-                      <th>Start</th>
-                      <th>Stop</th>
-                      <th>Duration</th>
-                      <th className="rt-actions-col" aria-label="Delete" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {t.data!.runs.map((r, i) => (
-                      <tr key={r.startId || i}>
-                        <td>
-                          <EditableRunTime value={r.start} onCommit={(iso) => onUpdateEventTime(r.startId, iso)} />
-                        </td>
-                        <td>
-                          {r.stop && r.stopId ? (
-                            <EditableRunTime value={r.stop} onCommit={(iso) => onUpdateEventTime(r.stopId!, iso)} />
-                          ) : (
-                            <span style={{ color: '#475569' }}>—</span>
-                          )}
-                        </td>
-                        <td>{r.min}m{!r.stop && <span className="rt-active">●</span>}</td>
-                        <td className="rt-actions-col">
-                          <button
-                            className="rt-row-delete"
-                            onClick={() => onDeleteRun(r.startId, r.stopId)}
-                            title="Delete this run"
-                            aria-label="Delete run"
-                            type="button"
-                          >×</button>
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="rt-total">
-                      <td colSpan={2}>Total</td>
-                      <td colSpan={2}>{t.data!.totalMin}m</td>
-                    </tr>
-                  </tbody>
-                </table>
+                <span className="tc-value">{value}</span>
               </div>
-            ) : (
-              <div key={`${t.key}-log`} className="tr-log-empty">No runs yet</div>
-            )
-
-            return (
-              <Fragment key={t.key}>
-                {chip}
-                {logCell}
-              </Fragment>
             )
           })}
-
-          {activePopupRows.length > 0 && (
-            <div className="tr-full popup-row">
-              {activePopupRows.map(t => {
-                const phase = PHASE_COLORS[t.key]
-                const running = t.data?.running ?? false
-                const value = t.data?.min != null ? `${t.data.min} min` : '—'
-                return (
-                  <div key={t.key} className={`timer-pop${running ? ' running' : ''}`} style={{ ['--phase' as never]: phase }}>
-                    <div className="tp-label">{t.label}</div>
-                    <div className="tp-value">{value}</div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
       </div>
     </>
@@ -1656,6 +1658,68 @@ function VentBar({
     </div>
   )
 }
+
+function PhaseLogCard({
+  label, phase, data, onUpdateEventTime, onDeleteRun, formatT,
+}: {
+  label: string
+  phase: string
+  data: PhaseData
+  onUpdateEventTime: (id: string, iso: string) => Promise<void>
+  onDeleteRun: (startId: string, stopId?: string) => Promise<void>
+  formatT: (iso?: string) => string
+}) {
+  return (
+    <div className="run-table-card" style={{ ['--phase' as never]: phase }}>
+      <div className="rt-title">
+        <span className="rt-title-dot" />
+        {label}
+      </div>
+      <table className="rt-table">
+        <thead>
+          <tr>
+            <th>Start</th>
+            <th>Stop</th>
+            <th>Duration</th>
+            <th className="rt-actions-col" aria-label="Delete" />
+          </tr>
+        </thead>
+        <tbody>
+          {data.runs.map((r, i) => (
+            <tr key={r.startId || i}>
+              <td>
+                <EditableRunTime value={r.start} onCommit={(iso) => onUpdateEventTime(r.startId, iso)} />
+              </td>
+              <td>
+                {r.stop && r.stopId ? (
+                  <EditableRunTime value={r.stop} onCommit={(iso) => onUpdateEventTime(r.stopId!, iso)} />
+                ) : (
+                  <span style={{ color: '#475569' }}>—</span>
+                )}
+              </td>
+              <td>{r.min}m{!r.stop && <span className="rt-active">●</span>}</td>
+              <td className="rt-actions-col">
+                <button
+                  className="rt-row-delete"
+                  onClick={() => onDeleteRun(r.startId, r.stopId)}
+                  title="Delete this run"
+                  aria-label="Delete run"
+                  type="button"
+                >×</button>
+              </td>
+            </tr>
+          ))}
+          <tr className="rt-total">
+            <td colSpan={2}>Total</td>
+            <td colSpan={2}>{data.totalMin}m</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// formatT is used by both PhaseLogCard (via prop) and inline renderers.
 
 function EditableRunTime({ value, onCommit }: { value: string; onCommit: (iso: string) => void }) {
   const [editing, setEditing] = useState(false)
