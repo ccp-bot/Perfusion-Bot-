@@ -357,6 +357,17 @@ export default function ChartPage() {
     const labels = PRIMARY_TIMER_LABELS[which]
     const running = timers[which]?.running ?? false
     await logEvent('hotkey', running ? labels.stop : labels.start)
+
+    // Coming off bypass stops everything: close out any other running primary
+    // timers so they don't keep counting past CPB end.
+    if (which === 'cpb' && running) {
+      const others: Array<'xclamp' | 'dhca' | 'sacp' | 'extra'> = ['xclamp', 'dhca', 'sacp', 'extra']
+      for (const o of others) {
+        if (timers[o]?.running) {
+          await logEvent('hotkey', PRIMARY_TIMER_LABELS[o].stop)
+        }
+      }
+    }
   }
 
   async function deleteEvent(id: string) {
