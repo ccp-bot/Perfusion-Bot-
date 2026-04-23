@@ -198,6 +198,27 @@ const CP_ROUTES = ['Antegrade', 'Retrograde', 'Ostial', 'Aortic Root']
 const BLOOD_PRODUCTS = ['PRBC', 'FFP', 'Platelets', 'Cryo', 'Cell Saver']
 const VOLUME_FLUIDS = ['Normosol', 'Plasmalyte', 'Albumin', '0.9% Normal Saline', '0.45% Half Normal Saline', 'Lactated Ringers']
 
+// Mosteller BSA: sqrt((height_cm × weight_kg) / 3600). Returns null until
+// both values are present and positive.
+function mostellerBSA(height: number | null | undefined, weight: number | null | undefined): number | null {
+  if (!height || !weight || height <= 0 || weight <= 0) return null
+  return Math.round(Math.sqrt((height * weight) / 3600) * 100) / 100
+}
+
+// On-pump dilutional HCT: pre_hct × PBV / (PBV + prime). PBV uses sex-based
+// mL/kg (M:75, F:65, else 70). Returns null until pre_hct, prime, and
+// weight are all present.
+function postDilutionalHct(c: Partial<CaseRecord>): number | null {
+  const pre = c.pre_hct
+  const prime = c.prime_volume_ml
+  const weight = c.weight_kg
+  if (pre == null || prime == null || weight == null) return null
+  if (pre <= 0 || prime < 0 || weight <= 0) return null
+  const mlPerKg = c.sex === 'M' ? 75 : c.sex === 'F' ? 65 : 70
+  const pbv = weight * mlPerKg
+  return Math.round((pre * pbv) / (pbv + prime) * 10) / 10
+}
+
 // Render the timeline label from details when we can produce a nicer format
 // than the stored label (applies retroactively to historical events).
 function displayEventLabel(e: CaseEvent): string {
@@ -542,6 +563,21 @@ export default function ChartPage() {
 
   function set<K extends keyof CaseRecord>(key: K, value: CaseRecord[K]) {
     setEditing(prev => ({ ...prev, [key]: value }))
+  }
+
+  // Height/weight edits cascade into BSA (Mosteller) so the user doesn't have
+  // to recalc by hand. A manually typed BSA stays put until H or W changes.
+  function updateHeight(h: number | null) {
+    setEditing(prev => {
+      const w = prev.weight_kg ?? null
+      return { ...prev, height_cm: h, bsa: mostellerBSA(h, w) ?? prev.bsa }
+    })
+  }
+  function updateWeight(w: number | null) {
+    setEditing(prev => {
+      const h = prev.height_cm ?? null
+      return { ...prev, weight_kg: w, bsa: mostellerBSA(h, w) ?? prev.bsa }
+    })
   }
 
   // Derive all phase timers from events. All timers freeze when Off Bypass is clicked.
@@ -1352,9 +1388,20 @@ export default function ChartPage() {
                     <option value="">—</option><option value="M">M</option><option value="F">F</option><option value="O">Other</option>
                   </select>
                 </div>
-                <div><label style={labelStyle}>Weight (kg)</label><input style={inputStyle} type="number" step="0.1" value={editing.weight_kg ?? ''} onChange={e => set('weight_kg', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Height (cm)</label><input style={inputStyle} type="number" step="0.1" value={editing.height_cm ?? ''} onChange={e => set('height_cm', e.target.value === '' ? null : Number(e.target.value))} /></div>
+                <div><label style={labelStyle}>Weight (kg)</label><input style={inputStyle} type="number" step="0.1" value={editing.weight_kg ?? ''} onChange={e => updateWeight(e.target.value === '' ? null : Number(e.target.value))} /></div>
+                <div><label style={labelStyle}>Height (cm)</label><input style={inputStyle} type="number" step="0.1" value={editing.height_cm ?? ''} onChange={e => updateHeight(e.target.value === '' ? null : Number(e.target.value))} /></div>
                 <div><label style={labelStyle}>BSA (m²)</label><input style={inputStyle} type="number" step="0.01" value={editing.bsa ?? ''} onChange={e => set('bsa', e.target.value === '' ? null : Number(e.target.value))} /></div>
+                <div><label style={labelStyle}>Pre-bypass HCT (%)</label><input style={inputStyle} type="number" step="0.1" value={editing.pre_hct ?? ''} onChange={e => set('pre_hct', e.target.value === '' ? null : Number(e.target.value))} /></div>
+                <div><label style={labelStyle}>Prime Volume (mL)</label><input style={inputStyle} type="number" value={editing.prime_volume_ml ?? ''} onChange={e => set('prime_volume_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
+                <div>
+                  <label style={labelStyle}>Post-Dilutional HCT (%)</label>
+                  <input
+                    readOnly
+                    style={{ ...inputStyle, background: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.25)', color: '#22c55e', fontWeight: 600 }}
+                    value={postDilutionalHct(editing) ?? ''}
+                    placeholder="—"
+                  />
+                </div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Case Type</label><input style={inputStyle} value={editing.procedure || ''} onChange={e => set('procedure', e.target.value)} placeholder="e.g. CABG x3, AVR, MVR, Type-A" /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Allergies</label><input style={inputStyle} value={editing.allergies || ''} onChange={e => set('allergies', e.target.value)} placeholder="e.g. None known, PCN, Latex" /></div>
                 <div><label style={labelStyle}>Surgeon</label><input style={inputStyle} value={editing.surgeon || ''} onChange={e => set('surgeon', e.target.value)} /></div>
