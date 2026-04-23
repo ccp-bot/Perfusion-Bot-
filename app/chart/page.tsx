@@ -1309,9 +1309,12 @@ export default function ChartPage() {
             }} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.6rem 1rem', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>Cancel</button>
           )}
           {view === 'live' && (
-            <div className="header-clock">
-              <div className="hc-value">{new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-              <div className="hc-date">{new Date(now).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              {liveCase && <CORAssistant caseRecord={liveCase} events={events} />}
+              <div className="header-clock">
+                <div className="hc-value">{new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                <div className="hc-date">{new Date(now).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
+              </div>
             </div>
           )}
         </div>
@@ -2512,5 +2515,271 @@ function EquipmentSection({
         })}
       </div>
     </div>
+  )
+}
+
+// ---------- COR Assistant ---------------------------------------------------
+
+const PREBYPASS_CHECKLIST: Array<{ id: string; label: string }> = [
+  { id: 'act', label: 'ACT drawn & therapeutic' },
+  { id: 'heparin', label: 'Heparin given (~300 u/kg)' },
+  { id: 'recirc', label: 'Circuit recirc verified' },
+  { id: 'cannulas', label: 'Cannulas connected & secure' },
+  { id: 'reservoir', label: 'Reservoir level adequate' },
+  { id: 'vent', label: 'Vent line open' },
+  { id: 'abg', label: 'Pre-CPB ABG drawn' },
+  { id: 'blood', label: 'Cross-matched blood available' },
+]
+
+type AssistantSuggestion = {
+  id: string
+  severity: 'urgent' | 'info' | 'done'
+  title: string
+  body?: string
+}
+
+function computePhase(events: CaseEvent[]): 'prebypass' | 'onbypass' | 'postbypass' {
+  const ons = events.filter(e => e.label === 'On Bypass').sort((a, b) => a.event_time.localeCompare(b.event_time))
+  if (ons.length === 0) return 'prebypass'
+  const latestOn = ons[ons.length - 1].event_time
+  const offAfter = events.find(e => e.label === 'Off Bypass' && e.event_time > latestOn)
+  return offAfter ? 'postbypass' : 'onbypass'
+}
+
+function computePrebypassSuggestions(c: CaseRecord): AssistantSuggestion[] {
+  const out: AssistantSuggestion[] = []
+
+  if (c.bsa && c.bsa > 0) {
+    const low = (c.bsa * 2.2).toFixed(1)
+    const mid = (c.bsa * 2.4).toFixed(1)
+    const high = (c.bsa * 2.6).toFixed(1)
+    out.push({
+      id: 'target-flow',
+      severity: 'info',
+      title: `Target flow ≈ ${mid} L/min`,
+      body: `Range ${low}–${high} L/min (CI 2.2–2.6 × BSA ${c.bsa.toFixed(2)} m²)`,
+    })
+  } else {
+    out.push({
+      id: 'missing-bsa',
+      severity: 'info',
+      title: 'Enter height & weight',
+      body: 'I can suggest target flow once BSA is available.',
+    })
+  }
+
+  const hasHct = c.pre_hct != null && c.pre_hct > 0
+  const hasPrime = c.prime_volume_ml != null && c.prime_volume_ml >= 0
+  const hasWeight = c.weight_kg != null && c.weight_kg > 0
+  const post = postDilutionalHct(c)
+
+  if (!hasHct) {
+    out.push({ id: 'missing-pre-hct', severity: 'info', title: 'Enter pre-bypass HCT', body: 'Required to estimate post-dilutional HCT.' })
+  } else if (!hasPrime) {
+    out.push({ id: 'missing-prime', severity: 'info', title: 'Enter prime volume', body: 'Required to estimate post-dilutional HCT.' })
+  } else if (!hasWeight) {
+    out.push({ id: 'missing-weight', severity: 'info', title: 'Enter patient weight' })
+  } else if (post != null) {
+    if (post < 22) {
+      out.push({
+        id: 'dilutional-hct-critical',
+        severity: 'urgent',
+        title: `Post-dilutional HCT would be ${post}%`,
+        body: 'Below the 22% safety threshold. Add PRBC to the prime before going on.',
+      })
+    } else if (post < 25) {
+      out.push({
+        id: 'dilutional-hct-borderline',
+        severity: 'info',
+        title: `Post-dilutional HCT ≈ ${post}%`,
+        body: 'Borderline. Consider adding PRBC to the prime.',
+      })
+    } else {
+      out.push({ id: 'dilutional-hct-ok', severity: 'done', title: `Post-dilutional HCT ≈ ${post}%`, body: 'Within target.' })
+    }
+  }
+
+  return out
+}
+
+function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: CaseEvent[] }) {
+  const phase = useMemo(() => computePhase(events), [events])
+  const suggestions = useMemo(() => phase === 'prebypass' ? computePrebypassSuggestions(caseRecord) : [], [caseRecord, phase])
+
+  const ackKey = `cor-ack-${caseRecord.id}`
+  const checklistKey = `cor-checklist-${caseRecord.id}`
+
+  const [acked, setAcked] = useState<Record<string, boolean>>({})
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({})
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const rawAck = localStorage.getItem(ackKey)
+      if (rawAck) setAcked(JSON.parse(rawAck))
+      const rawCl = localStorage.getItem(checklistKey)
+      if (rawCl) setChecklist(JSON.parse(rawCl))
+    } catch { /* ignore corrupt state */ }
+  }, [ackKey, checklistKey])
+
+  const ack = (id: string) => {
+    setAcked(prev => {
+      const next = { ...prev, [id]: true }
+      try { localStorage.setItem(ackKey, JSON.stringify(next)) } catch { /* quota / incognito */ }
+      return next
+    })
+  }
+  const toggleCheck = (id: string) => {
+    setChecklist(prev => {
+      const next = { ...prev, [id]: !prev[id] }
+      try { localStorage.setItem(checklistKey, JSON.stringify(next)) } catch { /* quota / incognito */ }
+      return next
+    })
+  }
+
+  const urgentUnread = suggestions.find(s => s.severity === 'urgent' && !acked[s.id])
+  const unreadCount = suggestions.filter(s => !acked[s.id] && s.severity !== 'done').length
+
+  const phaseLabel = phase === 'prebypass' ? 'Pre-Bypass' : phase === 'onbypass' ? 'On Bypass' : 'Post-Bypass'
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label="Open COR assistant"
+        style={{
+          position: 'relative', display: 'flex', alignItems: 'center', gap: '0.5rem',
+          background: urgentUnread ? 'rgba(230,57,70,0.12)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${urgentUnread ? 'rgba(230,57,70,0.45)' : 'rgba(255,255,255,0.1)'}`,
+          borderRadius: '999px', padding: '0.3rem 0.7rem 0.3rem 0.35rem', cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        <span style={{
+          width: 34, height: 34, borderRadius: '50%',
+          background: '#080b12', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '1.35rem', border: '1px solid rgba(255,255,255,0.08)',
+        }}>🤖</span>
+        <span style={{ color: '#e2e8f0', fontSize: '0.78rem', fontWeight: 600, letterSpacing: '0.02em' }}>COR</span>
+        {unreadCount > 0 && (
+          <span style={{
+            minWidth: 18, height: 18, padding: '0 6px', borderRadius: 9,
+            background: urgentUnread ? '#e63946' : '#22c55e', color: 'white',
+            fontSize: '0.7rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            marginLeft: '0.1rem',
+          }}>{unreadCount}</span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 60 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'absolute', top: 80, right: 32, width: 360, maxHeight: '70vh', overflow: 'auto',
+              background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.6)', padding: '1rem',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div>
+                <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.95rem' }}>COR · {phaseLabel}</div>
+                <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: 2 }}>Case briefing</div>
+              </div>
+              <button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: '0.85rem' }}>✕</button>
+            </div>
+
+            {phase !== 'prebypass' && (
+              <div style={{ color: '#64748b', fontSize: '0.82rem', padding: '0.5rem 0' }}>
+                On-bypass and post-bypass briefings coming soon.
+              </div>
+            )}
+
+            {phase === 'prebypass' && (
+              <>
+                <div style={{ marginBottom: '0.9rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.5rem' }}>Suggestions</div>
+                  {suggestions.length === 0 && <div style={{ color: '#64748b', fontSize: '0.82rem' }}>Nothing to flag right now.</div>}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    {suggestions.map(s => {
+                      const color = s.severity === 'urgent' ? '#e63946' : s.severity === 'done' ? '#22c55e' : '#eab308'
+                      const icon = s.severity === 'urgent' ? '⚠️' : s.severity === 'done' ? '✅' : '💡'
+                      const isRead = acked[s.id]
+                      return (
+                        <div key={s.id} style={{ border: `1px solid ${color}44`, background: `${color}0d`, borderRadius: 10, padding: '0.55rem 0.7rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span aria-hidden>{icon}</span>
+                            <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600, flex: 1 }}>{s.title}</span>
+                            {isRead && <span style={{ color: '#64748b', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Read</span>}
+                          </div>
+                          {s.body && <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: 4, lineHeight: 1.4 }}>{s.body}</div>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.5rem' }}>Pre-Bypass Checklist</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    {PREBYPASS_CHECKLIST.map(item => {
+                      const done = !!checklist[item.id]
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => toggleCheck(item.id)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '0.55rem', textAlign: 'left',
+                            background: 'transparent', border: 'none', padding: '0.35rem 0.25rem',
+                            color: done ? '#64748b' : '#e2e8f0', fontSize: '0.82rem', cursor: 'pointer',
+                            textDecoration: done ? 'line-through' : 'none', fontFamily: 'inherit',
+                          }}
+                        >
+                          <span style={{
+                            width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                            border: `1.5px solid ${done ? '#22c55e' : 'rgba(255,255,255,0.2)'}`,
+                            background: done ? '#22c55e' : 'transparent',
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            color: 'white', fontSize: '0.7rem', fontWeight: 800,
+                          }}>{done ? '✓' : ''}</span>
+                          <span>{item.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {urgentUnread && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#0d1117', border: '1px solid rgba(230,57,70,0.45)', borderRadius: 16, maxWidth: 460, width: '100%', padding: '1.5rem', boxShadow: '0 30px 60px rgba(0,0,0,0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.9rem' }}>
+              <span style={{ fontSize: '1.6rem' }}>⚠️</span>
+              <div>
+                <div style={{ color: '#e63946', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>COR Alert · {phaseLabel}</div>
+                <div style={{ color: '#e2e8f0', fontSize: '1.05rem', fontWeight: 700, marginTop: 2 }}>{urgentUnread.title}</div>
+              </div>
+            </div>
+            {urgentUnread.body && <div style={{ color: '#cbd5e1', fontSize: '0.88rem', lineHeight: 1.5, marginBottom: '1.1rem' }}>{urgentUnread.body}</div>}
+            <div style={{ textAlign: 'right' }}>
+              <button type="button" onClick={() => ack(urgentUnread.id)}
+                style={{ background: '#e63946', border: 'none', color: 'white', fontWeight: 700, fontSize: '0.88rem', padding: '0.65rem 1.4rem', borderRadius: 10, cursor: 'pointer' }}>
+                Read & Acknowledge
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
