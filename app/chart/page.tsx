@@ -1023,6 +1023,68 @@ export default function ChartPage() {
         }
         .popup-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.2rem; }
 
+        /* Automatic derived timers row — 4 squareish chips under the phase
+           timers. Always visible. Running chips use their own phase color
+           (yellow / orange / blue / red); idle or empty chips are shadowed. */
+        .popup-row-bar {
+          grid-column: 1 / span 2;
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 0.5rem;
+          margin-top: 0.35rem;
+        }
+        .popup-chip {
+          display: flex; flex-direction: column;
+          align-items: flex-start; justify-content: center;
+          padding: 0.75rem 0.85rem;
+          border-radius: 12px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012));
+          border: 1px solid rgba(255,255,255,0.08);
+          gap: 7px;
+          min-height: 78px;
+          position: relative;
+          transition: opacity 0.18s ease, border-color 0.18s ease;
+          min-width: 0;
+        }
+        .popup-chip .pc-label {
+          font-size: 0.7rem; font-weight: 800;
+          text-transform: uppercase; letter-spacing: 0.08em;
+          color: #94a3b8;
+          display: flex; align-items: center; gap: 6px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          max-width: 100%;
+        }
+        .popup-chip .pc-value {
+          font-size: 1.25rem; font-weight: 800; letter-spacing: -0.01em;
+          color: #cbd5e1; font-variant-numeric: tabular-nums; line-height: 1;
+        }
+        .popup-chip .pc-dot {
+          width: 8px; height: 8px; border-radius: 50%;
+          background: var(--phase);
+          flex-shrink: 0;
+          animation: pulseDot 1.6s ease-out infinite;
+        }
+        /* Idle — triggered at least once but not running right now */
+        .popup-chip.idle { opacity: 0.55; }
+        /* Empty — never triggered this case */
+        .popup-chip.empty { opacity: 0.3; }
+        .popup-chip.empty .pc-value { color: #475569; }
+        /* Running — light up in the timer's phase color */
+        .popup-chip.running {
+          background: linear-gradient(180deg,
+            color-mix(in srgb, var(--phase) 10%, transparent),
+            color-mix(in srgb, var(--phase) 3%, transparent));
+          border-color: color-mix(in srgb, var(--phase) 55%, transparent);
+          animation: popupChipLive 2.4s ease-in-out infinite;
+        }
+        .popup-chip.running .pc-label { color: var(--phase); }
+        .popup-chip.running .pc-value { color: var(--phase); }
+        @keyframes popupChipLive {
+          0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--phase) 30%, transparent); }
+          50%      { box-shadow: 0 0 0 2px color-mix(in srgb, var(--phase) 60%, transparent),
+                                 0 0 22px color-mix(in srgb, var(--phase) 22%, transparent); }
+        }
+
         @media (max-width: 1100px) {
           .main-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
           .col-main, .patient-bar, .vent-bar, .timer-rows {
@@ -1269,18 +1331,6 @@ function LiveChart({
   onUpdateCase: (patches: Partial<CaseRecord>) => Promise<void>
 }) {
   type PrimaryKey = TimerKey
-  // Unified row shape for the timer column. Phase rows (CPB, X-Clamp, quick
-  // timers) carry a PhaseData with runs for the log table. Popup rows (CP,
-  // Reperfusion, Cooling, Rewarming) are derived from events and have no
-  // editable run history, so they render as a chip only.
-  type TimerRow =
-    | { kind: 'phase'; key: PrimaryKey; label: string; data: PhaseData; running: boolean; totalMin: number; phaseColor: string }
-    | { kind: 'popup'; key: string; label: string; data: { running: boolean; min: number }; running: boolean; totalMin: number; phaseColor: string }
-
-  const phaseRow = (key: PrimaryKey, label: string, d: PhaseData | null): TimerRow | null =>
-    d ? { kind: 'phase', key, label, data: d, running: d.running, totalMin: d.totalMin, phaseColor: PHASE_COLORS[key] } : null
-  const popupRow = (key: string, label: string, d: { running: boolean; min: number } | null): TimerRow | null =>
-    d ? { kind: 'popup', key, label, data: d, running: d.running, totalMin: d.min, phaseColor: PHASE_COLORS[key] } : null
 
   // Pinned primary timers: chips always render, log only once there are runs.
   const pinnedRows: { key: PrimaryKey; label: string; data: PhaseData | null }[] = [
@@ -1288,22 +1338,27 @@ function LiveChart({
     { key: 'xclamp', label: 'X-Clamp', data: timers.xclamp },
   ]
 
-  // Everything else — quick-event timers AND the derived popup timers — is
-  // lazy (only shows once there is data) and is sorted so running ones float
-  // above stopped ones.
-  const extraRows: TimerRow[] = [
-    phaseRow('dhca', 'DHCA', timers.dhca),
-    phaseRow('sacp', 'SACP', timers.sacp),
-    phaseRow('rcp', 'RCP', timers.rcp),
-    phaseRow('muf', 'MUF', timers.muf),
-    phaseRow('extra', 'Extra', timers.extra),
-    popupRow('cp', 'CP Timer', timers.cp),
-    popupRow('reperfusion', 'Reperfusion', timers.reperfusion),
-    popupRow('cooling', 'Cooling', timers.cooling),
-    popupRow('rewarming', 'Rewarming', timers.rewarming),
-  ]
-    .filter((r): r is TimerRow => r != null)
-    .sort((a, b) => (b.running ? 1 : 0) - (a.running ? 1 : 0))
+  // Quick-event phase timers (DHCA/SACP/RCP/MUF/Extra): lazy — only appear
+  // once they have been triggered. Running ones sort above stopped ones.
+  const phaseExtraRows = ([
+    { key: 'dhca' as PrimaryKey, label: 'DHCA', data: timers.dhca },
+    { key: 'sacp' as PrimaryKey, label: 'SACP', data: timers.sacp },
+    { key: 'rcp' as PrimaryKey, label: 'RCP', data: timers.rcp },
+    { key: 'muf' as PrimaryKey, label: 'MUF', data: timers.muf },
+    { key: 'extra' as PrimaryKey, label: 'Extra', data: timers.extra },
+  ])
+    .filter((r): r is { key: PrimaryKey; label: string; data: PhaseData } => r.data != null)
+    .sort((a, b) => (b.data.running ? 1 : 0) - (a.data.running ? 1 : 0))
+
+  // Automatic derived timers (CP / Reperfusion / Cooling / Rewarming): always
+  // render as a 4-column compact bar underneath the phase rows. Non-clickable
+  // — they react to other events. Running ones sort to the left.
+  const autoTimers = ([
+    { key: 'cp', label: 'CP Timer', data: timers.cp },
+    { key: 'reperfusion', label: 'Reperfusion', data: timers.reperfusion },
+    { key: 'cooling', label: 'Cooling', data: timers.cooling },
+    { key: 'rewarming', label: 'Rewarming', data: timers.rewarming },
+  ] as const).slice().sort((a, b) => (b.data?.running ? 1 : 0) - (a.data?.running ? 1 : 0))
 
   const formatT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
 
@@ -1489,58 +1544,65 @@ function LiveChart({
             )
           })}
 
-          {extraRows.map(t => {
-            if (t.kind === 'phase') {
-              const running = t.running
-              const value = `${t.totalMin} min`
-              const hasRuns = t.data.runs.length > 0
-              return (
-                <Fragment key={t.key}>
-                  <button
-                    onClick={() => onToggleTimer(t.key as TimerKey)}
-                    className={`timer-chip-btn${running ? ' active' : ''}${!running ? ' stopped' : ''}`}
-                    type="button"
-                    style={{ ['--phase' as never]: t.phaseColor }}
-                  >
-                    <span className="tc-label">
-                      {running && <span className="pulse-dot" />}
-                      {t.label}
-                    </span>
-                    <span className="tc-value">{value}</span>
-                  </button>
-                  {hasRuns ? (
-                    <PhaseLogCard
-                      label={t.label}
-                      phase={t.phaseColor}
-                      data={t.data}
-                      onUpdateEventTime={onUpdateEventTime}
-                      onDeleteRun={onDeleteRun}
-                      formatT={formatT}
-                    />
-                  ) : (
-                    <div className="tr-log-empty">No runs yet</div>
-                  )}
-                </Fragment>
-              )
-            }
-            // Popup row — read-only chip spanning both columns (no log).
-            const running = t.running
-            const value = `${t.totalMin} min`
+          {phaseExtraRows.map(t => {
+            const running = t.data.running
+            const value = `${t.data.totalMin} min`
+            const hasRuns = t.data.runs.length > 0
+            const phase = PHASE_COLORS[t.key]
             return (
-              <div
-                key={t.key}
-                className={`timer-chip-btn tr-full${running ? ' active' : ' stopped'}`}
-                style={{ ['--phase' as never]: t.phaseColor, cursor: 'default' }}
-                aria-label={`${t.label} timer`}
-              >
-                <span className="tc-label">
-                  {running && <span className="pulse-dot" />}
-                  {t.label}
-                </span>
-                <span className="tc-value">{value}</span>
-              </div>
+              <Fragment key={t.key}>
+                <button
+                  onClick={() => onToggleTimer(t.key)}
+                  className={`timer-chip-btn${running ? ' active' : ''}${!running ? ' stopped' : ''}`}
+                  type="button"
+                  style={{ ['--phase' as never]: phase }}
+                >
+                  <span className="tc-label">
+                    {running && <span className="pulse-dot" />}
+                    {t.label}
+                  </span>
+                  <span className="tc-value">{value}</span>
+                </button>
+                {hasRuns ? (
+                  <PhaseLogCard
+                    label={t.label}
+                    phase={phase}
+                    data={t.data}
+                    onUpdateEventTime={onUpdateEventTime}
+                    onDeleteRun={onDeleteRun}
+                    formatT={formatT}
+                  />
+                ) : (
+                  <div className="tr-log-empty">No runs yet</div>
+                )}
+              </Fragment>
             )
           })}
+
+          {/* Automatic derived timers. 4 compact chips in their own row bar;
+              always visible. Running ones flow left, stopped/untriggered
+              shadow out on the right. Not clickable. */}
+          <div className="popup-row-bar">
+            {autoTimers.map(t => {
+              const running = t.data?.running ?? false
+              const hasData = t.data != null
+              const min = t.data?.min ?? 0
+              return (
+                <div
+                  key={t.key}
+                  className={`popup-chip${running ? ' running' : hasData ? ' idle' : ' empty'}`}
+                  style={{ ['--phase' as never]: PHASE_COLORS[t.key] }}
+                  aria-label={`${t.label} timer`}
+                >
+                  <div className="pc-label">
+                    {running && <span className="pc-dot" />}
+                    {t.label}
+                  </div>
+                  <div className="pc-value">{hasData ? `${min} min` : '—'}</div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
     </>
