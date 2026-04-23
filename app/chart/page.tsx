@@ -1797,13 +1797,12 @@ function EventDetails({ details, eventType }: { details: Record<string, unknown>
   return (
     <div className="tl-details">
       {pairs.map(([k, v]) => {
-        if (k === 'route') {
-          return <span key={k}><strong style={{ color: '#cbd5e1' }}>{String(v)}</strong></span>
-        }
-        if (k === 'temp') {
-          return <span key={k}><span style={{ color: '#94a3b8' }}>Temp:</span> <strong style={{ color: '#cbd5e1' }}>{String(v)}C</strong></span>
-        }
-        return <span key={k}><span style={{ textTransform: 'capitalize', color: '#94a3b8' }}>{k.replace(/_/g, ' ')}</span> <strong style={{ color: '#cbd5e1' }}>{String(v)}</strong></span>
+        const display = k === 'temp' ? `${String(v)}C` : String(v)
+        return (
+          <span key={k}>
+            <span style={{ textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span> {display}
+          </span>
+        )
       })}
     </div>
   )
