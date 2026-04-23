@@ -1391,16 +1391,18 @@ export default function ChartPage() {
                 <div><label style={labelStyle}>Weight (kg)</label><input style={inputStyle} type="number" step="0.1" value={editing.weight_kg ?? ''} onChange={e => updateWeight(e.target.value === '' ? null : Number(e.target.value))} /></div>
                 <div><label style={labelStyle}>Height (cm)</label><input style={inputStyle} type="number" step="0.1" value={editing.height_cm ?? ''} onChange={e => updateHeight(e.target.value === '' ? null : Number(e.target.value))} /></div>
                 <div><label style={labelStyle}>BSA (m²)</label><input style={inputStyle} type="number" step="0.01" value={editing.bsa ?? ''} onChange={e => set('bsa', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Pre-bypass HCT (%)</label><input style={inputStyle} type="number" step="0.1" value={editing.pre_hct ?? ''} onChange={e => set('pre_hct', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div><label style={labelStyle}>Prime Volume (mL)</label><input style={inputStyle} type="number" value={editing.prime_volume_ml ?? ''} onChange={e => set('prime_volume_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div>
-                  <label style={labelStyle}>Post-Dilutional HCT (%)</label>
-                  <input
-                    readOnly
-                    style={{ ...inputStyle, background: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.25)', color: '#22c55e', fontWeight: 600 }}
-                    value={postDilutionalHct(editing) ?? ''}
-                    placeholder="—"
-                  />
+                <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.75rem' }}>
+                  <div><label style={labelStyle}>Pre-bypass HCT (%)</label><input style={inputStyle} type="number" step="0.1" value={editing.pre_hct ?? ''} onChange={e => set('pre_hct', e.target.value === '' ? null : Number(e.target.value))} /></div>
+                  <div><label style={labelStyle}>Prime Volume (mL)</label><input style={inputStyle} type="number" value={editing.prime_volume_ml ?? ''} onChange={e => set('prime_volume_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
+                  <div>
+                    <label style={labelStyle}>Post-Dilutional HCT (%)</label>
+                    <input
+                      readOnly
+                      style={{ ...inputStyle, background: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.25)', color: '#22c55e', fontWeight: 600 }}
+                      value={postDilutionalHct(editing) ?? ''}
+                      placeholder="—"
+                    />
+                  </div>
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Case Type</label><input style={inputStyle} value={editing.procedure || ''} onChange={e => set('procedure', e.target.value)} placeholder="e.g. CABG x3, AVR, MVR, Type-A" /></div>
                 <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Allergies</label><input style={inputStyle} value={editing.allergies || ''} onChange={e => set('allergies', e.target.value)} placeholder="e.g. None known, PCN, Latex" /></div>
