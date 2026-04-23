@@ -52,7 +52,7 @@ type CaseRecord = {
 }
 
 type PhaseData = {
-  runs: Array<{ start: string; stop?: string; min: number }>
+  runs: Array<{ start: string; stop?: string; min: number; startId: string; stopId?: string }>
   totalMin: number
   running: boolean
 }
@@ -360,6 +360,35 @@ export default function ChartPage() {
     }
   }
 
+  async function updateEventTime(id: string, eventTime: string) {
+    if (!user) return
+    const res = await fetch('/api/case-events', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, userId: user.id, eventTime }),
+    })
+    const data = await res.json()
+    if (data.error) {
+      await showAlert(data.error, 'Could not update time')
+      return
+    }
+    if (data.event) {
+      setEvents(prev => {
+        const next = prev.map(e => e.id === id ? data.event : e)
+        return next.sort((a, b) => new Date(a.event_time).getTime() - new Date(b.event_time).getTime())
+      })
+    }
+  }
+
+  async function deleteRun(startId: string, stopId?: string) {
+    if (!user) return
+    const ok = await showConfirm('This removes the start and stop events for this run.', { title: 'Delete this run?', danger: true, confirmLabel: 'Delete' })
+    if (!ok) return
+    const ids = stopId ? [startId, stopId] : [startId]
+    await Promise.all(ids.map(id => fetch(`/api/case-events?id=${id}&userId=${user.id}`, { method: 'DELETE' })))
+    setEvents(prev => prev.filter(e => !ids.includes(e.id)))
+  }
+
   function set<K extends keyof CaseRecord>(key: K, value: CaseRecord[K]) {
     setEditing(prev => ({ ...prev, [key]: value }))
   }
@@ -379,24 +408,26 @@ export default function ChartPage() {
 
     // Multi-run phase: pairs every start with its next stop, sums total time.
     function computePhase(startLabel: string, stopLabel: string): PhaseData | null {
-      const runs: Array<{ start: string; stop?: string; min: number }> = []
+      const runs: Array<{ start: string; stop?: string; min: number; startId: string; stopId?: string }> = []
       let currentStart: string | null = null
+      let currentStartId: string | null = null
 
       for (const e of events) {
         if (e.label === startLabel) {
-          if (!currentStart) currentStart = e.event_time
-        } else if (e.label === stopLabel && currentStart) {
+          if (!currentStart) { currentStart = e.event_time; currentStartId = e.id }
+        } else if (e.label === stopLabel && currentStart && currentStartId) {
           const min = Math.max(0, Math.floor((new Date(e.event_time).getTime() - new Date(currentStart).getTime()) / 60000))
-          runs.push({ start: currentStart, stop: e.event_time, min })
+          runs.push({ start: currentStart, stop: e.event_time, min, startId: currentStartId, stopId: e.id })
           currentStart = null
+          currentStartId = null
         }
       }
 
       let running = false
-      if (currentStart) {
+      if (currentStart && currentStartId) {
         running = true
         const min = Math.max(0, Math.floor((now - new Date(currentStart).getTime()) / 60000))
-        runs.push({ start: currentStart, min })
+        runs.push({ start: currentStart, min, startId: currentStartId })
       }
 
       if (runs.length === 0) return null
@@ -753,6 +784,42 @@ export default function ChartPage() {
         .rt-active { color: #22c55e; font-weight: 600; font-size: 0.64rem; margin-left: 4px; }
         .rt-total td { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.4rem !important; color: #e2e8f0; font-weight: 700; }
 
+        /* Editable run time cell */
+        .rt-time-btn {
+          background: transparent; border: 1px solid transparent;
+          color: #cbd5e1; font-family: inherit; font-size: inherit;
+          padding: 1px 5px; border-radius: 5px; cursor: pointer;
+          font-variant-numeric: tabular-nums;
+          transition: all 0.12s ease;
+        }
+        .rt-time-btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.08); color: #fff; }
+        .rt-time-placeholder {
+          background: transparent; border: 1px dashed rgba(255,255,255,0.1);
+          color: #475569; font-family: inherit; font-size: inherit;
+          padding: 1px 5px; border-radius: 5px; cursor: pointer;
+          transition: all 0.12s ease;
+        }
+        .rt-time-placeholder:hover { color: #94a3b8; border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.03); }
+        .rt-time-input {
+          background: rgba(230,57,70,0.08);
+          border: 1px solid rgba(230,57,70,0.4);
+          color: #fff; font-family: inherit; font-size: inherit;
+          padding: 1px 4px; border-radius: 5px; outline: none;
+          font-variant-numeric: tabular-nums;
+          width: 74px;
+        }
+        .rt-time-input::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+        .rt-row-delete {
+          background: transparent; border: 1px solid rgba(255,255,255,0.08);
+          color: #64748b; cursor: pointer;
+          padding: 0 6px; border-radius: 5px; font-size: 0.85rem;
+          line-height: 1.4; font-family: inherit;
+          transition: all 0.12s ease;
+          opacity: 0.6;
+        }
+        .rt-row-delete:hover { opacity: 1; color: #e63946; border-color: rgba(230,57,70,0.35); background: rgba(230,57,70,0.08); }
+        .rt-table th.rt-actions-col, .rt-table td.rt-actions-col { width: 24px; text-align: right !important; padding-right: 0 !important; }
+
         /* Add-entry tab pill */
         .entry-tab {
           padding: 0.55rem 1rem; border-radius: 999px;
@@ -802,11 +869,11 @@ export default function ChartPage() {
         .patient-field-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .patient-field-input[type=number] { -moz-appearance: textfield; }
 
-        /* Horizontal Vent bar */
+        /* Vent bar (stacked Sweep + FiO2 sliders) */
         .vent-bar {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 0.9rem;
+          grid-template-columns: 1fr;
+          gap: 0.55rem;
           padding: 0.75rem 0.95rem;
           background: linear-gradient(180deg, rgba(6,182,212,0.06), rgba(6,182,212,0.01));
           border: 1px solid rgba(6,182,212,0.2);
@@ -1058,6 +1125,8 @@ export default function ChartPage() {
             onAddEvent={logEvent}
             onDeleteEvent={deleteEvent}
             onUpdateEventNote={updateEventNote}
+            onUpdateEventTime={updateEventTime}
+            onDeleteRun={deleteRun}
             onUpdateCase={updateCase}
           />
         )}
@@ -1097,7 +1166,7 @@ export default function ChartPage() {
 // ----- Live chart component -----
 
 function LiveChart({
-  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent, onUpdateEventNote, onUpdateCase,
+  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent, onUpdateEventNote, onUpdateEventTime, onDeleteRun, onUpdateCase,
 }: {
   caseRecord: CaseRecord
   events: CaseEvent[]
@@ -1120,6 +1189,8 @@ function LiveChart({
   onAddEvent: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
   onDeleteEvent: (id: string) => Promise<void>
   onUpdateEventNote: (id: string, note: string) => Promise<void>
+  onUpdateEventTime: (id: string, eventTime: string) => Promise<void>
+  onDeleteRun: (startId: string, stopId?: string) => Promise<void>
   onUpdateCase: (patches: Partial<CaseRecord>) => Promise<void>
 }) {
   type PrimaryKey = 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra'
@@ -1328,19 +1399,41 @@ function LiveChart({
                 </div>
                 <table className="rt-table">
                   <thead>
-                    <tr><th>Start</th><th>Stop</th><th>Duration</th></tr>
+                    <tr>
+                      <th>Start</th>
+                      <th>Stop</th>
+                      <th>Duration</th>
+                      <th className="rt-actions-col" aria-label="Delete" />
+                    </tr>
                   </thead>
                   <tbody>
                     {t.data!.runs.map((r, i) => (
-                      <tr key={i}>
-                        <td>{formatT(r.start)}</td>
-                        <td>{r.stop ? formatT(r.stop) : '—'}</td>
+                      <tr key={r.startId || i}>
+                        <td>
+                          <EditableRunTime value={r.start} onCommit={(iso) => onUpdateEventTime(r.startId, iso)} />
+                        </td>
+                        <td>
+                          {r.stop && r.stopId ? (
+                            <EditableRunTime value={r.stop} onCommit={(iso) => onUpdateEventTime(r.stopId!, iso)} />
+                          ) : (
+                            <span style={{ color: '#475569' }}>—</span>
+                          )}
+                        </td>
                         <td>{r.min}m{!r.stop && <span className="rt-active">●</span>}</td>
+                        <td className="rt-actions-col">
+                          <button
+                            className="rt-row-delete"
+                            onClick={() => onDeleteRun(r.startId, r.stopId)}
+                            title="Delete this run"
+                            aria-label="Delete run"
+                            type="button"
+                          >×</button>
+                        </td>
                       </tr>
                     ))}
                     <tr className="rt-total">
                       <td colSpan={2}>Total</td>
-                      <td>{t.data!.totalMin}m</td>
+                      <td colSpan={2}>{t.data!.totalMin}m</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1456,6 +1549,43 @@ function VentBar({
         />
       </div>
     </div>
+  )
+}
+
+function EditableRunTime({ value, onCommit }: { value: string; onCommit: (iso: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const orig = useMemo(() => new Date(value), [value])
+  const displayTime = orig.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const hhmm = `${String(orig.getHours()).padStart(2, '0')}:${String(orig.getMinutes()).padStart(2, '0')}`
+
+  if (!editing) {
+    return (
+      <button type="button" className="rt-time-btn" onClick={() => setEditing(true)} title="Click to edit">
+        {displayTime}
+      </button>
+    )
+  }
+  return (
+    <input
+      type="time"
+      defaultValue={hhmm}
+      autoFocus
+      className="rt-time-input"
+      onBlur={(e) => {
+        setEditing(false)
+        const newHhmm = e.target.value
+        if (!newHhmm || newHhmm === hhmm) return
+        const [h, m] = newHhmm.split(':').map(Number)
+        if (isNaN(h) || isNaN(m)) return
+        const next = new Date(orig)
+        next.setHours(h, m)
+        onCommit(next.toISOString())
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') { setEditing(false) }
+      }}
+    />
   )
 }
 

@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 // PATCH /api/case-events — update an event (e.g. add/change its note)
 export async function PATCH(req: NextRequest) {
   const body = await req.json()
-  const { id, userId, note, details, label } = body
+  const { id, userId, note, details, label, eventTime } = body
 
   if (!id || !userId) return NextResponse.json({ error: 'Missing id or userId' }, { status: 400 })
 
@@ -78,6 +78,7 @@ export async function PATCH(req: NextRequest) {
 
   const patch: Record<string, unknown> = { details: merged }
   if (typeof label === 'string') patch.label = label
+  if (typeof eventTime === 'string') patch.event_time = eventTime
 
   const { data, error } = await supabase
     .from('case_events')
