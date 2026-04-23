@@ -627,17 +627,27 @@ export default function ChartPage() {
 
         /* Timeline entry */
         .tl-entry {
-          display: flex; align-items: flex-start; gap: 0.9rem;
-          padding: 0.75rem 0.9rem; border-radius: 12px;
+          display: flex; align-items: center; gap: 0.9rem;
+          padding: 0.7rem 0.9rem; border-radius: 12px;
           background: rgba(255,255,255,0.02);
           border: 1px solid rgba(255,255,255,0.04);
           transition: all 0.15s ease;
         }
         .tl-entry:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
-        .tl-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; flex-shrink: 0; background: color-mix(in srgb, var(--tl-color, #64748b) 15%, transparent); border: 1px solid color-mix(in srgb, var(--tl-color, #64748b) 30%, transparent); }
-        .tl-time { font-size: 0.8rem; color: #94a3b8; font-variant-numeric: tabular-nums; min-width: 56px; padding-top: 7px; font-weight: 600; }
-        .tl-label { font-weight: 600; color: #e2e8f0; font-size: 0.92rem; }
-        .tl-details { font-size: 0.75rem; color: #64748b; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 0.6rem; }
+        .tl-icon {
+          width: 46px; height: 46px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 1.45rem; line-height: 1; flex-shrink: 0;
+          background: color-mix(in srgb, var(--tl-color, #64748b) 18%, transparent);
+          border: 1px solid color-mix(in srgb, var(--tl-color, #64748b) 45%, transparent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--tl-color, #64748b) 8%, transparent);
+          color: var(--tl-color, #94a3b8);
+        }
+        .tl-time { font-size: 0.82rem; color: #94a3b8; font-variant-numeric: tabular-nums; min-width: 60px; font-weight: 600; }
+        .tl-title-row { display: flex; align-items: center; gap: 0.45rem; flex-wrap: nowrap; min-width: 0; }
+        .tl-label { font-weight: 700; color: #e2e8f0; font-size: 0.95rem; letter-spacing: 0.01em; flex-shrink: 0; }
+        .tl-sep { color: #475569; font-weight: 500; flex-shrink: 0; user-select: none; }
+        .tl-details { font-size: 0.75rem; color: #64748b; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 0.6rem; }
         .tl-delete { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #94a3b8; cursor: pointer; font-size: 1rem; padding: 4px 10px; border-radius: 8px; opacity: 0.85; transition: all 0.15s ease; line-height: 1; align-self: center; }
         .tl-delete:hover { opacity: 1; color: #e63946; background: rgba(230,57,70,0.08); border-color: rgba(230,57,70,0.25); }
 
@@ -694,17 +704,18 @@ export default function ChartPage() {
         }
         .vent-num:focus { border-color: rgba(6,182,212,0.45); }
 
-        /* Timeline event note input */
+        /* Timeline event note input — inline after the label */
         .tl-note-input {
-          width: 100%; margin-top: 4px;
-          padding: 0.35rem 0.55rem; border-radius: 6px;
+          flex: 1; min-width: 0;
+          padding: 0.22rem 0.5rem; border-radius: 6px;
           border: 1px solid transparent; background: transparent;
-          color: #cbd5e1; font-size: 0.78rem; font-family: inherit;
+          color: #cbd5e1; font-size: 0.85rem; font-family: inherit;
+          font-style: italic;
           transition: all 0.15s ease; outline: none;
         }
         .tl-note-input::placeholder { color: #475569; font-style: italic; }
-        .tl-note-input:hover { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.04); }
-        .tl-note-input:focus { background: rgba(255,255,255,0.04); border-color: rgba(230,57,70,0.3); }
+        .tl-note-input:hover { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.05); }
+        .tl-note-input:focus { background: rgba(255,255,255,0.05); border-color: rgba(230,57,70,0.3); font-style: normal; color: #e2e8f0; }
 
         /* Header clock (top-right, live mode) */
         .header-clock { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
@@ -1204,9 +1215,12 @@ function LiveChart({
                       <div className="tl-time">{new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                       <div className="tl-icon" style={{ ['--tl-color' as never]: typeStyle.color }} aria-hidden>{typeStyle.icon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="tl-label">{e.label}</div>
+                        <div className="tl-title-row">
+                          <span className="tl-label">{e.label}</span>
+                          <span className="tl-sep">:</span>
+                          <EventNote eventId={e.id} initial={currentNote} onSave={onUpdateEventNote} />
+                        </div>
                         {e.details && <EventDetails details={e.details} />}
-                        <EventNote eventId={e.id} initial={currentNote} onSave={onUpdateEventNote} />
                       </div>
                       <button onClick={() => onDeleteEvent(e.id)} className="tl-delete" title="Delete event" aria-label="Delete event">×</button>
                     </div>
