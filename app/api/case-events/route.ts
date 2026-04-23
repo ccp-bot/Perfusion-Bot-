@@ -55,6 +55,42 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ event: data })
 }
 
+// PATCH /api/case-events — update an event (e.g. add/change its note)
+export async function PATCH(req: NextRequest) {
+  const body = await req.json()
+  const { id, userId, note, details, label } = body
+
+  if (!id || !userId) return NextResponse.json({ error: 'Missing id or userId' }, { status: 400 })
+
+  // Fetch current event so we can merge details
+  const { data: current, error: fetchErr } = await supabase
+    .from('case_events')
+    .select('details')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .single()
+
+  if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+
+  const merged: Record<string, unknown> = { ...(current?.details || {}) }
+  if (details && typeof details === 'object') Object.assign(merged, details)
+  if (typeof note === 'string') merged.note = note
+
+  const patch: Record<string, unknown> = { details: merged }
+  if (typeof label === 'string') patch.label = label
+
+  const { data, error } = await supabase
+    .from('case_events')
+    .update(patch)
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ event: data })
+}
+
 // DELETE /api/case-events?id=xxx&userId=yyy
 export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url)

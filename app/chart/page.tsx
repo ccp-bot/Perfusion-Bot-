@@ -303,6 +303,19 @@ export default function ChartPage() {
     setEvents(prev => prev.filter(e => e.id !== id))
   }
 
+  async function updateEventNote(id: string, note: string) {
+    if (!user) return
+    const res = await fetch('/api/case-events', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, userId: user.id, note }),
+    })
+    const data = await res.json()
+    if (data.event) {
+      setEvents(prev => prev.map(e => e.id === id ? data.event : e))
+    }
+  }
+
   function set<K extends keyof CaseRecord>(key: K, value: CaseRecord[K]) {
     setEditing(prev => ({ ...prev, [key]: value }))
   }
@@ -487,9 +500,18 @@ export default function ChartPage() {
         .timer-chip-btn .tc-value-placeholder { font-size: 0.82rem; font-weight: 500; color: #475569; }
         .timer-chip-btn .tc-runs { font-size: 0.68rem; color: #94a3b8; font-weight: 500; }
 
-        /* Running state: just green text, otherwise chip stays neutral */
+        /* Running state: green text + pulsing border ring */
         .timer-chip-btn.active .tc-value { color: #22c55e; }
         .timer-chip-btn.active .tc-label { color: #22c55e; }
+        .timer-chip-btn.active {
+          border-color: rgba(34,197,94,0.5) !important;
+          animation: chipLivePulse 2.2s ease-in-out infinite;
+        }
+        @keyframes chipLivePulse {
+          0%, 100% { box-shadow: 0 0 0 1px rgba(34,197,94,0.35), 0 0 18px rgba(34,197,94,0.08); }
+          50%      { box-shadow: 0 0 0 2px rgba(34,197,94,0.7), 0 0 30px rgba(34,197,94,0.25); }
+        }
+
         .pulse-dot {
           width: 8px; height: 8px; border-radius: 50%;
           background: #22c55e;
@@ -518,6 +540,14 @@ export default function ChartPage() {
         .timer-pop .tp-value { font-size: 1.05rem; font-weight: 800; color: #94a3b8; font-variant-numeric: tabular-nums; margin-top: 2px; }
         .timer-pop.running .tp-label { color: var(--phase, #94a3b8); }
         .timer-pop.running .tp-value { color: var(--phase, #e2e8f0); }
+        .timer-pop.running {
+          border-color: color-mix(in srgb, var(--phase) 55%, transparent);
+          animation: popLivePulse 2.4s ease-in-out infinite;
+        }
+        @keyframes popLivePulse {
+          0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--phase) 30%, transparent); }
+          50%      { box-shadow: 0 0 0 2px color-mix(in srgb, var(--phase) 60%, transparent), 0 0 18px color-mix(in srgb, var(--phase) 25%, transparent); }
+        }
         @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 
         /* Timeline entry */
@@ -533,8 +563,20 @@ export default function ChartPage() {
         .tl-time { font-size: 0.8rem; color: #94a3b8; font-variant-numeric: tabular-nums; min-width: 56px; padding-top: 7px; font-weight: 600; }
         .tl-label { font-weight: 600; color: #e2e8f0; font-size: 0.92rem; }
         .tl-details { font-size: 0.75rem; color: #64748b; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 0.6rem; }
-        .tl-delete { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 6px; opacity: 0.5; transition: all 0.15s ease; }
-        .tl-delete:hover { opacity: 1; color: #e63946; background: rgba(230,57,70,0.08); }
+        .tl-delete { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #94a3b8; cursor: pointer; font-size: 1rem; padding: 4px 10px; border-radius: 8px; opacity: 0.85; transition: all 0.15s ease; line-height: 1; align-self: center; }
+        .tl-delete:hover { opacity: 1; color: #e63946; background: rgba(230,57,70,0.08); border-color: rgba(230,57,70,0.25); }
+
+        /* Timeline event note input */
+        .tl-note-input {
+          width: 100%; margin-top: 4px;
+          padding: 0.35rem 0.55rem; border-radius: 6px;
+          border: 1px solid transparent; background: transparent;
+          color: #cbd5e1; font-size: 0.78rem; font-family: inherit;
+          transition: all 0.15s ease; outline: none;
+        }
+        .tl-note-input::placeholder { color: #475569; font-style: italic; }
+        .tl-note-input:hover { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.04); }
+        .tl-note-input:focus { background: rgba(255,255,255,0.04); border-color: rgba(230,57,70,0.3); }
 
         /* Header clock (top-right, live mode) */
         .header-clock { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
@@ -799,6 +841,7 @@ export default function ChartPage() {
             onToggleTimer={toggleTimer}
             onAddEvent={logEvent}
             onDeleteEvent={deleteEvent}
+            onUpdateEventNote={updateEventNote}
           />
         )}
       </div>
@@ -809,7 +852,7 @@ export default function ChartPage() {
 // ----- Live chart component -----
 
 function LiveChart({
-  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent,
+  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent, onUpdateEventNote,
 }: {
   caseRecord: CaseRecord
   events: CaseEvent[]
@@ -831,6 +874,7 @@ function LiveChart({
   onToggleTimer: (which: 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra') => Promise<void>
   onAddEvent: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
   onDeleteEvent: (id: string) => Promise<void>
+  onUpdateEventNote: (id: string, note: string) => Promise<void>
 }) {
   type PrimaryKey = 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra'
   const primaryRows: { key: PrimaryKey; label: string; data: PhaseData | null }[] = [
@@ -863,7 +907,7 @@ function LiveChart({
             const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
             const runCount = t.data?.runs.length ?? 0
             const phase = PHASE_COLORS[t.key]
-            const hasRuns = (t.data?.runs.length ?? 0) > 0
+            const hasRuns = (t.data?.runs.length ?? 0) > 0 && t.key !== 'extra'
             return (
               <div key={t.key} className="primary-col">
                 <button
@@ -943,6 +987,15 @@ function LiveChart({
               <span>{hk.label}</span>
             </button>
           ))}
+          <button
+            onClick={() => { setActiveForm('note'); setTimeout(() => document.getElementById('quick-note-textarea')?.focus(), 50) }}
+            className="hotkey-btn"
+            style={{ borderLeft: '3px solid #a855f7' }}
+            type="button"
+          >
+            <span className="hotkey-icon" style={{ color: '#a855f7' }} aria-hidden>📝</span>
+            <span>Quick Note</span>
+          </button>
         </div>
       </div>
 
@@ -986,6 +1039,9 @@ function LiveChart({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {[...events].reverse().map(e => {
               const typeStyle = EVENT_TYPE_STYLES[e.event_type] || EVENT_TYPE_STYLES.hotkey
+              const currentNote = (e.details && typeof e.details === 'object' && typeof (e.details as Record<string, unknown>).note === 'string')
+                ? ((e.details as Record<string, unknown>).note as string)
+                : ''
               return (
                 <div key={e.id} className="tl-entry">
                   <div className="tl-time">{new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
@@ -993,8 +1049,13 @@ function LiveChart({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="tl-label">{e.label}</div>
                     {e.details && <EventDetails details={e.details} />}
+                    <EventNote
+                      eventId={e.id}
+                      initial={currentNote}
+                      onSave={onUpdateEventNote}
+                    />
                   </div>
-                  <button onClick={() => onDeleteEvent(e.id)} className="tl-delete" title="Delete" aria-label="Delete event">×</button>
+                  <button onClick={() => onDeleteEvent(e.id)} className="tl-delete" title="Delete event" aria-label="Delete event">×</button>
                 </div>
               )
             })}
@@ -1006,7 +1067,8 @@ function LiveChart({
 }
 
 function EventDetails({ details }: { details: Record<string, unknown> }) {
-  const pairs = Object.entries(details).filter(([, v]) => v !== null && v !== undefined && v !== '')
+  // Skip the "note" key — it renders via EventNote below
+  const pairs = Object.entries(details).filter(([k, v]) => k !== 'note' && v !== null && v !== undefined && v !== '')
   if (pairs.length === 0) return null
   return (
     <div className="tl-details">
@@ -1014,6 +1076,22 @@ function EventDetails({ details }: { details: Record<string, unknown> }) {
         <span key={k}><span style={{ textTransform: 'capitalize', color: '#94a3b8' }}>{k.replace(/_/g, ' ')}</span> <strong style={{ color: '#cbd5e1' }}>{String(v)}</strong></span>
       ))}
     </div>
+  )
+}
+
+function EventNote({ eventId, initial, onSave }: { eventId: string; initial: string; onSave: (id: string, note: string) => void }) {
+  const [value, setValue] = useState(initial)
+  useEffect(() => { setValue(initial) }, [initial])
+  return (
+    <input
+      type="text"
+      className="tl-note-input"
+      placeholder="Add note..."
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      onBlur={() => { if (value !== initial) onSave(eventId, value) }}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+    />
   )
 }
 
@@ -1198,6 +1276,7 @@ function NoteForm({ onSubmit }: { onSubmit: (d: { text: string }) => void }) {
   return (
     <>
       <textarea
+        id="quick-note-textarea"
         style={{ ...inpStyle, minHeight: '60px', resize: 'vertical', fontFamily: 'inherit' }}
         placeholder="Type a note..."
         value={text}
