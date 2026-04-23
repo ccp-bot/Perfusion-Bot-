@@ -51,6 +51,7 @@ type CaseRecord = {
   notes?: string | null
   complications?: string | null
   created_at?: string
+  user_email?: string | null
 }
 
 type PhaseData = {
@@ -553,34 +554,6 @@ export default function ChartPage() {
 
     return { cpb, xclamp, cp, reperfusion, cooling, rewarming, sacp, dhca, extra, rcp, muf }
   }, [events, now])
-
-  // Map each stop-event id → duration in minutes (paired with its preceding start).
-  // Renders inline on the timeline so e.g. "Off Bypass" shows the CPB run length.
-  const stopDurations = useMemo(() => {
-    const map: Record<string, number> = {}
-    const pairs: Array<[string, string]> = [
-      ['On Bypass', 'Off Bypass'],
-      ['Aortic Clamp On', 'Aortic Clamp Off'],
-      ['DHCA Start', 'DHCA Stop'],
-      ['SACP Start', 'SACP Stop'],
-      ['Extra Start', 'Extra Stop'],
-      ['RCP Start', 'RCP Stop'],
-      ['MUF Start', 'MUF Stop'],
-    ]
-    for (const [startLabel, stopLabel] of pairs) {
-      let currentStart: number | null = null
-      for (const e of events) {
-        if (e.label === startLabel) {
-          if (currentStart == null) currentStart = new Date(e.event_time).getTime()
-        } else if (e.label === stopLabel && currentStart != null) {
-          const min = Math.max(0, Math.floor((new Date(e.event_time).getTime() - currentStart) / 60000))
-          map[e.id] = min
-          currentStart = null
-        }
-      }
-    }
-    return map
-  }, [events])
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '0.55rem 0.7rem', borderRadius: '8px',
@@ -1256,16 +1229,21 @@ export default function ChartPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {cases.map(c => (
+                {[...cases].sort((a, b) => {
+                  const ad = a.case_date || a.created_at || ''
+                  const bd = b.case_date || b.created_at || ''
+                  return bd.localeCompare(ad)
+                }).map(c => {
+                  const perfusionist = (c.user_email || user?.email || '').split('@')[0] || user?.name || ''
+                  return (
                   <div key={c.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
-                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#e2e8f0' }}>
-                          {c.procedure || 'Untitled procedure'}
-                        </div>
-                        {c.case_date && <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{c.case_date}</div>}
+                        {c.case_date && <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#e2e8f0' }}>{c.case_date}</div>}
+                        {perfusionist && <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>{perfusionist}</div>}
                       </div>
                       <div style={{ fontSize: '0.78rem', color: '#64748b', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <span style={{ color: '#94a3b8', fontWeight: 600 }}>{c.procedure || 'Untitled procedure'}</span>
                         {c.case_number && <span>MRN {c.case_number}</span>}
                         {c.patient_initials && <span>{c.patient_initials}</span>}
                         {c.surgeon && <span>Dr. {c.surgeon}</span>}
@@ -1279,7 +1257,8 @@ export default function ChartPage() {
                       <button onClick={() => deleteCase(c.id)} style={{ background: 'transparent', border: '1px solid rgba(230,57,70,0.3)', color: '#e63946', padding: '0.4rem 0.75rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.78rem' }}>Delete</button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </>
@@ -1460,6 +1439,34 @@ function LiveChart({
   ] as const).slice().sort((a, b) => (b.data?.running ? 1 : 0) - (a.data?.running ? 1 : 0))
 
   const formatT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
+
+  // Map each stop-event id → duration in minutes (paired with its preceding start).
+  // Renders inline on the timeline so e.g. "Off Bypass" shows the CPB run length.
+  const stopDurations = useMemo(() => {
+    const map: Record<string, number> = {}
+    const pairs: Array<[string, string]> = [
+      ['On Bypass', 'Off Bypass'],
+      ['Aortic Clamp On', 'Aortic Clamp Off'],
+      ['DHCA Start', 'DHCA Stop'],
+      ['SACP Start', 'SACP Stop'],
+      ['Extra Start', 'Extra Stop'],
+      ['RCP Start', 'RCP Stop'],
+      ['MUF Start', 'MUF Stop'],
+    ]
+    for (const [startLabel, stopLabel] of pairs) {
+      let currentStart: number | null = null
+      for (const e of events) {
+        if (e.label === startLabel) {
+          if (currentStart == null) currentStart = new Date(e.event_time).getTime()
+        } else if (e.label === stopLabel && currentStart != null) {
+          const min = Math.max(0, Math.floor((new Date(e.event_time).getTime() - currentStart) / 60000))
+          map[e.id] = min
+          currentStart = null
+        }
+      }
+    }
+    return map
+  }, [events])
 
   return (
     <>
