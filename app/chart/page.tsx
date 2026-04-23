@@ -183,7 +183,8 @@ function displayEventLabel(e: CaseEvent): string {
     const name = typeof d.name === 'string' ? d.name : null
     const dose = d.dose != null && d.dose !== '' ? String(d.dose) : null
     const unit = typeof d.unit === 'string' ? d.unit : ''
-    if (name && dose) return `Med: ${name}- ${dose}${unit}`
+    if (name && dose) return `${name}- ${dose}${unit}`
+    if (name) return name
   }
   if (e.event_type === 'cp' && d) {
     const type = typeof d.type === 'string' ? d.type : null
@@ -1532,7 +1533,7 @@ function LiveChart({
               })}
             </div>
             {activeForm === 'vitals' && <VitalsForm onSubmit={(d) => { onAddEvent('vitals', 'Vitals', d); setActiveForm(null) }} />}
-            {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `Med: ${d.name}- ${d.dose}${d.unit}`, d); setActiveForm(null) }} />}
+            {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `${d.name}- ${d.dose}${d.unit}`, d); setActiveForm(null) }} />}
             {activeForm === 'cp' && <CpForm onSubmit={(d) => { onAddEvent('cp', `CP: ${d.type} ${d.volume}ml`, d); setActiveForm(null) }} />}
             {activeForm === 'blood' && <BloodForm onSubmit={(d) => { onAddEvent('blood', `${d.product} ${d.amount}${d.product === 'Cell Saver' ? 'mL' : 'u'}`, d); setActiveForm(null) }} />}
             {activeForm === 'abg' && <AbgForm onSubmit={(d) => { onAddEvent('abg', 'ABG', d); setActiveForm(null) }} />}
