@@ -145,6 +145,31 @@ export default function ChartPage() {
   const [now, setNow] = useState(Date.now())
   const [activeForm, setActiveForm] = useState<'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null>(null)
 
+  // Custom modal for alerts and confirms (replaces native window.alert / window.confirm)
+  const [modal, setModal] = useState<{
+    open: boolean
+    title?: string
+    message: string
+    kind: 'alert' | 'confirm'
+    danger?: boolean
+    confirmLabel?: string
+    resolve?: (value: boolean) => void
+  }>({ open: false, message: '', kind: 'alert' })
+
+  function showAlert(message: string, title?: string): Promise<void> {
+    return new Promise(resolve => {
+      setModal({ open: true, message, title, kind: 'alert', resolve: () => resolve() })
+    })
+  }
+  function showConfirm(message: string, opts?: { title?: string; danger?: boolean; confirmLabel?: string }): Promise<boolean> {
+    return new Promise(resolve => {
+      setModal({ open: true, message, title: opts?.title, kind: 'confirm', danger: opts?.danger, confirmLabel: opts?.confirmLabel, resolve })
+    })
+  }
+  function closeModal(confirmed: boolean) {
+    setModal(m => { m.resolve?.(confirmed); return { ...m, open: false, resolve: undefined } })
+  }
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) {
@@ -217,7 +242,7 @@ export default function ChartPage() {
     const data = await res.json()
     setSaving(false)
     if (data.error) {
-      alert('Save failed: ' + data.error)
+      await showAlert('Save failed: ' + data.error, 'Could not save case')
       return
     }
     await loadCases()
@@ -227,7 +252,8 @@ export default function ChartPage() {
 
   async function deleteCase(id: string) {
     if (!user) return
-    if (!confirm('Delete this case? This cannot be undone.')) return
+    const ok = await showConfirm('This cannot be undone.', { title: 'Delete this case?', danger: true, confirmLabel: 'Delete' })
+    if (!ok) return
     await fetch(`/api/cases?id=${id}&userId=${user.id}`, { method: 'DELETE' })
     await loadCases()
   }
@@ -263,7 +289,7 @@ export default function ChartPage() {
     })
     const data = await res.json()
     if (data.error || !data.case) {
-      alert('Could not start case: ' + (data.error || 'unknown'))
+      await showAlert((data.error || 'Unknown error.'), 'Could not start case')
       return
     }
     setCases(prev => [data.case, ...prev])
@@ -287,7 +313,7 @@ export default function ChartPage() {
     if (data.event) {
       setEvents(prev => [...prev, data.event])
     } else if (data.error) {
-      alert('Failed to log: ' + data.error)
+      await showAlert(data.error, 'Failed to log event')
     }
   }
 
@@ -299,7 +325,8 @@ export default function ChartPage() {
 
   async function deleteEvent(id: string) {
     if (!user) return
-    if (!confirm('Delete this event?')) return
+    const ok = await showConfirm('This will remove it from the timeline.', { title: 'Delete this event?', danger: true, confirmLabel: 'Delete' })
+    if (!ok) return
     await fetch(`/api/case-events?id=${id}&userId=${user.id}`, { method: 'DELETE' })
     setEvents(prev => prev.filter(e => e.id !== id))
   }
@@ -427,6 +454,37 @@ export default function ChartPage() {
         input::placeholder, textarea::placeholder { color: #475569; }
         input:focus, textarea:focus, select:focus { border-color: rgba(230,57,70,0.4) !important; }
         .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
+
+        /* Custom modal dialog */
+        .modal-overlay {
+          position: fixed; inset: 0; z-index: 1000;
+          background: rgba(0,0,0,0.65);
+          -webkit-backdrop-filter: blur(6px);
+          backdrop-filter: blur(6px);
+          display: flex; align-items: center; justify-content: center;
+          padding: 1rem;
+          animation: modalFade 0.15s ease;
+        }
+        .modal-card {
+          background: linear-gradient(180deg, #131924, #0d131e);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 16px;
+          padding: 1.4rem 1.6rem 1.2rem;
+          max-width: 420px; width: 100%;
+          box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(230,57,70,0.05), 0 0 40px rgba(230,57,70,0.06);
+          animation: modalPop 0.18s ease-out;
+        }
+        .modal-title { font-size: 1.02rem; font-weight: 700; color: #e2e8f0; margin-bottom: 0.4rem; letter-spacing: -0.01em; }
+        .modal-message { font-size: 0.88rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 1.25rem; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.55rem; }
+        .modal-btn { padding: 0.58rem 1.15rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #cbd5e1; cursor: pointer; font-weight: 600; font-size: 0.85rem; font-family: inherit; transition: all 0.15s ease; }
+        .modal-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+        .modal-btn.primary { background: #e63946; border-color: #e63946; color: white; }
+        .modal-btn.primary:hover { background: #dc2f3e; border-color: #dc2f3e; box-shadow: 0 0 16px rgba(230,57,70,0.35); }
+        .modal-btn.danger { background: #e63946; border-color: #e63946; color: white; }
+        .modal-btn.danger:hover { background: #dc2f3e; border-color: #dc2f3e; box-shadow: 0 0 16px rgba(230,57,70,0.35); }
+        @keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes modalPop { from { opacity: 0; transform: scale(0.95) translateY(-6px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
         /* Sticky frosted header */
         .live-sticky {
@@ -901,6 +959,34 @@ export default function ChartPage() {
           />
         )}
       </div>
+
+      {/* Custom modal */}
+      {modal.open && (
+        <div
+          className="modal-overlay"
+          onClick={() => closeModal(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            {modal.title && <div className="modal-title">{modal.title}</div>}
+            <div className="modal-message">{modal.message}</div>
+            <div className="modal-actions">
+              {modal.kind === 'confirm' && (
+                <button className="modal-btn" onClick={() => closeModal(false)} type="button">Cancel</button>
+              )}
+              <button
+                className={`modal-btn${modal.danger ? ' danger' : modal.kind === 'alert' ? ' primary' : ''}`}
+                onClick={() => closeModal(true)}
+                type="button"
+                autoFocus
+              >
+                {modal.kind === 'confirm' ? (modal.confirmLabel || 'Confirm') : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
