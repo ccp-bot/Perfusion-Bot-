@@ -705,6 +705,9 @@ export default function ChartPage() {
         }
         .primary-col { display: flex; flex-direction: column; gap: 0.5rem; }
         .primary-col .timer-chip-btn { width: 100%; min-width: 0; }
+        .primary-chips-row .timer-chip-btn { width: 100%; }
+        .primary-extras-row { margin-top: 0.5rem; }
+        .popup-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.55rem; }
 
         /* Run history card (inside a column) */
         .run-table-card {
@@ -1042,66 +1045,36 @@ function LiveChart({
       {/* Sticky frosted top bar with timers */}
       <div className="live-sticky">
         {/* Primary columns: each timer chip stacks over its run-history table */}
-        <div className="primary-grid">
+        {/* Row 1: primary timer chips */}
+        <div className="primary-grid primary-chips-row">
           {primaryRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
             const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
             const runCount = t.data?.runs.length ?? 0
             const phase = PHASE_COLORS[t.key]
-            const hasRuns = (t.data?.runs.length ?? 0) > 0 && t.key !== 'extra'
             return (
-              <div key={t.key} className="primary-col">
-                <button
-                  onClick={() => onToggleTimer(t.key)}
-                  className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
-                  type="button"
-                  style={{ ['--phase' as never]: phase }}
-                >
-                  <div className="tc-label">
-                    {running && <span className="pulse-dot" />}
-                    {t.label}
-                  </div>
-                  <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</div>
-                  {runCount > 1 && <div className="tc-runs">{runCount} runs</div>}
-                </button>
-                {hasRuns && (
-                  <div className="run-table-card" style={{ ['--phase' as never]: phase }}>
-                    <div className="rt-title">
-                      <span className="rt-title-dot" />
-                      {t.label}
-                    </div>
-                    <table className="rt-table">
-                      <thead>
-                        <tr><th>Start</th><th>Stop</th><th>Duration</th></tr>
-                      </thead>
-                      <tbody>
-                        {t.data!.runs.map((r, i) => (
-                          <tr key={i}>
-                            <td>{formatT(r.start)}</td>
-                            <td>{r.stop ? formatT(r.stop) : '—'}</td>
-                            <td>{r.min}m{!r.stop && <span className="rt-active">●</span>}</td>
-                          </tr>
-                        ))}
-                        <tr className="rt-total">
-                          <td colSpan={2}>Total</td>
-                          <td>{t.data!.totalMin}m</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {t.key === 'extra' && (
-                  <VentSliders events={events} onLog={onAddEvent} />
-                )}
-              </div>
+              <button
+                key={t.key}
+                onClick={() => onToggleTimer(t.key)}
+                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
+                type="button"
+                style={{ ['--phase' as never]: phase }}
+              >
+                <div className="tc-label">
+                  {running && <span className="pulse-dot" />}
+                  {t.label}
+                </div>
+                <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</div>
+                {runCount > 1 && <div className="tc-runs">{runCount} runs</div>}
+              </button>
             )
           })}
         </div>
 
-        {/* Popup timers (appear once triggered) */}
+        {/* Row 2: popup timers (appear once triggered) — tight under primary chips */}
         {activePopupRows.length > 0 && (
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.7rem' }}>
+          <div className="popup-row">
             {activePopupRows.map(t => {
               const phase = PHASE_COLORS[t.key]
               const running = t.data?.running ?? false
@@ -1110,6 +1083,49 @@ function LiveChart({
                 <div key={t.key} className={`timer-pop${running ? ' running' : ''}`} style={{ ['--phase' as never]: phase }}>
                   <div className="tp-label">{t.label}</div>
                   <div className="tp-value">{value}</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Row 3: run-history tables and sliders, aligned under their chip columns */}
+        {(primaryRows.some(t => (t.data?.runs.length ?? 0) > 0 && t.key !== 'extra') || true) && (
+          <div className="primary-grid primary-extras-row">
+            {primaryRows.map(t => {
+              const phase = PHASE_COLORS[t.key]
+              const hasRuns = (t.data?.runs.length ?? 0) > 0 && t.key !== 'extra'
+              return (
+                <div key={t.key} className="primary-col">
+                  {hasRuns && (
+                    <div className="run-table-card" style={{ ['--phase' as never]: phase }}>
+                      <div className="rt-title">
+                        <span className="rt-title-dot" />
+                        {t.label}
+                      </div>
+                      <table className="rt-table">
+                        <thead>
+                          <tr><th>Start</th><th>Stop</th><th>Duration</th></tr>
+                        </thead>
+                        <tbody>
+                          {t.data!.runs.map((r, i) => (
+                            <tr key={i}>
+                              <td>{formatT(r.start)}</td>
+                              <td>{r.stop ? formatT(r.stop) : '—'}</td>
+                              <td>{r.min}m{!r.stop && <span className="rt-active">●</span>}</td>
+                            </tr>
+                          ))}
+                          <tr className="rt-total">
+                            <td colSpan={2}>Total</td>
+                            <td>{t.data!.totalMin}m</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {t.key === 'extra' && (
+                    <VentSliders events={events} onLog={onAddEvent} />
+                  )}
                 </div>
               )
             })}
