@@ -624,27 +624,24 @@ export default function ChartPage() {
         .timer-chip-btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.14); }
         .timer-chip-btn:active { transform: translateY(0); }
         .timer-chip-btn .tc-label {
-          font-size: 1.05rem; font-weight: 800; letter-spacing: 0.05em;
+          font-size: 1.05rem; font-weight: 800; letter-spacing: 0.04em;
           text-transform: uppercase; color: #cbd5e1;
           display: flex; align-items: center; gap: 7px;
-          padding-right: 0.95rem;
+          padding-right: 0.9rem;
           border-right: 2px solid rgba(255,255,255,0.18);
-          line-height: 1; min-width: 58px;
+          line-height: 1; flex-shrink: 0;
+          white-space: nowrap;
           transition: color 0.18s ease, border-color 0.18s ease;
         }
         .timer-chip-btn .tc-value {
           font-size: 1.55rem; font-weight: 800; letter-spacing: -0.01em;
           font-variant-numeric: tabular-nums; line-height: 1;
+          flex-shrink: 0;
           transition: color 0.18s ease;
         }
         .timer-chip-btn .tc-value-placeholder {
           font-size: 0.9rem; font-weight: 500; color: #475569; font-style: italic;
-        }
-        .timer-chip-btn .tc-runs {
-          font-size: 0.6rem; color: #94a3b8; font-weight: 700;
-          letter-spacing: 0.08em; text-transform: uppercase;
-          margin-left: 0.45rem; padding: 2px 6px;
-          border-radius: 999px; background: rgba(255,255,255,0.06);
+          flex-shrink: 0;
         }
 
         /* Running state: green text + divider + pulsing border ring */
@@ -964,7 +961,7 @@ export default function ChartPage() {
         .timer-rows {
           grid-column: 2 / span 2; grid-row: 3;
           display: grid;
-          grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
           gap: 0.55rem 0.6rem;
           align-content: start;
           position: sticky; top: 1rem;
@@ -1384,16 +1381,14 @@ function LiveChart({
             const running = t.data?.running ?? false
             const started = t.data != null
             const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
-            const runCount = t.data?.runs.length ?? 0
             const phase = PHASE_COLORS[t.key]
-            const isExtra = t.key === 'extra'
             const hasRuns = (t.data?.runs.length ?? 0) > 0
 
             const chip = (
               <button
                 key={`${t.key}-chip`}
                 onClick={() => onToggleTimer(t.key)}
-                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}${isExtra ? ' tr-full' : ''}`}
+                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
                 type="button"
                 style={{ ['--phase' as never]: phase }}
               >
@@ -1402,11 +1397,8 @@ function LiveChart({
                   {t.label}
                 </span>
                 <span className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</span>
-                {runCount > 1 && <span className="tc-runs">{runCount} runs</span>}
               </button>
             )
-
-            if (isExtra) return <Fragment key={t.key}>{chip}</Fragment>
 
             const logCell = hasRuns ? (
               <div key={`${t.key}-log`} className="run-table-card" style={{ ['--phase' as never]: phase }}>
