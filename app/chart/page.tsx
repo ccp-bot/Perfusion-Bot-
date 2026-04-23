@@ -52,6 +52,25 @@ type CaseRecord = {
   complications?: string | null
   created_at?: string
   user_email?: string | null
+  equipment?: Record<string, { name: string; number: string }> | null
+}
+
+const EQUIPMENT_SLOTS: Array<{ key: string; label: string }> = [
+  { key: 'pump_pack', label: 'Pump Pack' },
+  { key: 'oxygenator', label: 'Oxygenator' },
+  { key: 'arterial_cannula', label: 'Arterial Cannula' },
+  { key: 'venous_cannula', label: 'Venous Cannula' },
+  { key: 'cardioplegia_cannula', label: 'Cardioplegia Cannula' },
+  { key: 'hemoconcentrator', label: 'Hemoconcentrator' },
+  { key: 'bypass_machine', label: 'Bypass Machine' },
+  { key: 'cell_saver_machine', label: 'Cell Saver Machine' },
+  { key: 'heater_cooler', label: 'Heater/Cooler' },
+]
+
+type EquipmentTemplate = {
+  id: string
+  name: string
+  equipment: Record<string, { name: string; number: string }>
 }
 
 type PhaseData = {
@@ -211,6 +230,7 @@ export default function ChartPage() {
   const [events, setEvents] = useState<CaseEvent[]>([])
   const [now, setNow] = useState(Date.now())
   const [activeForm, setActiveForm] = useState<'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null>(null)
+  const [equipmentTemplates, setEquipmentTemplates] = useState<EquipmentTemplate[]>([])
 
   // Custom modal for alerts and confirms (replaces native window.alert / window.confirm)
   const [modal, setModal] = useState<{
@@ -255,8 +275,38 @@ export default function ChartPage() {
   }, [])
 
   useEffect(() => {
-    if (user) loadCases()
+    if (user) {
+      loadCases()
+      loadEquipmentTemplates()
+    }
   }, [user])
+
+  async function loadEquipmentTemplates() {
+    if (!user) return
+    const res = await fetch(`/api/equipment-templates?userId=${user.id}`)
+    const data = await res.json()
+    setEquipmentTemplates(data.templates || [])
+  }
+
+  async function saveEquipmentTemplate(name: string, equipment: Record<string, { name: string; number: string }>) {
+    if (!user) return
+    const res = await fetch('/api/equipment-templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, userEmail: user.email, name, equipment }),
+    })
+    const data = await res.json()
+    if (data.error) { await showAlert('Save failed: ' + data.error, 'Could not save template'); return }
+    loadEquipmentTemplates()
+  }
+
+  async function deleteEquipmentTemplate(id: string) {
+    if (!user) return
+    const ok = await showConfirm('Delete this equipment template?', { title: 'Delete template?', danger: true, confirmLabel: 'Delete' })
+    if (!ok) return
+    await fetch(`/api/equipment-templates?id=${id}&userId=${user.id}`, { method: 'DELETE' })
+    loadEquipmentTemplates()
+  }
 
   // Clock tick for live timers
   useEffect(() => {
@@ -1308,16 +1358,15 @@ export default function ChartPage() {
               </div>
             </div>
 
-            <div style={sectionStyle}>
-              <div style={sectionTitle}>Circuit</div>
-              <div className="chart-grid">
-                <div><label style={labelStyle}>Oxygenator</label><input style={inputStyle} value={editing.oxygenator || ''} onChange={e => set('oxygenator', e.target.value)} /></div>
-                <div><label style={labelStyle}>Arterial Cannula</label><input style={inputStyle} value={editing.arterial_cannula || ''} onChange={e => set('arterial_cannula', e.target.value)} /></div>
-                <div><label style={labelStyle}>Venous Cannula</label><input style={inputStyle} value={editing.venous_cannula || ''} onChange={e => set('venous_cannula', e.target.value)} /></div>
-                <div><label style={labelStyle}>Prime Volume (mL)</label><input style={inputStyle} type="number" value={editing.prime_volume_ml ?? ''} onChange={e => set('prime_volume_ml', e.target.value === '' ? null : Number(e.target.value))} /></div>
-                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Prime Composition</label><input style={inputStyle} value={editing.prime_composition || ''} onChange={e => set('prime_composition', e.target.value)} /></div>
-              </div>
-            </div>
+            <EquipmentSection
+              equipment={editing.equipment || {}}
+              onChange={(eq) => setEditing(prev => ({ ...prev, equipment: eq }))}
+              templates={equipmentTemplates}
+              onSaveTemplate={saveEquipmentTemplate}
+              onDeleteTemplate={deleteEquipmentTemplate}
+              showAlert={showAlert}
+              inputStyle={inputStyle}
+            />
 
             <div style={sectionStyle}>
               <div style={sectionTitle}>Heparin / Protamine</div>
@@ -2233,5 +2282,152 @@ function NoteForm({ onSubmit }: { onSubmit: (d: { text: string }) => void }) {
       />
       <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log Note</button></div>
     </>
+  )
+}
+
+function EquipmentSection({
+  equipment, onChange, templates, onSaveTemplate, onDeleteTemplate, showAlert, inputStyle,
+}: {
+  equipment: Record<string, { name: string; number: string }>
+  onChange: (eq: Record<string, { name: string; number: string }>) => void
+  templates: EquipmentTemplate[]
+  onSaveTemplate: (name: string, eq: Record<string, { name: string; number: string }>) => Promise<void>
+  onDeleteTemplate: (id: string) => Promise<void>
+  showAlert: (msg: string, title?: string) => Promise<void>
+  inputStyle: React.CSSProperties
+}) {
+  const [editingKey, setEditingKey] = useState<string | null>(null)
+  const [draftName, setDraftName] = useState('')
+  const [draftNumber, setDraftNumber] = useState('')
+  const [savingTpl, setSavingTpl] = useState(false)
+  const [tplName, setTplName] = useState('')
+  const [showTplMenu, setShowTplMenu] = useState(false)
+
+  const openEdit = (key: string) => {
+    const current = equipment[key]
+    setDraftName(current?.name || '')
+    setDraftNumber(current?.number || '')
+    setEditingKey(key)
+  }
+  const cancelEdit = () => {
+    setEditingKey(null)
+    setDraftName('')
+    setDraftNumber('')
+  }
+  const commitEdit = () => {
+    if (!editingKey) return
+    if (!draftName.trim() && !draftNumber.trim()) { cancelEdit(); return }
+    onChange({ ...equipment, [editingKey]: { name: draftName.trim(), number: draftNumber.trim() } })
+    cancelEdit()
+  }
+  const clearSlot = (key: string) => {
+    const next = { ...equipment }
+    delete next[key]
+    onChange(next)
+  }
+
+  const commitSaveTemplate = async () => {
+    const trimmed = tplName.trim()
+    if (!trimmed) return
+    if (Object.keys(equipment).length === 0) {
+      await showAlert('Add at least one piece of equipment before saving as a template.', 'Empty template')
+      return
+    }
+    await onSaveTemplate(trimmed, equipment)
+    setSavingTpl(false)
+    setTplName('')
+  }
+
+  const applyTemplate = (tpl: EquipmentTemplate) => {
+    onChange({ ...tpl.equipment })
+    setShowTplMenu(false)
+  }
+
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: '12px', padding: '1rem 1.25rem', marginBottom: '1rem',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e63946', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Equipment</div>
+        <div style={{ display: 'flex', gap: '0.5rem', position: 'relative' }}>
+          <button type="button" onClick={() => { setSavingTpl(s => !s); setShowTplMenu(false) }}
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.35rem 0.7rem', borderRadius: '8px', fontSize: '0.75rem', cursor: 'pointer' }}>
+            Save Template
+          </button>
+          <button type="button" onClick={() => { setShowTplMenu(m => !m); setSavingTpl(false) }}
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', padding: '0.35rem 0.7rem', borderRadius: '8px', fontSize: '0.75rem', cursor: 'pointer' }}>
+            Load Template ▾
+          </button>
+          {showTplMenu && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '0.35rem', minWidth: '220px', zIndex: 50, boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+              {templates.length === 0 ? (
+                <div style={{ padding: '0.6rem 0.8rem', color: '#64748b', fontSize: '0.78rem' }}>No saved templates yet.</div>
+              ) : templates.map(tpl => (
+                <div key={tpl.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.25rem' }}>
+                  <button type="button" onClick={() => applyTemplate(tpl)}
+                    style={{ flex: 1, textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', padding: '0.4rem 0.6rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem' }}>
+                    {tpl.name}
+                  </button>
+                  <button type="button" onClick={() => onDeleteTemplate(tpl.id)} title="Delete template"
+                    style={{ background: 'transparent', border: '1px solid rgba(230,57,70,0.3)', color: '#e63946', padding: '0.2rem 0.55rem', borderRadius: '6px', cursor: 'pointer', fontSize: '0.72rem' }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {savingTpl && (
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
+          <input autoFocus style={{ ...inputStyle, flex: 1 }} placeholder="Template name (e.g. Standard Adult Pack)"
+            value={tplName} onChange={e => setTplName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') commitSaveTemplate(); if (e.key === 'Escape') { setSavingTpl(false); setTplName('') } }} />
+          <button type="button" onClick={commitSaveTemplate}
+            style={{ background: '#e63946', border: 'none', color: 'white', padding: '0.55rem 1rem', borderRadius: '8px', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>Save</button>
+          <button type="button" onClick={() => { setSavingTpl(false); setTplName('') }}
+            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.55rem 1rem', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+        {EQUIPMENT_SLOTS.map(slot => {
+          const val = equipment[slot.key]
+          const isEditing = editingKey === slot.key
+          return (
+            <div key={slot.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.25rem', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <div style={{ minWidth: '180px', fontSize: '0.82rem', color: '#cbd5e1', fontWeight: 500 }}>{slot.label}</div>
+              {isEditing ? (
+                <div style={{ display: 'flex', gap: '0.5rem', flex: 1, alignItems: 'center' }}>
+                  <input autoFocus style={{ ...inputStyle, flex: 2 }} placeholder="Name" value={draftName} onChange={e => setDraftName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit() }} />
+                  <input style={{ ...inputStyle, flex: 1 }} placeholder="Number" value={draftNumber} onChange={e => setDraftNumber(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit() }} />
+                  <button type="button" onClick={commitEdit}
+                    style={{ background: '#22c55e', border: 'none', color: 'white', padding: '0.45rem 0.8rem', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                  <button type="button" onClick={cancelEdit}
+                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.45rem 0.75rem', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer' }}>Cancel</button>
+                </div>
+              ) : val ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                  <button type="button" onClick={() => openEdit(slot.key)}
+                    style={{ flex: 1, textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', fontSize: '0.85rem', cursor: 'pointer', padding: '0.25rem 0' }}>
+                    <span style={{ fontWeight: 600 }}>{val.name || '(no name)'}</span>
+                    {val.number && <span style={{ color: '#94a3b8', marginLeft: '0.5rem' }}>#{val.number}</span>}
+                  </button>
+                  <button type="button" onClick={() => clearSlot(slot.key)} title="Clear"
+                    style={{ background: 'transparent', border: '1px solid rgba(230,57,70,0.25)', color: '#e63946', padding: '0.25rem 0.55rem', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer' }}>×</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => openEdit(slot.key)}
+                  style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', padding: '0.35rem 0.8rem', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}>
+                  + Add
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
