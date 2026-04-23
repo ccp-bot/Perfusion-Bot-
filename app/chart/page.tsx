@@ -1073,7 +1073,6 @@ export default function ChartPage() {
           )}
           {view === 'live' && (
             <div className="header-clock">
-              <div className="hc-label">Clock</div>
               <div className="hc-value">{new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
             </div>
           )}
