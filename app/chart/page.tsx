@@ -1634,16 +1634,28 @@ function LiveChart({
             {activeForm === 'note' && <NoteForm onSubmit={(d) => { onAddEvent('note', 'Note', d); setActiveForm(null) }} />}
           </div>
 
+          {(() => {
+            const filtered = activeForm ? events.filter(e => e.event_type === activeForm) : events
+            const filterLabel: Record<string, string> = { vitals: 'Vitals', med: 'Medication', cp: 'CP Dose', blood: 'Blood Product', volume: 'Volume', abg: 'ABG', note: 'Note' }
+            return (
           <div className="live-card">
-            <div className="live-card-title">Timeline <span style={{ color: '#64748b', fontWeight: 500, fontSize: '0.85rem', marginLeft: '8px' }}>· {events.length} {events.length === 1 ? 'event' : 'events'}</span></div>
-            {events.length === 0 ? (
+            <div className="live-card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span>Timeline</span>
+              <span style={{ color: '#64748b', fontWeight: 500, fontSize: '0.85rem' }}>· {filtered.length} {filtered.length === 1 ? 'event' : 'events'}</span>
+              {activeForm && (
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#e63946', background: 'rgba(230,57,70,0.1)', border: '1px solid rgba(230,57,70,0.3)', borderRadius: '999px', padding: '2px 10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {filterLabel[activeForm] || activeForm} only
+                </span>
+              )}
+            </div>
+            {filtered.length === 0 ? (
               <div style={{ color: '#475569', fontSize: '0.88rem', padding: '2rem 0', textAlign: 'center' }}>
                 <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.4 }}>⏱️</div>
-                No events yet. Tap a timer or a Quick Event to start logging.
+                {activeForm ? `No ${filterLabel[activeForm] || activeForm} entries yet.` : 'No events yet. Tap a timer or a Quick Event to start logging.'}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {[...events].reverse().map(e => {
+                {[...filtered].reverse().map(e => {
                   const typeStyle = EVENT_TYPE_STYLES[e.event_type] || EVENT_TYPE_STYLES.hotkey
                   const labelIcon = e.event_type === 'hotkey' && e.label ? HOTKEY_LABEL_ICONS[e.label] : undefined
                   const displayIcon = labelIcon || typeStyle.icon
@@ -1674,6 +1686,8 @@ function LiveChart({
               </div>
             )}
           </div>
+            )
+          })()}
         </div>
 
         {/* Right side — Row 1: Patient info stack (no box) */}
