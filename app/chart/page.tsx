@@ -159,9 +159,9 @@ const DETAIL_KEY_ORDER = [
 // Detail keys to hide per event type because they are already in the title.
 // e.g. "Med: Epinephrine" repeats `name`; "PRBC 1u" repeats `product`/`amount`.
 const REDUNDANT_DETAIL_KEYS: Record<string, string[]> = {
-  med: ['name'],
+  med: ['name', 'dose', 'unit'],
   blood: ['product', 'amount'],
-  cp: ['type', 'volume', 'route'],
+  cp: ['type', 'volume'],
   vent: ['sweep', 'fio2'],
 }
 
@@ -174,6 +174,24 @@ const COMMON_MEDS = [
 const CP_TYPES = ['Del Nido', 'Buckberg', 'Custodiol (HTK)', 'Microplegia', 'Other']
 const CP_ROUTES = ['Antegrade', 'Retrograde', 'Ostial', 'Aortic Root']
 const BLOOD_PRODUCTS = ['PRBC', 'FFP', 'Platelets', 'Cryo', 'Cell Saver']
+
+// Render the timeline label from details when we can produce a nicer format
+// than the stored label (applies retroactively to historical events).
+function displayEventLabel(e: CaseEvent): string {
+  const d = (e.details && typeof e.details === 'object') ? e.details as Record<string, unknown> : null
+  if (e.event_type === 'med' && d) {
+    const name = typeof d.name === 'string' ? d.name : null
+    const dose = d.dose != null && d.dose !== '' ? String(d.dose) : null
+    const unit = typeof d.unit === 'string' ? d.unit : ''
+    if (name && dose) return `Med: ${name}- ${dose}${unit}`
+  }
+  if (e.event_type === 'cp' && d) {
+    const type = typeof d.type === 'string' ? d.type : null
+    const volume = d.volume != null && d.volume !== '' ? String(d.volume) : null
+    if (type && volume) return `CP: ${type} ${volume}ml`
+  }
+  return e.label || ''
+}
 
 export default function ChartPage() {
   const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null)
@@ -1515,8 +1533,8 @@ function LiveChart({
               })}
             </div>
             {activeForm === 'vitals' && <VitalsForm onSubmit={(d) => { onAddEvent('vitals', 'Vitals', d); setActiveForm(null) }} />}
-            {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `Med: ${d.name}`, d); setActiveForm(null) }} />}
-            {activeForm === 'cp' && <CpForm onSubmit={(d) => { onAddEvent('cp', `CP: ${d.type} ${d.volume}mL ${d.route}`, d); setActiveForm(null) }} />}
+            {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `Med: ${d.name}- ${d.dose}${d.unit}`, d); setActiveForm(null) }} />}
+            {activeForm === 'cp' && <CpForm onSubmit={(d) => { onAddEvent('cp', `CP: ${d.type} ${d.volume}ml`, d); setActiveForm(null) }} />}
             {activeForm === 'blood' && <BloodForm onSubmit={(d) => { onAddEvent('blood', `${d.product} ${d.amount}${d.product === 'Cell Saver' ? 'mL' : 'u'}`, d); setActiveForm(null) }} />}
             {activeForm === 'abg' && <AbgForm onSubmit={(d) => { onAddEvent('abg', 'ABG', d); setActiveForm(null) }} />}
             {activeForm === 'note' && <NoteForm onSubmit={(d) => { onAddEvent('note', 'Note', d); setActiveForm(null) }} />}
@@ -1546,7 +1564,7 @@ function LiveChart({
                       <div className="tl-icon" style={{ ['--tl-color' as never]: typeStyle.color }} aria-hidden>{displayIcon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="tl-title-row">
-                          <span className="tl-label">{e.label}</span>
+                          <span className="tl-label">{displayEventLabel(e)}</span>
                           {stopDurations[e.id] != null && (
                             <span className="tl-duration">{stopDurations[e.id]} min</span>
                           )}
@@ -1781,9 +1799,15 @@ function EventDetails({ details, eventType }: { details: Record<string, unknown>
   if (pairs.length === 0) return null
   return (
     <div className="tl-details">
-      {pairs.map(([k, v]) => (
-        <span key={k}><span style={{ textTransform: 'capitalize', color: '#94a3b8' }}>{k.replace(/_/g, ' ')}</span> <strong style={{ color: '#cbd5e1' }}>{String(v)}</strong></span>
-      ))}
+      {pairs.map(([k, v]) => {
+        if (k === 'route') {
+          return <span key={k}><strong style={{ color: '#cbd5e1' }}>{String(v)}</strong></span>
+        }
+        if (k === 'temp') {
+          return <span key={k}><span style={{ color: '#94a3b8' }}>Temp:</span> <strong style={{ color: '#cbd5e1' }}>{String(v)}C</strong></span>
+        }
+        return <span key={k}><span style={{ textTransform: 'capitalize', color: '#94a3b8' }}>{k.replace(/_/g, ' ')}</span> <strong style={{ color: '#cbd5e1' }}>{String(v)}</strong></span>
+      })}
     </div>
   )
 }
