@@ -757,13 +757,12 @@ export default function ChartPage() {
         /* Patient info bar (live mode) */
         .patient-bar {
           display: grid;
-          grid-template-columns: 1.4fr 1fr 0.85fr 0.85fr 0.85fr;
-          gap: 0.5rem;
-          padding: 0.7rem 1rem;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 0.35rem;
+          padding: 0.7rem 0.9rem;
           background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
           border: 1px solid rgba(255,255,255,0.08);
           border-radius: 14px;
-          margin-bottom: 0.9rem;
           box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
         }
         .patient-field {
@@ -796,19 +795,18 @@ export default function ChartPage() {
         .vent-bar {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 1.1rem;
-          padding: 0.85rem 1.1rem;
+          gap: 0.9rem;
+          padding: 0.75rem 0.95rem;
           background: linear-gradient(180deg, rgba(6,182,212,0.06), rgba(6,182,212,0.01));
           border: 1px solid rgba(6,182,212,0.2);
           border-radius: 14px;
-          margin-bottom: 1rem;
           box-shadow: 0 0 32px rgba(6,182,212,0.04), 0 1px 0 rgba(255,255,255,0.03) inset;
         }
         .vent-bar-row {
           display: grid;
-          grid-template-columns: 115px 1fr 72px;
+          grid-template-columns: 90px 1fr 60px;
           align-items: center;
-          gap: 0.9rem;
+          gap: 0.7rem;
         }
         .vent-bar-lbl { display: flex; flex-direction: column; gap: 2px; }
         .vent-bar-lbl .vb-name {
@@ -823,16 +821,26 @@ export default function ChartPage() {
           font-size: 0.65rem; color: #64748b; margin-left: 4px; font-weight: 600;
         }
 
-        /* 3-column live layout */
+        /* 3-column live layout with right-side header rows (patient + vent span cols 2-3) */
         .main-grid {
           display: grid;
           grid-template-columns: minmax(0, 2fr) minmax(0, 0.6fr) minmax(0, 0.6fr);
-          gap: 1rem;
+          grid-template-rows: auto auto 1fr;
+          gap: 0.75rem 1rem;
           align-items: start;
         }
-        .col-main { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+        .col-main {
+          grid-column: 1;
+          grid-row: 1 / span 3;
+          display: flex; flex-direction: column; gap: 0;
+          min-width: 0;
+        }
+        .col-main .live-card:first-child { margin-top: 0; }
         .col-main .live-card:last-child { margin-bottom: 0; }
+        .patient-bar { grid-column: 2 / span 2; grid-row: 1; }
+        .vent-bar { grid-column: 2 / span 2; grid-row: 2; }
         .col-timers {
+          grid-column: 2; grid-row: 3;
           display: flex; flex-direction: column; gap: 0.6rem;
           position: sticky; top: 1rem;
           min-width: 0;
@@ -843,6 +851,7 @@ export default function ChartPage() {
         }
         .col-timers .timer-chip-btn .tc-value { font-size: 1.45rem; }
         .col-logs {
+          grid-column: 3; grid-row: 3;
           display: flex; flex-direction: column; gap: 0.55rem;
           position: sticky; top: 1rem;
           min-width: 0;
@@ -858,7 +867,10 @@ export default function ChartPage() {
         .popup-col .timer-pop { width: 100%; min-width: 0; }
 
         @media (max-width: 1100px) {
-          .main-grid { grid-template-columns: 1fr; }
+          .main-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
+          .col-main, .patient-bar, .vent-bar, .col-timers, .col-logs {
+            grid-column: 1; grid-row: auto;
+          }
           .col-timers, .col-logs { position: static; }
           .col-timers { flex-direction: row; flex-wrap: wrap; }
           .col-timers .timer-chip-btn { flex: 1 1 160px; }
@@ -1122,49 +1134,9 @@ function LiveChart({
 
   return (
     <>
-      {/* Patient info header */}
-      <div className="patient-bar">
-        <PatientField
-          label="Patient Name"
-          value={caseRecord.patient_initials || ''}
-          placeholder="Last name"
-          onCommit={(v) => onUpdateCase({ patient_initials: v || null })}
-        />
-        <PatientField
-          label="MRN"
-          value={caseRecord.case_number || ''}
-          placeholder="—"
-          onCommit={(v) => onUpdateCase({ case_number: v || null })}
-        />
-        <PatientField
-          label="Height (cm)"
-          value={caseRecord.height_cm != null ? String(caseRecord.height_cm) : ''}
-          placeholder="—"
-          numeric
-          onCommit={(v) => onUpdateCase({ height_cm: v === '' ? null : Number(v) })}
-        />
-        <PatientField
-          label="Weight (kg)"
-          value={caseRecord.weight_kg != null ? String(caseRecord.weight_kg) : ''}
-          placeholder="—"
-          numeric
-          onCommit={(v) => onUpdateCase({ weight_kg: v === '' ? null : Number(v) })}
-        />
-        <PatientField
-          label="BSA (m²)"
-          value={caseRecord.bsa != null ? String(caseRecord.bsa) : ''}
-          placeholder="—"
-          numeric
-          onCommit={(v) => onUpdateCase({ bsa: v === '' ? null : Number(v) })}
-        />
-      </div>
-
-      {/* Horizontal Ventilation bar */}
-      <VentBar events={events} onLog={onAddEvent} />
-
-      {/* Main 3-column grid */}
+      {/* Main grid — col 1 spans all rows; patient + vent bars span cols 2-3 */}
       <div className="main-grid">
-        {/* Column 1 — Quick Events, Add Entry, Timeline */}
+        {/* Column 1 — Quick Events, Add Entry, Timeline (full height) */}
         <div className="col-main">
           <div className="live-card">
             <div className="live-card-title">Quick Events</div>
@@ -1245,7 +1217,47 @@ function LiveChart({
           </div>
         </div>
 
-        {/* Column 2 — Primary timers (stacked) + active popup timers */}
+        {/* Right side — Row 1: Patient header spans cols 2-3 */}
+        <div className="patient-bar">
+          <PatientField
+            label="Patient Name"
+            value={caseRecord.patient_initials || ''}
+            placeholder="Last name"
+            onCommit={(v) => onUpdateCase({ patient_initials: v || null })}
+          />
+          <PatientField
+            label="MRN"
+            value={caseRecord.case_number || ''}
+            placeholder="—"
+            onCommit={(v) => onUpdateCase({ case_number: v || null })}
+          />
+          <PatientField
+            label="Height (cm)"
+            value={caseRecord.height_cm != null ? String(caseRecord.height_cm) : ''}
+            placeholder="—"
+            numeric
+            onCommit={(v) => onUpdateCase({ height_cm: v === '' ? null : Number(v) })}
+          />
+          <PatientField
+            label="Weight (kg)"
+            value={caseRecord.weight_kg != null ? String(caseRecord.weight_kg) : ''}
+            placeholder="—"
+            numeric
+            onCommit={(v) => onUpdateCase({ weight_kg: v === '' ? null : Number(v) })}
+          />
+          <PatientField
+            label="BSA (m²)"
+            value={caseRecord.bsa != null ? String(caseRecord.bsa) : ''}
+            placeholder="—"
+            numeric
+            onCommit={(v) => onUpdateCase({ bsa: v === '' ? null : Number(v) })}
+          />
+        </div>
+
+        {/* Right side — Row 2: Ventilation bar spans cols 2-3 */}
+        <VentBar events={events} onLog={onAddEvent} />
+
+        {/* Right side — Row 3 Col 2: Primary timers (stacked) + active popup timers */}
         <div className="col-timers">
           {primaryRows.map(t => {
             const running = t.data?.running ?? false
