@@ -258,6 +258,22 @@ export default function ChartPage() {
     await loadCases()
   }
 
+  async function updateCase(patches: Partial<CaseRecord>) {
+    if (!user || !liveCase) return
+    const caseId = liveCase.id
+    setLiveCase(prev => prev ? { ...prev, ...patches } : prev)
+    setCases(prev => prev.map(c => c.id === caseId ? { ...c, ...patches } : c))
+    const res = await fetch('/api/cases', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: caseId, userId: user.id, ...patches }),
+    })
+    const data = await res.json()
+    if (data.error) {
+      await showAlert('Save failed: ' + data.error, 'Could not update case')
+    }
+  }
+
   function startNew() {
     setEditing({ ...EMPTY_CASE })
     setView('form')
@@ -738,6 +754,124 @@ export default function ChartPage() {
         .entry-tab:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
         .entry-tab.active { background: #e63946; color: white; border-color: #e63946; box-shadow: 0 0 20px rgba(230,57,70,0.3); }
 
+        /* Patient info bar (live mode) */
+        .patient-bar {
+          display: grid;
+          grid-template-columns: 1.4fr 1fr 0.85fr 0.85fr 0.85fr;
+          gap: 0.5rem;
+          padding: 0.7rem 1rem;
+          background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01));
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 14px;
+          margin-bottom: 0.9rem;
+          box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
+        }
+        .patient-field {
+          display: flex; flex-direction: column; gap: 2px;
+          padding: 0.15rem 0.55rem;
+          border-right: 1px solid rgba(255,255,255,0.05);
+        }
+        .patient-field:last-child { border-right: none; }
+        .patient-field-label {
+          font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em;
+          color: #64748b; font-weight: 700;
+        }
+        .patient-field-input {
+          background: transparent; border: none; outline: none;
+          color: #e2e8f0; font-size: 1rem; font-weight: 600;
+          padding: 2px 0; font-family: inherit;
+          border-bottom: 1px solid transparent;
+          transition: border-color 0.15s ease, color 0.15s ease;
+          width: 100%; box-sizing: border-box;
+          font-variant-numeric: tabular-nums;
+        }
+        .patient-field-input:hover { border-bottom-color: rgba(255,255,255,0.12); }
+        .patient-field-input:focus { border-bottom-color: rgba(230,57,70,0.5); color: #fff; }
+        .patient-field-input::placeholder { color: #475569; font-weight: 500; }
+        .patient-field-input::-webkit-outer-spin-button,
+        .patient-field-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .patient-field-input[type=number] { -moz-appearance: textfield; }
+
+        /* Horizontal Vent bar */
+        .vent-bar {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1.1rem;
+          padding: 0.85rem 1.1rem;
+          background: linear-gradient(180deg, rgba(6,182,212,0.06), rgba(6,182,212,0.01));
+          border: 1px solid rgba(6,182,212,0.2);
+          border-radius: 14px;
+          margin-bottom: 1rem;
+          box-shadow: 0 0 32px rgba(6,182,212,0.04), 0 1px 0 rgba(255,255,255,0.03) inset;
+        }
+        .vent-bar-row {
+          display: grid;
+          grid-template-columns: 115px 1fr 72px;
+          align-items: center;
+          gap: 0.9rem;
+        }
+        .vent-bar-lbl { display: flex; flex-direction: column; gap: 2px; }
+        .vent-bar-lbl .vb-name {
+          font-size: 0.68rem; font-weight: 700; color: #94a3b8;
+          text-transform: uppercase; letter-spacing: 0.1em;
+        }
+        .vent-bar-lbl .vb-cur {
+          font-size: 1.35rem; font-weight: 800; color: #06b6d4;
+          font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+        }
+        .vent-bar-lbl .vb-cur .vb-unit {
+          font-size: 0.65rem; color: #64748b; margin-left: 4px; font-weight: 600;
+        }
+
+        /* 3-column live layout */
+        .main-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 2fr) minmax(0, 0.6fr) minmax(0, 0.6fr);
+          gap: 1rem;
+          align-items: start;
+        }
+        .col-main { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+        .col-main .live-card:last-child { margin-bottom: 0; }
+        .col-timers {
+          display: flex; flex-direction: column; gap: 0.6rem;
+          position: sticky; top: 1rem;
+          min-width: 0;
+        }
+        .col-timers .timer-chip-btn {
+          width: 100%; min-width: 0;
+          min-height: 82px; padding: 0.9rem 0.9rem;
+        }
+        .col-timers .timer-chip-btn .tc-value { font-size: 1.45rem; }
+        .col-logs {
+          display: flex; flex-direction: column; gap: 0.55rem;
+          position: sticky; top: 1rem;
+          min-width: 0;
+        }
+        .col-logs-empty {
+          color: #475569; font-size: 0.78rem; text-align: center;
+          padding: 1.25rem 0.5rem;
+          border: 1px dashed rgba(255,255,255,0.08);
+          border-radius: 12px;
+          background: rgba(255,255,255,0.015);
+        }
+        .popup-col { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.3rem; }
+        .popup-col .timer-pop { width: 100%; min-width: 0; }
+
+        @media (max-width: 1100px) {
+          .main-grid { grid-template-columns: 1fr; }
+          .col-timers, .col-logs { position: static; }
+          .col-timers { flex-direction: row; flex-wrap: wrap; }
+          .col-timers .timer-chip-btn { flex: 1 1 160px; }
+          .popup-col { flex-direction: row; flex-wrap: wrap; flex: 1 1 100%; }
+          .col-logs { flex-direction: row; flex-wrap: wrap; }
+          .col-logs .run-table-card { flex: 1 1 240px; }
+        }
+        @media (max-width: 700px) {
+          .patient-bar { grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+          .patient-field { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem; }
+          .vent-bar { grid-template-columns: 1fr; gap: 0.6rem; }
+        }
+
         @media (max-width: 900px) {
           .primary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
           .hotkey-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
@@ -749,10 +883,11 @@ export default function ChartPage() {
           .primary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
           .timer-chip-btn { min-height: 82px; padding: 0.85rem 0.75rem; }
           .timer-chip-btn .tc-value { font-size: 1.3rem; }
+          .vent-bar-row { grid-template-columns: 95px 1fr 60px; gap: 0.6rem; }
         }
       `}</style>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem 1.5rem 4rem' }}>
+      <div style={{ maxWidth: view === 'live' ? '1600px' : '1200px', margin: '0 auto', padding: '1.5rem 1.5rem 4rem' }}>
         {/* Header */}
         <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -900,6 +1035,7 @@ export default function ChartPage() {
             onAddEvent={logEvent}
             onDeleteEvent={deleteEvent}
             onUpdateEventNote={updateEventNote}
+            onUpdateCase={updateCase}
           />
         )}
       </div>
@@ -938,7 +1074,7 @@ export default function ChartPage() {
 // ----- Live chart component -----
 
 function LiveChart({
-  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent, onUpdateEventNote,
+  caseRecord, events, timers, now, activeForm, setActiveForm, onHotkey, onToggleTimer, onAddEvent, onDeleteEvent, onUpdateEventNote, onUpdateCase,
 }: {
   caseRecord: CaseRecord
   events: CaseEvent[]
@@ -961,6 +1097,7 @@ function LiveChart({
   onAddEvent: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
   onDeleteEvent: (id: string) => Promise<void>
   onUpdateEventNote: (id: string, note: string) => Promise<void>
+  onUpdateCase: (patches: Partial<CaseRecord>) => Promise<void>
 }) {
   type PrimaryKey = 'cpb' | 'xclamp' | 'dhca' | 'sacp' | 'extra'
   const primaryRows: { key: PrimaryKey; label: string; data: PhaseData | null }[] = [
@@ -981,174 +1118,210 @@ function LiveChart({
 
   const formatT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
 
+  const logRows = primaryRows.filter(t => (t.data?.runs.length ?? 0) > 0)
+
   return (
     <>
-      {/* Sticky frosted top bar with timers */}
-      <div className="live-sticky">
-        {/* Primary columns: each timer chip stacks over its run-history table */}
-        {/* Primary columns: each column = one timer chip + its run table (or sliders for Extra) */}
-        <div className="primary-grid">
+      {/* Patient info header */}
+      <div className="patient-bar">
+        <PatientField
+          label="Patient Name"
+          value={caseRecord.patient_initials || ''}
+          placeholder="Last name"
+          onCommit={(v) => onUpdateCase({ patient_initials: v || null })}
+        />
+        <PatientField
+          label="MRN"
+          value={caseRecord.case_number || ''}
+          placeholder="—"
+          onCommit={(v) => onUpdateCase({ case_number: v || null })}
+        />
+        <PatientField
+          label="Height (cm)"
+          value={caseRecord.height_cm != null ? String(caseRecord.height_cm) : ''}
+          placeholder="—"
+          numeric
+          onCommit={(v) => onUpdateCase({ height_cm: v === '' ? null : Number(v) })}
+        />
+        <PatientField
+          label="Weight (kg)"
+          value={caseRecord.weight_kg != null ? String(caseRecord.weight_kg) : ''}
+          placeholder="—"
+          numeric
+          onCommit={(v) => onUpdateCase({ weight_kg: v === '' ? null : Number(v) })}
+        />
+        <PatientField
+          label="BSA (m²)"
+          value={caseRecord.bsa != null ? String(caseRecord.bsa) : ''}
+          placeholder="—"
+          numeric
+          onCommit={(v) => onUpdateCase({ bsa: v === '' ? null : Number(v) })}
+        />
+      </div>
+
+      {/* Horizontal Ventilation bar */}
+      <VentBar events={events} onLog={onAddEvent} />
+
+      {/* Main 3-column grid */}
+      <div className="main-grid">
+        {/* Column 1 — Quick Events, Add Entry, Timeline */}
+        <div className="col-main">
+          <div className="live-card">
+            <div className="live-card-title">Quick Events</div>
+            <div className="hotkey-grid">
+              {HOTKEYS.map(hk => (
+                <button key={hk.label} onClick={() => onHotkey(hk.label)} className="hotkey-btn">
+                  {hk.icon && <span className="hotkey-icon" style={{ color: hk.color }} aria-hidden>{hk.icon}</span>}
+                  <span>{hk.label}</span>
+                </button>
+              ))}
+              <button
+                onClick={() => { setActiveForm('note'); setTimeout(() => document.getElementById('quick-note-textarea')?.focus(), 50) }}
+                className="hotkey-btn"
+                type="button"
+              >
+                <span className="hotkey-icon" style={{ color: '#a855f7' }} aria-hidden>📝</span>
+                <span>Quick Note</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="live-card">
+            <div className="live-card-title">Add Entry</div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: activeForm ? '1rem' : 0 }}>
+              {(['vitals', 'med', 'cp', 'blood', 'abg', 'note'] as const).map(k => {
+                const iconMap: Record<string, string> = { vitals: '📊', med: '💊', cp: '❤️', blood: '🩸', abg: '🧪', note: '📝' }
+                const labelMap: Record<string, string> = { vitals: 'Vitals', med: 'Medication', cp: 'CP Dose', blood: 'Blood Product', abg: 'ABG', note: 'Note' }
+                return (
+                  <button
+                    key={k}
+                    onClick={() => setActiveForm(activeForm === k ? null : k)}
+                    className={`entry-tab${activeForm === k ? ' active' : ''}`}
+                    type="button"
+                  >
+                    <span aria-hidden>{iconMap[k]}</span>
+                    <span>{labelMap[k]}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {activeForm === 'vitals' && <VitalsForm onSubmit={(d) => { onAddEvent('vitals', 'Vitals', d); setActiveForm(null) }} />}
+            {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `Med: ${d.name}`, d); setActiveForm(null) }} />}
+            {activeForm === 'cp' && <CpForm onSubmit={(d) => { onAddEvent('cp', `CP: ${d.type} ${d.volume}mL ${d.route}`, d); setActiveForm(null) }} />}
+            {activeForm === 'blood' && <BloodForm onSubmit={(d) => { onAddEvent('blood', `${d.product} ${d.amount}${d.product === 'Cell Saver' ? 'mL' : 'u'}`, d); setActiveForm(null) }} />}
+            {activeForm === 'abg' && <AbgForm onSubmit={(d) => { onAddEvent('abg', 'ABG', d); setActiveForm(null) }} />}
+            {activeForm === 'note' && <NoteForm onSubmit={(d) => { onAddEvent('note', 'Note', d); setActiveForm(null) }} />}
+          </div>
+
+          <div className="live-card">
+            <div className="live-card-title">Timeline <span style={{ color: '#64748b', fontWeight: 500, fontSize: '0.85rem', marginLeft: '8px' }}>· {events.length} {events.length === 1 ? 'event' : 'events'}</span></div>
+            {events.length === 0 ? (
+              <div style={{ color: '#475569', fontSize: '0.88rem', padding: '2rem 0', textAlign: 'center' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.4 }}>⏱️</div>
+                No events yet. Tap a timer or a Quick Event to start logging.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {[...events].reverse().map(e => {
+                  const typeStyle = EVENT_TYPE_STYLES[e.event_type] || EVENT_TYPE_STYLES.hotkey
+                  const currentNote = (e.details && typeof e.details === 'object' && typeof (e.details as Record<string, unknown>).note === 'string')
+                    ? ((e.details as Record<string, unknown>).note as string)
+                    : ''
+                  return (
+                    <div key={e.id} className="tl-entry">
+                      <div className="tl-time">{new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      <div className="tl-icon" style={{ ['--tl-color' as never]: typeStyle.color }} aria-hidden>{typeStyle.icon}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="tl-label">{e.label}</div>
+                        {e.details && <EventDetails details={e.details} />}
+                        <EventNote eventId={e.id} initial={currentNote} onSave={onUpdateEventNote} />
+                      </div>
+                      <button onClick={() => onDeleteEvent(e.id)} className="tl-delete" title="Delete event" aria-label="Delete event">×</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Column 2 — Primary timers (stacked) + active popup timers */}
+        <div className="col-timers">
           {primaryRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
             const value = t.data?.totalMin != null ? `${t.data.totalMin} min` : 'Tap to start'
             const runCount = t.data?.runs.length ?? 0
             const phase = PHASE_COLORS[t.key]
-            const hasRuns = (t.data?.runs.length ?? 0) > 0 && t.key !== 'extra'
             return (
-              <div key={t.key} className="primary-col">
-                <button
-                  onClick={() => onToggleTimer(t.key)}
-                  className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
-                  type="button"
-                  style={{ ['--phase' as never]: phase }}
-                >
-                  <div className="tc-label">
-                    {running && <span className="pulse-dot" />}
-                    {t.label}
+              <button
+                key={t.key}
+                onClick={() => onToggleTimer(t.key)}
+                className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
+                type="button"
+                style={{ ['--phase' as never]: phase }}
+              >
+                <div className="tc-label">
+                  {running && <span className="pulse-dot" />}
+                  {t.label}
+                </div>
+                <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</div>
+                {runCount > 1 && <div className="tc-runs">{runCount} runs</div>}
+              </button>
+            )
+          })}
+
+          {activePopupRows.length > 0 && (
+            <div className="popup-col">
+              {activePopupRows.map(t => {
+                const phase = PHASE_COLORS[t.key]
+                const running = t.data?.running ?? false
+                const value = t.data?.min != null ? `${t.data.min} min` : '—'
+                return (
+                  <div key={t.key} className={`timer-pop${running ? ' running' : ''}`} style={{ ['--phase' as never]: phase }}>
+                    <div className="tp-label">{t.label}</div>
+                    <div className="tp-value">{value}</div>
                   </div>
-                  <div className={t.data != null ? 'tc-value' : 'tc-value-placeholder'}>{value}</div>
-                  {runCount > 1 && <div className="tc-runs">{runCount} runs</div>}
-                </button>
-                {hasRuns && (
-                  <div className="run-table-card" style={{ ['--phase' as never]: phase }}>
-                    <div className="rt-title">
-                      <span className="rt-title-dot" />
-                      {t.label}
-                    </div>
-                    <table className="rt-table">
-                      <thead>
-                        <tr><th>Start</th><th>Stop</th><th>Duration</th></tr>
-                      </thead>
-                      <tbody>
-                        {t.data!.runs.map((r, i) => (
-                          <tr key={i}>
-                            <td>{formatT(r.start)}</td>
-                            <td>{r.stop ? formatT(r.stop) : '—'}</td>
-                            <td>{r.min}m{!r.stop && <span className="rt-active">●</span>}</td>
-                          </tr>
-                        ))}
-                        <tr className="rt-total">
-                          <td colSpan={2}>Total</td>
-                          <td>{t.data!.totalMin}m</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {t.key === 'extra' && (
-                  <VentSliders events={events} onLog={onAddEvent} />
-                )}
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Column 3 — Run-history logs for each timer */}
+        <div className="col-logs">
+          {logRows.length === 0 ? (
+            <div className="col-logs-empty">Timer logs will appear here</div>
+          ) : logRows.map(t => {
+            const phase = PHASE_COLORS[t.key]
+            return (
+              <div key={t.key} className="run-table-card" style={{ ['--phase' as never]: phase }}>
+                <div className="rt-title">
+                  <span className="rt-title-dot" />
+                  {t.label}
+                </div>
+                <table className="rt-table">
+                  <thead>
+                    <tr><th>Start</th><th>Stop</th><th>Duration</th></tr>
+                  </thead>
+                  <tbody>
+                    {t.data!.runs.map((r, i) => (
+                      <tr key={i}>
+                        <td>{formatT(r.start)}</td>
+                        <td>{r.stop ? formatT(r.stop) : '—'}</td>
+                        <td>{r.min}m{!r.stop && <span className="rt-active">●</span>}</td>
+                      </tr>
+                    ))}
+                    <tr className="rt-total">
+                      <td colSpan={2}>Total</td>
+                      <td>{t.data!.totalMin}m</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             )
           })}
         </div>
-
-        {/* Popup timers (appear once triggered) — below the primary columns */}
-        {activePopupRows.length > 0 && (
-          <div className="popup-row">
-            {activePopupRows.map(t => {
-              const phase = PHASE_COLORS[t.key]
-              const running = t.data?.running ?? false
-              const value = t.data?.min != null ? `${t.data.min} min` : '—'
-              return (
-                <div key={t.key} className={`timer-pop${running ? ' running' : ''}`} style={{ ['--phase' as never]: phase }}>
-                  <div className="tp-label">{t.label}</div>
-                  <div className="tp-value">{value}</div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Hotkeys */}
-      <div className="live-card">
-        <div className="live-card-title">Quick Events</div>
-        <div className="hotkey-grid">
-          {HOTKEYS.map(hk => (
-            <button
-              key={hk.label}
-              onClick={() => onHotkey(hk.label)}
-              className="hotkey-btn"
-            >
-              {hk.icon && <span className="hotkey-icon" style={{ color: hk.color }} aria-hidden>{hk.icon}</span>}
-              <span>{hk.label}</span>
-            </button>
-          ))}
-          <button
-            onClick={() => { setActiveForm('note'); setTimeout(() => document.getElementById('quick-note-textarea')?.focus(), 50) }}
-            className="hotkey-btn"
-            type="button"
-          >
-            <span className="hotkey-icon" style={{ color: '#a855f7' }} aria-hidden>📝</span>
-            <span>Quick Note</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Add-entry tabs */}
-      <div className="live-card">
-        <div className="live-card-title">Add Entry</div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: activeForm ? '1rem' : 0 }}>
-          {(['vitals', 'med', 'cp', 'blood', 'abg', 'note'] as const).map(k => {
-            const iconMap: Record<string, string> = { vitals: '📊', med: '💊', cp: '❤️', blood: '🩸', abg: '🧪', note: '📝' }
-            const labelMap: Record<string, string> = { vitals: 'Vitals', med: 'Medication', cp: 'CP Dose', blood: 'Blood Product', abg: 'ABG', note: 'Note' }
-            return (
-              <button
-                key={k}
-                onClick={() => setActiveForm(activeForm === k ? null : k)}
-                className={`entry-tab${activeForm === k ? ' active' : ''}`}
-                type="button"
-              >
-                <span aria-hidden>{iconMap[k]}</span>
-                <span>{labelMap[k]}</span>
-              </button>
-            )
-          })}
-        </div>
-        {activeForm === 'vitals' && <VitalsForm onSubmit={(d) => { onAddEvent('vitals', 'Vitals', d); setActiveForm(null) }} />}
-        {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `Med: ${d.name}`, d); setActiveForm(null) }} />}
-        {activeForm === 'cp' && <CpForm onSubmit={(d) => { onAddEvent('cp', `CP: ${d.type} ${d.volume}mL ${d.route}`, d); setActiveForm(null) }} />}
-        {activeForm === 'blood' && <BloodForm onSubmit={(d) => { onAddEvent('blood', `${d.product} ${d.amount}${d.product === 'Cell Saver' ? 'mL' : 'u'}`, d); setActiveForm(null) }} />}
-        {activeForm === 'abg' && <AbgForm onSubmit={(d) => { onAddEvent('abg', 'ABG', d); setActiveForm(null) }} />}
-        {activeForm === 'note' && <NoteForm onSubmit={(d) => { onAddEvent('note', 'Note', d); setActiveForm(null) }} />}
-      </div>
-
-      {/* Timeline */}
-      <div className="live-card">
-        <div className="live-card-title">Timeline <span style={{ color: '#64748b', fontWeight: 500, fontSize: '0.85rem', marginLeft: '8px' }}>· {events.length} {events.length === 1 ? 'event' : 'events'}</span></div>
-        {events.length === 0 ? (
-          <div style={{ color: '#475569', fontSize: '0.88rem', padding: '2rem 0', textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.4 }}>⏱️</div>
-            No events yet. Tap a timer above or a Quick Event to start logging.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {[...events].reverse().map(e => {
-              const typeStyle = EVENT_TYPE_STYLES[e.event_type] || EVENT_TYPE_STYLES.hotkey
-              const currentNote = (e.details && typeof e.details === 'object' && typeof (e.details as Record<string, unknown>).note === 'string')
-                ? ((e.details as Record<string, unknown>).note as string)
-                : ''
-              return (
-                <div key={e.id} className="tl-entry">
-                  <div className="tl-time">{new Date(e.event_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                  <div className="tl-icon" style={{ ['--tl-color' as never]: typeStyle.color }} aria-hidden>{typeStyle.icon}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="tl-label">{e.label}</div>
-                    {e.details && <EventDetails details={e.details} />}
-                    <EventNote
-                      eventId={e.id}
-                      initial={currentNote}
-                      onSave={onUpdateEventNote}
-                    />
-                  </div>
-                  <button onClick={() => onDeleteEvent(e.id)} className="tl-delete" title="Delete event" aria-label="Delete event">×</button>
-                </div>
-              )
-            })}
-          </div>
-        )}
       </div>
     </>
   )
@@ -1167,7 +1340,7 @@ function EventDetails({ details }: { details: Record<string, unknown> }) {
   )
 }
 
-function VentSliders({
+function VentBar({
   events, onLog,
 }: {
   events: CaseEvent[]
@@ -1205,17 +1378,15 @@ function VentSliders({
   const fio2Pct = ((Math.max(21, Math.min(100, fio2)) - 21) / (100 - 21)) * 100
 
   return (
-    <div className="vent-card">
-      <div className="vent-row">
-        <div className="vent-head">
-          <span className="vent-lbl">Sweep</span>
-          <span className="vent-current">{sweep.toFixed(1)} <span className="vent-unit">LPM</span></span>
+    <div className="vent-bar">
+      <div className="vent-bar-row">
+        <div className="vent-bar-lbl">
+          <span className="vb-name">Sweep</span>
+          <span className="vb-cur">{sweep.toFixed(1)}<span className="vb-unit">LPM</span></span>
         </div>
         <input
           type="range"
-          min={0}
-          max={11}
-          step={0.1}
+          min={0} max={11} step={0.1}
           value={sweep}
           onChange={e => setSweep(Number(e.target.value))}
           onMouseUp={e => commitSweep(Number((e.target as HTMLInputElement).value))}
@@ -1225,9 +1396,7 @@ function VentSliders({
         />
         <input
           type="number"
-          min={0}
-          max={11}
-          step={0.1}
+          min={0} max={11} step={0.1}
           value={sweep}
           onChange={e => setSweep(e.target.value === '' ? 0 : Number(e.target.value))}
           onBlur={e => commitSweep(Number(e.target.value))}
@@ -1235,17 +1404,14 @@ function VentSliders({
           className="vent-num"
         />
       </div>
-
-      <div className="vent-row">
-        <div className="vent-head">
-          <span className="vent-lbl">FiO₂</span>
-          <span className="vent-current">{fio2}<span className="vent-unit">%</span></span>
+      <div className="vent-bar-row">
+        <div className="vent-bar-lbl">
+          <span className="vb-name">FiO₂</span>
+          <span className="vb-cur">{fio2}<span className="vb-unit">%</span></span>
         </div>
         <input
           type="range"
-          min={21}
-          max={100}
-          step={1}
+          min={21} max={100} step={1}
           value={fio2}
           onChange={e => setFio2(Number(e.target.value))}
           onMouseUp={e => commitFio2(Number((e.target as HTMLInputElement).value))}
@@ -1255,9 +1421,7 @@ function VentSliders({
         />
         <input
           type="number"
-          min={21}
-          max={100}
-          step={1}
+          min={21} max={100} step={1}
           value={fio2}
           onChange={e => setFio2(e.target.value === '' ? 21 : Number(e.target.value))}
           onBlur={e => commitFio2(Number(e.target.value))}
@@ -1265,6 +1429,34 @@ function VentSliders({
           className="vent-num"
         />
       </div>
+    </div>
+  )
+}
+
+function PatientField({
+  label, value, placeholder, numeric, onCommit,
+}: {
+  label: string
+  value: string
+  placeholder?: string
+  numeric?: boolean
+  onCommit: (v: string) => void
+}) {
+  const [v, setV] = useState(value)
+  useEffect(() => { setV(value) }, [value])
+  return (
+    <div className="patient-field">
+      <span className="patient-field-label">{label}</span>
+      <input
+        className="patient-field-input"
+        type={numeric ? 'number' : 'text'}
+        inputMode={numeric ? 'decimal' : 'text'}
+        value={v}
+        placeholder={placeholder}
+        onChange={e => setV(e.target.value)}
+        onBlur={() => { if (v !== value) onCommit(v) }}
+        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      />
     </div>
   )
 }
