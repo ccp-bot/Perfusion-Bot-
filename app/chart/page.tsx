@@ -1510,6 +1510,31 @@ function LiveChart({
             have no editable log, so they render as a single chip spanning
             both columns. */}
         <div className="timer-rows">
+          {/* Automatic derived timers pinned at the top. 4 compact chips in
+              their own row bar; always visible. Running ones flow left,
+              stopped/untriggered shadow out on the right. Not clickable. */}
+          <div className="popup-row-bar">
+            {autoTimers.map(t => {
+              const running = t.data?.running ?? false
+              const hasData = t.data != null
+              const min = t.data?.min ?? 0
+              return (
+                <div
+                  key={t.key}
+                  className={`popup-chip${running ? ' running' : hasData ? ' idle' : ' empty'}`}
+                  style={{ ['--phase' as never]: PHASE_COLORS[t.key] }}
+                  aria-label={`${t.label} timer`}
+                >
+                  <div className="pc-label">
+                    {running && <span className="pc-dot" />}
+                    {t.label}
+                  </div>
+                  <div className="pc-value">{hasData ? `${min} min` : '—'}</div>
+                </div>
+              )
+            })}
+          </div>
+
           {pinnedRows.map(t => {
             const running = t.data?.running ?? false
             const started = t.data != null
@@ -1581,30 +1606,6 @@ function LiveChart({
             )
           })}
 
-          {/* Automatic derived timers. 4 compact chips in their own row bar;
-              always visible. Running ones flow left, stopped/untriggered
-              shadow out on the right. Not clickable. */}
-          <div className="popup-row-bar">
-            {autoTimers.map(t => {
-              const running = t.data?.running ?? false
-              const hasData = t.data != null
-              const min = t.data?.min ?? 0
-              return (
-                <div
-                  key={t.key}
-                  className={`popup-chip${running ? ' running' : hasData ? ' idle' : ' empty'}`}
-                  style={{ ['--phase' as never]: PHASE_COLORS[t.key] }}
-                  aria-label={`${t.label} timer`}
-                >
-                  <div className="pc-label">
-                    {running && <span className="pc-dot" />}
-                    {t.label}
-                  </div>
-                  <div className="pc-value">{hasData ? `${min} min` : '—'}</div>
-                </div>
-              )
-            })}
-          </div>
         </div>
       </div>
     </>
