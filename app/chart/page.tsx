@@ -532,9 +532,11 @@ export default function ChartPage() {
     const rcp = computePhase('RCP Start', 'RCP Stop')
     const muf = computePhase('MUF Start', 'MUF Stop')
 
-    // CP Timer: since most recent CP dose event
+    // CP Timer: counts from the most recent CP dose event. Freezes when the
+    // cross clamp comes off (or when Off Bypass hits, via makeTimer's default).
     const latestCp = [...events].reverse().find(e => e.event_type === 'cp')?.event_time
-    const cp = makeTimer(latestCp)
+    const cpStop = findNextAfter('Aortic Clamp Off', latestCp)
+    const cp = makeTimer(latestCp, cpStop)
 
     // Reperfusion: most recent Aortic Clamp Off → Off Bypass
     const reperfusion = makeTimer(findLatest('Aortic Clamp Off'))
