@@ -554,6 +554,34 @@ export default function ChartPage() {
     return { cpb, xclamp, cp, reperfusion, cooling, rewarming, sacp, dhca, extra, rcp, muf }
   }, [events, now])
 
+  // Map each stop-event id → duration in minutes (paired with its preceding start).
+  // Renders inline on the timeline so e.g. "Off Bypass" shows the CPB run length.
+  const stopDurations = useMemo(() => {
+    const map: Record<string, number> = {}
+    const pairs: Array<[string, string]> = [
+      ['On Bypass', 'Off Bypass'],
+      ['Aortic Clamp On', 'Aortic Clamp Off'],
+      ['DHCA Start', 'DHCA Stop'],
+      ['SACP Start', 'SACP Stop'],
+      ['Extra Start', 'Extra Stop'],
+      ['RCP Start', 'RCP Stop'],
+      ['MUF Start', 'MUF Stop'],
+    ]
+    for (const [startLabel, stopLabel] of pairs) {
+      let currentStart: number | null = null
+      for (const e of events) {
+        if (e.label === startLabel) {
+          if (currentStart == null) currentStart = new Date(e.event_time).getTime()
+        } else if (e.label === stopLabel && currentStart != null) {
+          const min = Math.max(0, Math.floor((new Date(e.event_time).getTime() - currentStart) / 60000))
+          map[e.id] = min
+          currentStart = null
+        }
+      }
+    }
+    return map
+  }, [events])
+
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '0.55rem 0.7rem', borderRadius: '8px',
     border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)',
@@ -787,6 +815,14 @@ export default function ChartPage() {
         .tl-title-row { display: flex; align-items: center; gap: 0.45rem; flex-wrap: nowrap; min-width: 0; }
         .tl-label { font-weight: 700; color: #e2e8f0; font-size: 0.95rem; letter-spacing: 0.01em; flex-shrink: 0; }
         .tl-sep { color: #475569; font-weight: 500; flex-shrink: 0; user-select: none; }
+        .tl-duration {
+          font-size: 0.72rem; font-weight: 700; color: #22c55e;
+          background: rgba(34,197,94,0.1);
+          border: 1px solid rgba(34,197,94,0.25);
+          border-radius: 6px; padding: 2px 7px;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: 0.02em; flex-shrink: 0;
+        }
         .tl-details { font-size: 0.75rem; color: #64748b; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 0.6rem; }
         .tl-delete { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #94a3b8; cursor: pointer; font-size: 1rem; padding: 4px 10px; border-radius: 8px; opacity: 0.85; transition: all 0.15s ease; line-height: 1; align-self: center; }
         .tl-delete:hover { opacity: 1; color: #e63946; background: rgba(230,57,70,0.08); border-color: rgba(230,57,70,0.25); }
@@ -1504,6 +1540,9 @@ function LiveChart({
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="tl-title-row">
                           <span className="tl-label">{e.label}</span>
+                          {stopDurations[e.id] != null && (
+                            <span className="tl-duration">{stopDurations[e.id]} min</span>
+                          )}
                           <span className="tl-sep">:</span>
                           <EventNote eventId={e.id} initial={currentNote} onSave={onUpdateEventNote} />
                         </div>
