@@ -83,7 +83,7 @@ type CaseEvent = {
   id: string
   case_id: string
   event_time: string
-  event_type: string // 'hotkey' | 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note'
+  event_type: string // 'hotkey' | 'vitals' | 'med' | 'cp' | 'blood' | 'volume' | 'abg' | 'note'
   label?: string | null
   details?: Record<string, unknown> | null
   created_at?: string
@@ -150,6 +150,7 @@ const EVENT_TYPE_STYLES: Record<string, { color: string; icon: string }> = {
   med: { color: '#a855f7', icon: '💊' },
   cp: { color: '#ec4899', icon: '❤️' },
   blood: { color: '#ef4444', icon: '🩸' },
+  volume: { color: '#06b6d4', icon: '💧' },
   abg: { color: '#eab308', icon: '🧪' },
   note: { color: '#64748b', icon: '📝' },
   vent: { color: '#06b6d4', icon: '🌬️' },
@@ -170,6 +171,7 @@ const DETAIL_KEY_ORDER = [
   'name', 'dose', 'unit',
   'type', 'volume', 'route', 'temp',
   'product', 'amount',
+  'fluid',
   'map', 'cvp', 'flow', 'temp_blood', 'temp_bladder', 'svo2', 'hct', 'act', 'fio2', 'sweep', 'urine',
   'ph', 'pco2', 'po2', 'hco3', 'be', 'k', 'ica', 'hgb', 'glucose', 'lactate',
   'text',
@@ -181,6 +183,7 @@ const REDUNDANT_DETAIL_KEYS: Record<string, string[]> = {
   med: ['name', 'dose', 'unit'],
   blood: ['product', 'amount'],
   cp: ['type', 'volume'],
+  volume: ['fluid', 'amount'],
   vent: ['sweep', 'fio2'],
 }
 
@@ -193,6 +196,7 @@ const COMMON_MEDS = [
 const CP_TYPES = ['Del Nido', 'Buckberg', 'Custodiol (HTK)', 'Microplegia', 'Other']
 const CP_ROUTES = ['Antegrade', 'Retrograde', 'Ostial', 'Aortic Root']
 const BLOOD_PRODUCTS = ['PRBC', 'FFP', 'Platelets', 'Cryo', 'Cell Saver']
+const VOLUME_FLUIDS = ['Normosol', 'Plasmalyte', 'Albumin', '0.9% Normal Saline', '0.45% Half Normal Saline', 'Lactated Ringers']
 
 // Render the timeline label from details when we can produce a nicer format
 // than the stored label (applies retroactively to historical events).
@@ -229,7 +233,7 @@ export default function ChartPage() {
   const [liveCase, setLiveCase] = useState<CaseRecord | null>(null)
   const [events, setEvents] = useState<CaseEvent[]>([])
   const [now, setNow] = useState(Date.now())
-  const [activeForm, setActiveForm] = useState<'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null>(null)
+  const [activeForm, setActiveForm] = useState<'vitals' | 'med' | 'cp' | 'blood' | 'volume' | 'abg' | 'note' | null>(null)
   const [equipmentTemplates, setEquipmentTemplates] = useState<EquipmentTemplate[]>([])
 
   // Custom modal for alerts and confirms (replaces native window.alert / window.confirm)
@@ -1463,8 +1467,8 @@ function LiveChart({
     muf: PhaseData | null
   }
   now: number
-  activeForm: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null
-  setActiveForm: (f: 'vitals' | 'med' | 'cp' | 'blood' | 'abg' | 'note' | null) => void
+  activeForm: 'vitals' | 'med' | 'cp' | 'blood' | 'volume' | 'abg' | 'note' | null
+  setActiveForm: (f: 'vitals' | 'med' | 'cp' | 'blood' | 'volume' | 'abg' | 'note' | null) => void
   onHotkey: (label: string) => void
   onToggleTimer: (which: TimerKey) => Promise<void>
   onAddEvent: (eventType: string, label: string, details?: Record<string, unknown>) => Promise<void>
@@ -1565,9 +1569,9 @@ function LiveChart({
           <div className="live-card">
             <div className="live-card-title">Add Entry</div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: activeForm ? '1rem' : 0 }}>
-              {(['vitals', 'med', 'cp', 'blood', 'abg', 'note'] as const).map(k => {
-                const iconMap: Record<string, string> = { vitals: '📊', med: '💊', cp: '❤️', blood: '🩸', abg: '🧪', note: '📝' }
-                const labelMap: Record<string, string> = { vitals: 'Vitals', med: 'Medication', cp: 'CP Dose', blood: 'Blood Product', abg: 'ABG', note: 'Note' }
+              {(['vitals', 'med', 'cp', 'blood', 'volume', 'abg', 'note'] as const).map(k => {
+                const iconMap: Record<string, string> = { vitals: '📊', med: '💊', cp: '❤️', blood: '🩸', volume: '💧', abg: '🧪', note: '📝' }
+                const labelMap: Record<string, string> = { vitals: 'Vitals', med: 'Medication', cp: 'CP Dose', blood: 'Blood Product', volume: 'Volume', abg: 'ABG', note: 'Note' }
                 return (
                   <button
                     key={k}
@@ -1585,6 +1589,7 @@ function LiveChart({
             {activeForm === 'med' && <MedForm onSubmit={(d) => { onAddEvent('med', `${d.name}- ${d.dose}${d.unit}`, d); setActiveForm(null) }} />}
             {activeForm === 'cp' && <CpForm onSubmit={(d) => { onAddEvent('cp', `CP: ${d.type} ${d.volume}ml`, d); setActiveForm(null) }} />}
             {activeForm === 'blood' && <BloodForm onSubmit={(d) => { onAddEvent('blood', `${d.product} ${d.amount}${d.product === 'Cell Saver' ? 'mL' : 'u'}`, d); setActiveForm(null) }} />}
+            {activeForm === 'volume' && <VolumeForm onSubmit={(d) => { onAddEvent('volume', `${d.fluid}- ${d.amount}mL`, d); setActiveForm(null) }} />}
             {activeForm === 'abg' && <AbgForm onSubmit={(d) => { onAddEvent('abg', 'ABG', d); setActiveForm(null) }} />}
             {activeForm === 'note' && <NoteForm onSubmit={(d) => { onAddEvent('note', 'Note', d); setActiveForm(null) }} />}
           </div>
@@ -2230,6 +2235,30 @@ function BloodForm({ onSubmit }: { onSubmit: (d: { product: string; amount: stri
         <div><label style={lblStyle}>{product === 'Cell Saver' ? 'mL' : 'Units'}</label><input style={inpStyle} inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></div>
       </div>
       <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log Blood Product</button></div>
+    </>
+  )
+}
+
+function VolumeForm({ onSubmit }: { onSubmit: (d: { fluid: string; amount: string }) => void }) {
+  const [fluid, setFluid] = useState(VOLUME_FLUIDS[0])
+  const [amount, setAmount] = useState('')
+  const submit = () => {
+    if (!amount) return
+    onSubmit({ fluid, amount })
+    setAmount('')
+  }
+  return (
+    <>
+      <div style={formStyle}>
+        <div>
+          <label style={lblStyle}>Fluid</label>
+          <select style={inpStyle} value={fluid} onChange={e => setFluid(e.target.value)}>
+            {VOLUME_FLUIDS.map(f => <option key={f}>{f}</option>)}
+          </select>
+        </div>
+        <div><label style={lblStyle}>Amount (mL)</label><input style={inpStyle} inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></div>
+      </div>
+      <div style={{ marginTop: '0.75rem', textAlign: 'right' }}><button onClick={submit} style={submitStyle}>Log Volume</button></div>
     </>
   )
 }
