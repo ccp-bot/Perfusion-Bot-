@@ -205,17 +205,16 @@ function mostellerBSA(height: number | null | undefined, weight: number | null |
   return Math.round(Math.sqrt((height * weight) / 3600) * 100) / 100
 }
 
-// On-pump dilutional HCT: pre_hct × PBV / (PBV + prime). PBV uses sex-based
-// mL/kg (M:75, F:65, else 70). Returns null until pre_hct, prime, and
-// weight are all present.
+// On-pump dilutional HCT: pre_hct × PBV / (PBV + prime). PBV uses 65 mL/kg
+// across the board. Returns null until pre_hct, prime, and weight are all
+// present.
 function postDilutionalHct(c: Partial<CaseRecord>): number | null {
   const pre = c.pre_hct
   const prime = c.prime_volume_ml
   const weight = c.weight_kg
   if (pre == null || prime == null || weight == null) return null
   if (pre <= 0 || prime < 0 || weight <= 0) return null
-  const mlPerKg = c.sex === 'M' ? 75 : c.sex === 'F' ? 65 : 70
-  const pbv = weight * mlPerKg
+  const pbv = weight * 65
   return Math.round((pre * pbv) / (pbv + prime) * 10) / 10
 }
 
