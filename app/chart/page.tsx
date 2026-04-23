@@ -1449,14 +1449,6 @@ function LiveChart({
                   </button>
                 )
               })}
-              <button
-                onClick={() => { setActiveForm('note'); setTimeout(() => document.getElementById('quick-note-textarea')?.focus(), 50) }}
-                className="hotkey-btn"
-                type="button"
-              >
-                <span className="hotkey-icon" style={{ color: '#a855f7' }} aria-hidden>📝</span>
-                <span>Quick Note</span>
-              </button>
             </div>
           </div>
 
