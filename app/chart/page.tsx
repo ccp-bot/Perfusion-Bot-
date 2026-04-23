@@ -164,7 +164,7 @@ const CP_ROUTES = ['Antegrade', 'Retrograde', 'Ostial', 'Aortic Root']
 const BLOOD_PRODUCTS = ['PRBC', 'FFP', 'Platelets', 'Cryo', 'Cell Saver']
 
 export default function ChartPage() {
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
+  const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [cases, setCases] = useState<CaseRecord[]>([])
   const [view, setView] = useState<'list' | 'form' | 'live'>('list')
@@ -208,7 +208,12 @@ export default function ChartPage() {
       if (!session) {
         window.location.href = '/login'
       } else {
-        setUser({ id: session.user.id, email: session.user.email })
+        const meta = session.user.user_metadata as Record<string, unknown> | undefined
+        const name =
+          (typeof meta?.full_name === 'string' ? meta.full_name : undefined) ||
+          (typeof meta?.name === 'string' ? meta.name : undefined) ||
+          session.user.email?.split('@')[0]
+        setUser({ id: session.user.id, email: session.user.email, name })
         setAuthLoading(false)
       }
     })
@@ -1057,9 +1062,9 @@ export default function ChartPage() {
               <div style={{ fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
                 <span style={{ color: '#e63946' }}>COR</span> Charting
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#4a5568' }}>
-                {view === 'live' && liveCase ? `${liveCase.procedure || 'Case'} · ${liveCase.case_date || ''}` : 'Case log — private to you'}
-              </div>
+              {user?.name && (
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{user.name}</div>
+              )}
             </div>
           </div>
           {view === 'list' && (
