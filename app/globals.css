@@ -49,6 +49,22 @@ input[type=number] {
   appearance: textfield;
 }
 
+/* COR assistant alert pulses. */
+@keyframes cor-pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.55); }
+  50%      { box-shadow: 0 0 0 10px rgba(230, 57, 70, 0); }
+}
+@keyframes cor-pulse-yellow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.45); }
+  50%      { box-shadow: 0 0 0 10px rgba(234, 179, 8, 0); }
+}
+.cor-flash-red {
+  animation: cor-pulse-red 1.6s ease-in-out infinite;
+}
+.cor-flash-yellow {
+  animation: cor-pulse-yellow 2.2s ease-in-out infinite;
+}
+
 @media print {
   @page {
     size: landscape;

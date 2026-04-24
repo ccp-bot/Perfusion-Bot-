@@ -2666,7 +2666,7 @@ function computeOnbypassSuggestions(
     const interval = Math.max(1, Math.floor(cadences[def.key]))
     const overdue = minSince - interval
     if (overdue < 0) continue
-    const severity: AssistantSuggestion['severity'] = overdue >= 5 ? 'urgent' : 'info'
+    const severity: AssistantSuggestion['severity'] = overdue >= 10 ? 'urgent' : 'info'
     const label = CADENCE_LABELS[def.key]
     // Cycle ID so a fresh reminder isn't suppressed by a stale ack once the
     // user logs the matching event.
@@ -2869,16 +2869,22 @@ function CORAssistant({ caseRecord, events, onOpenForm, onOpenEntry }: {
   const do2i = phase === 'prebypass' ? do2iTargetFlow(caseRecord) : null
   const showDo2iBubble = !!do2i && !urgentUnread && !bubbleDismissed['do2i']
 
+  const infoUnread = suggestions.some(s => s.severity === 'info' && !acked[s.id])
+  const flashClass = urgentUnread ? 'cor-flash-red' : infoUnread ? 'cor-flash-yellow' : ''
+  const buttonBorder = urgentUnread ? 'rgba(230,57,70,0.55)' : infoUnread ? 'rgba(234,179,8,0.55)' : 'rgba(255,255,255,0.1)'
+  const buttonBg = urgentUnread ? 'rgba(230,57,70,0.12)' : infoUnread ? 'rgba(234,179,8,0.08)' : 'rgba(255,255,255,0.04)'
+
   return (
     <div style={{ position: 'relative' }}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-label="Open COR assistant"
+        className={flashClass}
         style={{
           display: 'flex', alignItems: 'center', gap: '0.5rem',
-          background: urgentUnread ? 'rgba(230,57,70,0.12)' : 'rgba(255,255,255,0.04)',
-          border: `1px solid ${urgentUnread ? 'rgba(230,57,70,0.45)' : 'rgba(255,255,255,0.1)'}`,
+          background: buttonBg,
+          border: `1px solid ${buttonBorder}`,
           borderRadius: '999px', padding: '0.3rem 0.7rem 0.3rem 0.35rem', cursor: 'pointer',
           fontFamily: 'inherit',
         }}
@@ -3113,23 +3119,38 @@ function CORAssistant({ caseRecord, events, onOpenForm, onOpenEntry }: {
         </div>
       )}
 
-      {urgentUnread && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div style={{ background: '#0d1117', border: '1px solid rgba(230,57,70,0.45)', borderRadius: 16, maxWidth: 460, width: '100%', padding: '1.5rem', boxShadow: '0 30px 60px rgba(0,0,0,0.7)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.9rem' }}>
-              <span style={{ fontSize: '1.6rem' }}>⚠️</span>
-              <div>
-                <div style={{ color: '#e63946', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>COR Alert · {phaseLabel}</div>
-                <div style={{ color: '#e2e8f0', fontSize: '1.05rem', fontWeight: 700, marginTop: 2 }}>{urgentUnread.title}</div>
-              </div>
+      {urgentUnread && !open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 10, width: 320,
+          background: '#0d1117', border: '1px solid rgba(230,57,70,0.45)', borderRadius: 14,
+          padding: '0.85rem 0.9rem 0.9rem', boxShadow: '0 14px 34px rgba(0,0,0,0.6)', zIndex: 55,
+        }}>
+          <div aria-hidden style={{
+            position: 'absolute', top: -6, right: 24, width: 12, height: 12,
+            background: '#0d1117', border: '1px solid rgba(230,57,70,0.45)', borderRight: 'none', borderBottom: 'none',
+            transform: 'rotate(45deg)',
+          }} />
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem' }}>
+            <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>⚠️</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: '#e63946', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>COR · {phaseLabel}</div>
+              <div style={{ color: '#e2e8f0', fontSize: '0.88rem', fontWeight: 600, lineHeight: 1.35 }}>{urgentUnread.title}</div>
+              {urgentUnread.body && <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: 6, lineHeight: 1.4 }}>{urgentUnread.body}</div>}
+              {urgentUnread.goTo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    ack(urgentUnread.id)
+                    if (urgentUnread.goTo === 'form') onOpenForm()
+                    else if (urgentUnread.goTo) onOpenEntry(urgentUnread.goTo)
+                  }}
+                  style={{ marginTop: 8, background: '#e63946', border: 'none', color: 'white', fontWeight: 700, fontSize: '0.78rem', padding: '0.45rem 0.85rem', borderRadius: 8, cursor: 'pointer' }}>
+                  Open →
+                </button>
+              )}
             </div>
-            {urgentUnread.body && <div style={{ color: '#cbd5e1', fontSize: '0.88rem', lineHeight: 1.5, marginBottom: '1.1rem' }}>{urgentUnread.body}</div>}
-            <div style={{ textAlign: 'right' }}>
-              <button type="button" onClick={() => ack(urgentUnread.id)}
-                style={{ background: '#e63946', border: 'none', color: 'white', fontWeight: 700, fontSize: '0.88rem', padding: '0.65rem 1.4rem', borderRadius: 10, cursor: 'pointer' }}>
-                Read & Acknowledge
-              </button>
-            </div>
+            <button type="button" onClick={() => ack(urgentUnread.id)} aria-label="Dismiss"
+              style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.95rem', padding: 0, lineHeight: 1 }}>✕</button>
           </div>
         </div>
       )}
