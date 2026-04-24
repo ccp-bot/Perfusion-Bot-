@@ -2599,7 +2599,30 @@ function computePrebypassSuggestions(c: CaseRecord): AssistantSuggestion[] {
     }
   }
 
+  const do2iFlow = do2iTargetFlow(c)
+  if (do2iFlow) {
+    out.push({
+      id: 'do2i-target-flow',
+      severity: 'info',
+      title: `DO2i 280 target flow ≈ ${do2iFlow.flow.toFixed(1)} L/min`,
+      body: `Assumes Hb ≈ HCT/3 (post-dilutional ${do2iFlow.hct}% → ${do2iFlow.hb.toFixed(1)} g/dL). CI required ≈ ${do2iFlow.ci.toFixed(1)} L/min/m².`,
+    })
+  }
+
   return out
+}
+
+// DO2i (mL/min/m²) = CI × 1.34 × Hb × 10, with SaO2 assumed 100% and dissolved
+// O2 ignored (standard perfusion approximation). Invert for a target DO2i of
+// 280: required flow = BSA × 280 / (13.4 × Hb), Hb ≈ HCT / 3.
+function do2iTargetFlow(c: Partial<CaseRecord>): { flow: number; ci: number; hb: number; hct: number } | null {
+  const bsa = c.bsa
+  const post = postDilutionalHct(c)
+  if (!bsa || bsa <= 0 || post == null || post <= 0) return null
+  const hb = post / 3
+  const ci = 280 / (13.4 * hb)
+  const flow = bsa * ci
+  return { flow, ci, hb, hct: post }
 }
 
 function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: CaseEvent[] }) {
@@ -2608,10 +2631,12 @@ function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: 
 
   const ackKey = `cor-ack-${caseRecord.id}`
   const checklistKey = `cor-checklist-${caseRecord.id}`
+  const bubbleKey = `cor-bubble-${caseRecord.id}`
 
   const [acked, setAcked] = useState<Record<string, boolean>>({})
   const [checklist, setChecklist] = useState<Record<string, boolean>>({})
   const [open, setOpen] = useState(false)
+  const [bubbleDismissed, setBubbleDismissed] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -2620,8 +2645,18 @@ function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: 
       if (rawAck) setAcked(JSON.parse(rawAck))
       const rawCl = localStorage.getItem(checklistKey)
       if (rawCl) setChecklist(JSON.parse(rawCl))
+      const rawBubble = localStorage.getItem(bubbleKey)
+      if (rawBubble) setBubbleDismissed(JSON.parse(rawBubble))
     } catch { /* ignore corrupt state */ }
-  }, [ackKey, checklistKey])
+  }, [ackKey, checklistKey, bubbleKey])
+
+  const dismissBubble = (id: string) => {
+    setBubbleDismissed(prev => {
+      const next = { ...prev, [id]: true }
+      try { localStorage.setItem(bubbleKey, JSON.stringify(next)) } catch { /* quota / incognito */ }
+      return next
+    })
+  }
 
   const ack = (id: string) => {
     setAcked(prev => {
@@ -2643,14 +2678,17 @@ function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: 
 
   const phaseLabel = phase === 'prebypass' ? 'Pre-Bypass' : phase === 'onbypass' ? 'On Bypass' : 'Post-Bypass'
 
+  const do2i = phase === 'prebypass' ? do2iTargetFlow(caseRecord) : null
+  const showDo2iBubble = !!do2i && !urgentUnread && !bubbleDismissed['do2i']
+
   return (
-    <>
+    <div style={{ position: 'relative' }}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-label="Open COR assistant"
         style={{
-          position: 'relative', display: 'flex', alignItems: 'center', gap: '0.5rem',
+          display: 'flex', alignItems: 'center', gap: '0.5rem',
           background: urgentUnread ? 'rgba(230,57,70,0.12)' : 'rgba(255,255,255,0.04)',
           border: `1px solid ${urgentUnread ? 'rgba(230,57,70,0.45)' : 'rgba(255,255,255,0.1)'}`,
           borderRadius: '999px', padding: '0.3rem 0.7rem 0.3rem 0.35rem', cursor: 'pointer',
@@ -2672,6 +2710,34 @@ function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: 
           }}>{unreadCount}</span>
         )}
       </button>
+
+      {showDo2iBubble && do2i && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 10, width: 300,
+          background: '#0d1117', border: '1px solid rgba(34,197,94,0.35)', borderRadius: 14,
+          padding: '0.85rem 0.9rem 0.9rem', boxShadow: '0 14px 34px rgba(0,0,0,0.6)', zIndex: 55,
+        }}>
+          <div aria-hidden style={{
+            position: 'absolute', top: -6, right: 24, width: 12, height: 12,
+            background: '#0d1117', border: '1px solid rgba(34,197,94,0.35)', borderRight: 'none', borderBottom: 'none',
+            transform: 'rotate(45deg)',
+          }} />
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem' }}>
+            <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>🤖</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: '#22c55e', fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>COR says</div>
+              <div style={{ color: '#e2e8f0', fontSize: '0.88rem', fontWeight: 600, lineHeight: 1.35 }}>
+                Aim for ~{do2i.flow.toFixed(1)} L/min to hit DO2i 280.
+              </div>
+              <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: 6, lineHeight: 1.4 }}>
+                Based on post-dilutional HCT {do2i.hct}% (Hb ≈ {do2i.hb.toFixed(1)} g/dL) and BSA {(caseRecord.bsa ?? 0).toFixed(2)} m². Required CI ≈ {do2i.ci.toFixed(1)} L/min/m².
+              </div>
+            </div>
+            <button type="button" onClick={() => dismissBubble('do2i')} aria-label="Dismiss"
+              style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.95rem', padding: 0, lineHeight: 1 }}>✕</button>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div
@@ -2780,6 +2846,6 @@ function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: 
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
