@@ -2572,16 +2572,60 @@ const CADENCE_LABELS: Record<keyof Cadences, string> = {
   cp: 'Cardioplegia re-dose',
 }
 
+// Pull the most recent numeric reading for a given details key from events of
+// any of the accepted types. Returns { value, whenMs } or null.
+function latestNumeric(events: CaseEvent[], types: string[], key: string): { value: number; whenMs: number } | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (!types.includes(e.event_type)) continue
+    const d = e.details as Record<string, unknown> | null
+    if (!d) continue
+    const raw = d[key]
+    if (raw === null || raw === undefined || raw === '') continue
+    const n = typeof raw === 'number' ? raw : parseFloat(String(raw))
+    if (Number.isFinite(n)) return { value: n, whenMs: new Date(e.event_time).getTime() }
+  }
+  return null
+}
+
 function computeOnbypassSuggestions(
   events: CaseEvent[],
   cadences: Cadences,
   now: number,
+  bsa: number | null,
 ): AssistantSuggestion[] {
   const out: AssistantSuggestion[] = []
 
   const onBypass = [...events].reverse().find(e => e.label === 'On Bypass')
   if (!onBypass) return out
   const cpbStartMs = new Date(onBypass.event_time).getTime()
+
+  // Live DO2i check: target flow from the most recent measured HCT vs. the
+  // most recent pump flow. Only fires once both are present and BSA is set.
+  if (bsa && bsa > 0) {
+    const hctReading = latestNumeric(events, ['vitals', 'abg'], 'hct')
+    const flowReading = latestNumeric(events, ['vitals'], 'flow')
+    if (hctReading && flowReading && hctReading.value > 0) {
+      const hb = hctReading.value / 3
+      const target = bsa * 280 / (13.4 * hb)
+      const delta = flowReading.value - target
+      const absDelta = Math.abs(delta)
+      if (absDelta >= 0.3) {
+        const direction = delta < 0 ? 'below' : 'above'
+        const severity: AssistantSuggestion['severity'] = absDelta >= 0.6 ? 'urgent' : 'info'
+        // Cycle the id with latest-reading timestamps so a fresh ack is
+        // required after the user re-measures HCT or updates flow.
+        const cycle = `${Math.floor(hctReading.whenMs / 60000)}-${Math.floor(flowReading.whenMs / 60000)}`
+        out.push({
+          id: `do2i-drift-${cycle}`,
+          severity,
+          title: `Flow ${absDelta.toFixed(1)} L/min ${direction} DO2i 280 target`,
+          body: `Current ${flowReading.value.toFixed(1)} L/min vs target ${target.toFixed(1)} L/min (HCT ${hctReading.value}%, Hb ≈ ${hb.toFixed(1)} g/dL, BSA ${bsa.toFixed(2)} m²). Tap to update vitals.`,
+          goTo: 'vitals',
+        })
+      }
+    }
+  }
 
   const latestOfType = (type: string): number | null => {
     const found = [...events].reverse().find(e => e.event_type === type)
@@ -2752,7 +2796,7 @@ function CORAssistant({ caseRecord, events, onOpenForm, onOpenEntry }: {
 
   const suggestions = useMemo(() => {
     if (phase === 'prebypass') return computePrebypassSuggestions(caseRecord)
-    if (phase === 'onbypass') return computeOnbypassSuggestions(events, cadences, nowTick)
+    if (phase === 'onbypass') return computeOnbypassSuggestions(events, cadences, nowTick, caseRecord.bsa ?? null)
     return []
   }, [caseRecord, events, phase, cadences, nowTick])
 
