@@ -1730,7 +1730,11 @@ function LiveChart({
               value={caseRecord.height_cm != null ? String(caseRecord.height_cm) : ''}
               placeholder="—"
               numeric
-              onCommit={(v) => onUpdateCase({ height_cm: v === '' ? null : Number(v) })}
+              onCommit={(v) => {
+                const h = v === '' ? null : Number(v)
+                const w = caseRecord.weight_kg ?? null
+                onUpdateCase({ height_cm: h, bsa: mostellerBSA(h, w) ?? caseRecord.bsa ?? null })
+              }}
             />
             <span className="pb-unit">cm</span>
             <span className="pb-sep">·</span>
@@ -1739,7 +1743,11 @@ function LiveChart({
               value={caseRecord.weight_kg != null ? String(caseRecord.weight_kg) : ''}
               placeholder="—"
               numeric
-              onCommit={(v) => onUpdateCase({ weight_kg: v === '' ? null : Number(v) })}
+              onCommit={(v) => {
+                const w = v === '' ? null : Number(v)
+                const h = caseRecord.height_cm ?? null
+                onUpdateCase({ weight_kg: w, bsa: mostellerBSA(h, w) ?? caseRecord.bsa ?? null })
+              }}
             />
             <span className="pb-unit">kg</span>
             <span className="pb-sep">·</span>
@@ -2592,7 +2600,7 @@ function computeOnbypassSuggestions(
   events: CaseEvent[],
   cadences: Cadences,
   now: number,
-  bsa: number | null,
+  caseRecord: CaseRecord,
 ): AssistantSuggestion[] {
   const out: AssistantSuggestion[] = []
 
@@ -2601,7 +2609,11 @@ function computeOnbypassSuggestions(
   const cpbStartMs = new Date(onBypass.event_time).getTime()
 
   // Live DO2i check: target flow from the most recent measured HCT vs. the
-  // most recent pump flow. Only fires once both are present and BSA is set.
+  // most recent pump flow. Only fires once both are present and BSA (or
+  // enough inputs to derive it) is set.
+  const bsa = caseRecord.bsa && caseRecord.bsa > 0
+    ? caseRecord.bsa
+    : mostellerBSA(caseRecord.height_cm ?? null, caseRecord.weight_kg ?? null)
   if (bsa && bsa > 0) {
     const hctReading = latestNumeric(events, ['vitals', 'abg'], 'hct')
     const flowReading = latestNumeric(events, ['vitals'], 'flow')
@@ -2796,7 +2808,7 @@ function CORAssistant({ caseRecord, events, onOpenForm, onOpenEntry }: {
 
   const suggestions = useMemo(() => {
     if (phase === 'prebypass') return computePrebypassSuggestions(caseRecord)
-    if (phase === 'onbypass') return computeOnbypassSuggestions(events, cadences, nowTick, caseRecord.bsa ?? null)
+    if (phase === 'onbypass') return computeOnbypassSuggestions(events, cadences, nowTick, caseRecord)
     return []
   }, [caseRecord, events, phase, cadences, nowTick])
 
