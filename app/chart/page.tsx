@@ -1310,7 +1310,7 @@ export default function ChartPage() {
           )}
           {view === 'live' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              {liveCase && <CORAssistant caseRecord={liveCase} events={events} onOpenForm={openLiveCaseDetails} />}
+              {liveCase && <CORAssistant caseRecord={liveCase} events={events} onOpenForm={openLiveCaseDetails} onOpenEntry={(t) => setActiveForm(t)} />}
               <div className="header-clock">
                 <div className="hc-value">{new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                 <div className="hc-date">{new Date(now).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
@@ -2553,7 +2553,80 @@ type AssistantSuggestion = {
   severity: 'urgent' | 'info' | 'done'
   title: string
   body?: string
-  goTo?: 'form'
+  goTo?: 'form' | 'vitals' | 'abg' | 'cp'
+}
+
+type Cadences = {
+  vitals: number
+  abg: number
+  act: number
+  cp: number
+}
+
+const DEFAULT_CADENCES: Cadences = { vitals: 15, abg: 30, act: 30, cp: 45 }
+
+const CADENCE_LABELS: Record<keyof Cadences, string> = {
+  vitals: 'Vitals',
+  abg: 'ABG',
+  act: 'ACT',
+  cp: 'Cardioplegia re-dose',
+}
+
+function computeOnbypassSuggestions(
+  events: CaseEvent[],
+  cadences: Cadences,
+  now: number,
+): AssistantSuggestion[] {
+  const out: AssistantSuggestion[] = []
+
+  const onBypass = [...events].reverse().find(e => e.label === 'On Bypass')
+  if (!onBypass) return out
+  const cpbStartMs = new Date(onBypass.event_time).getTime()
+
+  const latestOfType = (type: string): number | null => {
+    const found = [...events].reverse().find(e => e.event_type === type)
+    return found ? new Date(found.event_time).getTime() : null
+  }
+
+  const latestActMs = (): number | null => {
+    const found = [...events].reverse().find(e => {
+      if (e.event_type !== 'vitals') return false
+      const d = e.details as Record<string, unknown> | null
+      return !!d && typeof d.act === 'string' && (d.act as string).trim() !== ''
+    })
+    return found ? new Date(found.event_time).getTime() : null
+  }
+
+  const defs: Array<{ key: keyof Cadences; goTo: 'vitals' | 'abg' | 'cp'; last: number | null }> = [
+    { key: 'vitals', goTo: 'vitals', last: latestOfType('vitals') },
+    { key: 'abg',    goTo: 'abg',    last: latestOfType('abg') },
+    { key: 'act',    goTo: 'vitals', last: latestActMs() },
+    { key: 'cp',     goTo: 'cp',     last: latestOfType('cp') },
+  ]
+
+  for (const def of defs) {
+    const baseline = def.last ?? cpbStartMs
+    const minSince = Math.floor((now - baseline) / 60000)
+    const interval = Math.max(1, Math.floor(cadences[def.key]))
+    const overdue = minSince - interval
+    if (overdue < 0) continue
+    const severity: AssistantSuggestion['severity'] = overdue >= 5 ? 'urgent' : 'info'
+    const label = CADENCE_LABELS[def.key]
+    // Cycle ID so a fresh reminder isn't suppressed by a stale ack once the
+    // user logs the matching event.
+    const cycle = def.last == null ? 'initial' : String(Math.floor(def.last / 60000))
+    out.push({
+      id: `cadence-${def.key}-${cycle}`,
+      severity,
+      title: def.last == null
+        ? `${label} due — ${minSince} min on bypass`
+        : `${label} due — ${minSince} min since last`,
+      body: `Every ${interval} min. Tap to log.`,
+      goTo: def.goTo,
+    })
+  }
+
+  return out
 }
 
 function computePhase(events: CaseEvent[]): 'prebypass' | 'onbypass' | 'postbypass' {
@@ -2644,9 +2717,44 @@ function do2iTargetFlow(c: Partial<CaseRecord>): { flow: number; ci: number; hb:
   return { flow, ci, hb, hct: post }
 }
 
-function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseRecord; events: CaseEvent[]; onOpenForm: () => void }) {
+function CORAssistant({ caseRecord, events, onOpenForm, onOpenEntry }: {
+  caseRecord: CaseRecord
+  events: CaseEvent[]
+  onOpenForm: () => void
+  onOpenEntry: (type: 'vitals' | 'abg' | 'cp') => void
+}) {
   const phase = useMemo(() => computePhase(events), [events])
-  const suggestions = useMemo(() => phase === 'prebypass' ? computePrebypassSuggestions(caseRecord) : [], [caseRecord, phase])
+
+  // Tick minute-by-minute while on bypass so the cadence timers stay live.
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    if (phase !== 'onbypass') return
+    const t = setInterval(() => setNowTick(Date.now()), 15000)
+    return () => clearInterval(t)
+  }, [phase])
+
+  const cadencesKey = `cor-cadences-${caseRecord.id}`
+  const [cadences, setCadences] = useState<Cadences>(DEFAULT_CADENCES)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = localStorage.getItem(cadencesKey)
+      if (raw) setCadences({ ...DEFAULT_CADENCES, ...JSON.parse(raw) })
+    } catch { /* ignore */ }
+  }, [cadencesKey])
+  const updateCadence = (key: keyof Cadences, value: number) => {
+    setCadences(prev => {
+      const next = { ...prev, [key]: value }
+      try { localStorage.setItem(cadencesKey, JSON.stringify(next)) } catch { /* quota / incognito */ }
+      return next
+    })
+  }
+
+  const suggestions = useMemo(() => {
+    if (phase === 'prebypass') return computePrebypassSuggestions(caseRecord)
+    if (phase === 'onbypass') return computeOnbypassSuggestions(events, cadences, nowTick)
+    return []
+  }, [caseRecord, events, phase, cadences, nowTick])
 
   const ackKey = `cor-ack-${caseRecord.id}`
   const checklistKey = `cor-checklist-${caseRecord.id}`
@@ -2784,13 +2892,13 @@ function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseReco
               <button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: '0.85rem' }}>✕</button>
             </div>
 
-            {phase !== 'prebypass' && (
+            {phase === 'postbypass' && (
               <div style={{ color: '#64748b', fontSize: '0.82rem', padding: '0.5rem 0' }}>
-                On-bypass and post-bypass briefings coming soon.
+                Post-bypass briefing coming soon.
               </div>
             )}
 
-            {phase === 'prebypass' && (
+            {(phase === 'prebypass' || phase === 'onbypass') && (
               <>
                 <div style={{ marginBottom: '0.9rem' }}>
                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.5rem' }}>Suggestions</div>
@@ -2800,8 +2908,12 @@ function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseReco
                       const color = s.severity === 'urgent' ? '#e63946' : s.severity === 'done' ? '#22c55e' : '#eab308'
                       const icon = s.severity === 'urgent' ? '⚠️' : s.severity === 'done' ? '✅' : '💡'
                       const isRead = acked[s.id]
-                      const clickable = s.goTo === 'form'
-                      const handleClick = clickable ? () => { setOpen(false); onOpenForm() } : undefined
+                      const clickable = s.goTo != null
+                      const handleClick = clickable ? () => {
+                        setOpen(false)
+                        if (s.goTo === 'form') onOpenForm()
+                        else if (s.goTo) onOpenEntry(s.goTo)
+                      } : undefined
                       return (
                         <div
                           key={s.id}
@@ -2830,31 +2942,53 @@ function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseReco
                   </div>
                 </div>
 
-                <div>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.5rem' }}>Pre-Bypass Checklist</div>
-                  <button
-                    type="button"
-                    onClick={() => { setOpen(false); setChecklistOpen(true) }}
-                    style={{
-                      width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
-                      background: checklistRemaining === 0 ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
-                      border: `1px solid ${checklistRemaining === 0 ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.1)'}`,
-                      borderRadius: 10, padding: '0.65rem 0.8rem',
-                      display: 'flex', alignItems: 'center', gap: '0.6rem',
-                    }}
-                  >
-                    <span aria-hidden style={{ fontSize: '1.05rem' }}>{checklistRemaining === 0 ? '✅' : '📋'}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>
-                        {checklistRemaining === 0 ? 'Checklist complete' : 'Open pre-bypass checklist'}
+                {phase === 'prebypass' && (
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.5rem' }}>Pre-Bypass Checklist</div>
+                    <button
+                      type="button"
+                      onClick={() => { setOpen(false); setChecklistOpen(true) }}
+                      style={{
+                        width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                        background: checklistRemaining === 0 ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${checklistRemaining === 0 ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: 10, padding: '0.65rem 0.8rem',
+                        display: 'flex', alignItems: 'center', gap: '0.6rem',
+                      }}
+                    >
+                      <span aria-hidden style={{ fontSize: '1.05rem' }}>{checklistRemaining === 0 ? '✅' : '📋'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>
+                          {checklistRemaining === 0 ? 'Checklist complete' : 'Open pre-bypass checklist'}
+                        </div>
+                        <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: 2 }}>
+                          {checklistDone} / {checklistTotal} done
+                        </div>
                       </div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: 2 }}>
-                        {checklistDone} / {checklistTotal} done
-                      </div>
+                      <span aria-hidden style={{ color: '#94a3b8', fontSize: '1rem' }}>→</span>
+                    </button>
+                  </div>
+                )}
+
+                {phase === 'onbypass' && (
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.5rem' }}>Reminder Intervals (min)</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                      {(Object.keys(CADENCE_LABELS) as Array<keyof Cadences>).map(k => (
+                        <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '0.45rem 0.55rem' }}>
+                          <span style={{ flex: 1, minWidth: 0, color: '#cbd5e1', fontSize: '0.78rem' }}>{CADENCE_LABELS[k]}</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={cadences[k]}
+                            onChange={e => updateCadence(k, Math.max(1, Number(e.target.value) || DEFAULT_CADENCES[k]))}
+                            style={{ width: 56, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0', borderRadius: 6, padding: '4px 6px', fontSize: '0.82rem', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}
+                          />
+                        </label>
+                      ))}
                     </div>
-                    <span aria-hidden style={{ color: '#94a3b8', fontSize: '1rem' }}>→</span>
-                  </button>
-                </div>
+                  </div>
+                )}
               </>
             )}
           </div>
