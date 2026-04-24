@@ -1310,7 +1310,7 @@ export default function ChartPage() {
           )}
           {view === 'live' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              {liveCase && <CORAssistant caseRecord={liveCase} events={events} />}
+              {liveCase && <CORAssistant caseRecord={liveCase} events={events} onOpenForm={openLiveCaseDetails} />}
               <div className="header-clock">
                 <div className="hc-value">{new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                 <div className="hc-date">{new Date(now).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
@@ -2536,6 +2536,7 @@ type AssistantSuggestion = {
   severity: 'urgent' | 'info' | 'done'
   title: string
   body?: string
+  goTo?: 'form'
 }
 
 function computePhase(events: CaseEvent[]): 'prebypass' | 'onbypass' | 'postbypass' {
@@ -2565,6 +2566,7 @@ function computePrebypassSuggestions(c: CaseRecord): AssistantSuggestion[] {
       severity: 'info',
       title: 'Enter height & weight',
       body: 'I can suggest target flow once BSA is available.',
+      goTo: 'form',
     })
   }
 
@@ -2574,11 +2576,11 @@ function computePrebypassSuggestions(c: CaseRecord): AssistantSuggestion[] {
   const post = postDilutionalHct(c)
 
   if (!hasHct) {
-    out.push({ id: 'missing-pre-hct', severity: 'info', title: 'Enter pre-bypass HCT', body: 'Required to estimate post-dilutional HCT.' })
+    out.push({ id: 'missing-pre-hct', severity: 'info', title: 'Enter pre-bypass HCT', body: 'Required to estimate post-dilutional HCT.', goTo: 'form' })
   } else if (!hasPrime) {
-    out.push({ id: 'missing-prime', severity: 'info', title: 'Enter prime volume', body: 'Required to estimate post-dilutional HCT.' })
+    out.push({ id: 'missing-prime', severity: 'info', title: 'Enter prime volume', body: 'Required to estimate post-dilutional HCT.', goTo: 'form' })
   } else if (!hasWeight) {
-    out.push({ id: 'missing-weight', severity: 'info', title: 'Enter patient weight' })
+    out.push({ id: 'missing-weight', severity: 'info', title: 'Enter patient weight', goTo: 'form' })
   } else if (post != null) {
     if (post < 22) {
       out.push({
@@ -2625,7 +2627,7 @@ function do2iTargetFlow(c: Partial<CaseRecord>): { flow: number; ci: number; hb:
   return { flow, ci, hb, hct: post }
 }
 
-function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: CaseEvent[] }) {
+function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseRecord; events: CaseEvent[]; onOpenForm: () => void }) {
   const phase = useMemo(() => computePhase(events), [events])
   const suggestions = useMemo(() => phase === 'prebypass' ? computePrebypassSuggestions(caseRecord) : [], [caseRecord, phase])
 
@@ -2776,11 +2778,27 @@ function CORAssistant({ caseRecord, events }: { caseRecord: CaseRecord; events: 
                       const color = s.severity === 'urgent' ? '#e63946' : s.severity === 'done' ? '#22c55e' : '#eab308'
                       const icon = s.severity === 'urgent' ? '⚠️' : s.severity === 'done' ? '✅' : '💡'
                       const isRead = acked[s.id]
+                      const clickable = s.goTo === 'form'
+                      const handleClick = clickable ? () => { setOpen(false); onOpenForm() } : undefined
                       return (
-                        <div key={s.id} style={{ border: `1px solid ${color}44`, background: `${color}0d`, borderRadius: 10, padding: '0.55rem 0.7rem' }}>
+                        <div
+                          key={s.id}
+                          onClick={handleClick}
+                          role={clickable ? 'button' : undefined}
+                          tabIndex={clickable ? 0 : undefined}
+                          onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick?.() } } : undefined}
+                          style={{
+                            border: `1px solid ${color}44`, background: `${color}0d`, borderRadius: 10,
+                            padding: '0.55rem 0.7rem', cursor: clickable ? 'pointer' : 'default',
+                            transition: 'background 0.15s ease',
+                          }}
+                          onMouseEnter={clickable ? (e) => { e.currentTarget.style.background = `${color}1a` } : undefined}
+                          onMouseLeave={clickable ? (e) => { e.currentTarget.style.background = `${color}0d` } : undefined}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                             <span aria-hidden>{icon}</span>
                             <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600, flex: 1 }}>{s.title}</span>
+                            {clickable && <span aria-hidden style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1 }}>→</span>}
                             {isRead && <span style={{ color: '#64748b', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Read</span>}
                           </div>
                           {s.body && <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: 4, lineHeight: 1.4 }}>{s.body}</div>}
