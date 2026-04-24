@@ -1554,6 +1554,9 @@ function LiveChart({
 
   const formatT = (iso?: string) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'
 
+  // Gate the CPB start with the pre-bypass checklist.
+  const [cpbGateOpen, setCpbGateOpen] = useState(false)
+
   // Map each stop-event id → duration in minutes (paired with its preceding start).
   // Renders inline on the timeline so e.g. "Off Bypass" shows the CPB run length.
   const stopDurations = useMemo(() => {
@@ -1821,7 +1824,13 @@ function LiveChart({
             return (
               <Fragment key={t.key}>
                 <button
-                  onClick={() => onToggleTimer(t.key)}
+                  onClick={() => {
+                    if (t.key === 'cpb' && !running) {
+                      setCpbGateOpen(true)
+                    } else {
+                      onToggleTimer(t.key)
+                    }
+                  }}
                   className={`timer-chip-btn${running ? ' active' : ''}${started && !running ? ' stopped' : ''}`}
                   type="button"
                   style={{ ['--phase' as never]: phase }}
@@ -1885,6 +1894,14 @@ function LiveChart({
 
         </div>
       </div>
+
+      {cpbGateOpen && (
+        <CPBStartGate
+          caseId={caseRecord.id}
+          onCancel={() => setCpbGateOpen(false)}
+          onConfirm={() => { setCpbGateOpen(false); onToggleTimer('cpb') }}
+        />
+      )}
     </>
   )
 }
@@ -2926,6 +2943,110 @@ function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseReco
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function CPBStartGate({
+  caseId, onCancel, onConfirm,
+}: {
+  caseId: string
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const checklistKey = `cor-checklist-${caseId}`
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = localStorage.getItem(checklistKey)
+      if (raw) setChecklist(JSON.parse(raw))
+    } catch { /* ignore corrupt state */ }
+  }, [checklistKey])
+
+  const toggleCheck = (id: string) => {
+    setChecklist(prev => {
+      const next = { ...prev, [id]: !prev[id] }
+      try { localStorage.setItem(checklistKey, JSON.stringify(next)) } catch { /* quota / incognito */ }
+      return next
+    })
+  }
+
+  const done = PREBYPASS_CHECKLIST.filter(i => checklist[i.id]).length
+  const total = PREBYPASS_CHECKLIST.length
+  const ready = done >= total
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 75, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16,
+          width: '100%', maxWidth: 560, maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 30px 60px rgba(0,0,0,0.7)',
+        }}
+      >
+        <div style={{ padding: '1.1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+          <div>
+            <div style={{ color: '#e63946', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Pre-Bypass Checklist</div>
+            <div style={{ color: '#e2e8f0', fontSize: '1.05rem', fontWeight: 700, marginTop: 2 }}>Confirm before going on bypass</div>
+          </div>
+          <button type="button" onClick={onCancel}
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#94a3b8', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: '0.85rem' }}>
+            ✕
+          </button>
+        </div>
+        <div style={{ padding: '0.75rem', overflow: 'auto', flex: 1 }}>
+          {PREBYPASS_CHECKLIST.map(item => {
+            const isChecked = !!checklist[item.id]
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => toggleCheck(item.id)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', textAlign: 'left',
+                  background: isChecked ? 'rgba(34,197,94,0.06)' : 'transparent',
+                  border: `1px solid ${isChecked ? 'rgba(34,197,94,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                  borderRadius: 10, padding: '0.8rem 0.9rem', marginBottom: '0.5rem',
+                  color: isChecked ? '#64748b' : '#e2e8f0', fontSize: '0.95rem', cursor: 'pointer',
+                  textDecoration: isChecked ? 'line-through' : 'none', fontFamily: 'inherit',
+                }}
+              >
+                <span style={{
+                  width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                  border: `1.5px solid ${isChecked ? '#22c55e' : 'rgba(255,255,255,0.25)'}`,
+                  background: isChecked ? '#22c55e' : 'transparent',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontSize: '0.85rem', fontWeight: 800,
+                }}>{isChecked ? '✓' : ''}</span>
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+          <button type="button" onClick={onCancel}
+            style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#94a3b8', padding: '0.7rem 1.2rem', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem' }}>
+            Cancel
+          </button>
+          <button type="button" disabled={!ready} onClick={() => { if (ready) onConfirm() }}
+            style={{
+              background: ready ? '#22c55e' : 'rgba(255,255,255,0.06)',
+              border: 'none', color: ready ? 'white' : '#64748b',
+              fontWeight: 700, fontSize: '0.95rem',
+              padding: '0.75rem 1.6rem', borderRadius: 10,
+              cursor: ready ? 'pointer' : 'not-allowed',
+              minWidth: 200,
+            }}>
+            {ready ? 'Going on bypass →' : `${done} / ${total} complete`}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
