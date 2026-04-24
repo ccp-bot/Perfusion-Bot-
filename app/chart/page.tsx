@@ -2638,6 +2638,7 @@ function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseReco
   const [acked, setAcked] = useState<Record<string, boolean>>({})
   const [checklist, setChecklist] = useState<Record<string, boolean>>({})
   const [open, setOpen] = useState(false)
+  const [checklistOpen, setChecklistOpen] = useState(false)
   const [bubbleDismissed, setBubbleDismissed] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
@@ -2676,7 +2677,11 @@ function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseReco
   }
 
   const urgentUnread = suggestions.find(s => s.severity === 'urgent' && !acked[s.id])
-  const unreadCount = suggestions.filter(s => !acked[s.id] && s.severity !== 'done').length
+  const unreadSuggestions = suggestions.filter(s => !acked[s.id] && s.severity !== 'done').length
+  const checklistDone = phase === 'prebypass' ? PREBYPASS_CHECKLIST.filter(i => checklist[i.id]).length : 0
+  const checklistTotal = phase === 'prebypass' ? PREBYPASS_CHECKLIST.length : 0
+  const checklistRemaining = Math.max(0, checklistTotal - checklistDone)
+  const unreadCount = unreadSuggestions + checklistRemaining
 
   const phaseLabel = phase === 'prebypass' ? 'Pre-Bypass' : phase === 'onbypass' ? 'On Bypass' : 'Post-Bypass'
 
@@ -2810,36 +2815,93 @@ function CORAssistant({ caseRecord, events, onOpenForm }: { caseRecord: CaseReco
 
                 <div>
                   <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: '0.5rem' }}>Pre-Bypass Checklist</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    {PREBYPASS_CHECKLIST.map(item => {
-                      const done = !!checklist[item.id]
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => toggleCheck(item.id)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '0.55rem', textAlign: 'left',
-                            background: 'transparent', border: 'none', padding: '0.35rem 0.25rem',
-                            color: done ? '#64748b' : '#e2e8f0', fontSize: '0.82rem', cursor: 'pointer',
-                            textDecoration: done ? 'line-through' : 'none', fontFamily: 'inherit',
-                          }}
-                        >
-                          <span style={{
-                            width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                            border: `1.5px solid ${done ? '#22c55e' : 'rgba(255,255,255,0.2)'}`,
-                            background: done ? '#22c55e' : 'transparent',
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            color: 'white', fontSize: '0.7rem', fontWeight: 800,
-                          }}>{done ? '✓' : ''}</span>
-                          <span>{item.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setOpen(false); setChecklistOpen(true) }}
+                    style={{
+                      width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                      background: checklistRemaining === 0 ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${checklistRemaining === 0 ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.1)'}`,
+                      borderRadius: 10, padding: '0.65rem 0.8rem',
+                      display: 'flex', alignItems: 'center', gap: '0.6rem',
+                    }}
+                  >
+                    <span aria-hidden style={{ fontSize: '1.05rem' }}>{checklistRemaining === 0 ? '✅' : '📋'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>
+                        {checklistRemaining === 0 ? 'Checklist complete' : 'Open pre-bypass checklist'}
+                      </div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: 2 }}>
+                        {checklistDone} / {checklistTotal} done
+                      </div>
+                    </div>
+                    <span aria-hidden style={{ color: '#94a3b8', fontSize: '1rem' }}>→</span>
+                  </button>
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {checklistOpen && (
+        <div
+          onClick={() => setChecklistOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 65, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16,
+              width: '100%', maxWidth: 560, maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 30px 60px rgba(0,0,0,0.7)',
+            }}
+          >
+            <div style={{ padding: '1.1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div>
+                <div style={{ color: '#e63946', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Pre-Bypass Checklist</div>
+                <div style={{ color: '#e2e8f0', fontSize: '1.05rem', fontWeight: 700, marginTop: 2 }}>{checklistDone} of {checklistTotal} complete</div>
+              </div>
+              <button type="button" onClick={() => setChecklistOpen(false)}
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#94a3b8', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: '0.75rem 0.75rem 0.25rem', overflow: 'auto', flex: 1 }}>
+              {PREBYPASS_CHECKLIST.map(item => {
+                const done = !!checklist[item.id]
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => toggleCheck(item.id)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', textAlign: 'left',
+                      background: done ? 'rgba(34,197,94,0.06)' : 'transparent',
+                      border: `1px solid ${done ? 'rgba(34,197,94,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                      borderRadius: 10, padding: '0.8rem 0.9rem', marginBottom: '0.5rem',
+                      color: done ? '#64748b' : '#e2e8f0', fontSize: '0.95rem', cursor: 'pointer',
+                      textDecoration: done ? 'line-through' : 'none', fontFamily: 'inherit',
+                    }}
+                  >
+                    <span style={{
+                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                      border: `1.5px solid ${done ? '#22c55e' : 'rgba(255,255,255,0.25)'}`,
+                      background: done ? '#22c55e' : 'transparent',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'white', fontSize: '0.85rem', fontWeight: 800,
+                    }}>{done ? '✓' : ''}</span>
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setChecklistOpen(false)}
+                style={{ background: checklistRemaining === 0 ? '#22c55e' : '#e63946', border: 'none', color: 'white', fontWeight: 700, fontSize: '0.9rem', padding: '0.65rem 1.4rem', borderRadius: 10, cursor: 'pointer' }}>
+                {checklistRemaining === 0 ? 'Done' : 'Close'}
+              </button>
+            </div>
           </div>
         </div>
       )}
