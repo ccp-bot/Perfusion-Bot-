@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#080b12" />
+  <title>COR Perfusion AI</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #080b12;
+      color: #e63946;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .brand {
+      font-size: 48px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .tagline {
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 32px;
+    }
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(230, 57, 70, 0.2);
+      border-top-color: #e63946;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .offline {
+      display: none;
+      text-align: center;
+      padding: 0 32px;
+      color: #9ca3af;
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 320px;
+    }
+    .offline.visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="brand">COR</div>
+  <div class="tagline">Perfusion AI Assistant</div>
+  <div class="spinner" id="spinner"></div>
+  <div class="offline" id="offline">
+    COR needs an internet connection. Please check your network and reopen the app.
+  </div>
+  <script>
+    setTimeout(function () {
+      if (!navigator.onLine) {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('offline').classList.add('visible');
+      }
+    }, 4000);
+  </script>
+</body>
+</html>
