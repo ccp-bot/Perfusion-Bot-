@@ -47,5 +47,17 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>COR uses your microphone for voice input so you can ask questions hands-free during cases.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>COR uses your camera so you can capture images of equipment, circuits, or cannulation for reference notes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>COR accesses your photo library so you can attach images to logbook entries and case notes.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>COR can save images you generate back to your photo library.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>COR converts your spoken questions into text so you can use voice input.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
