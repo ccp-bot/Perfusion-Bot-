@@ -29,12 +29,6 @@ export default function Home() {
   const [messages, setMessages] = useState<{role: string, content: string, image?: string}[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showSplash, setShowSplash] = useState(() => {
-    if (typeof window !== 'undefined' && sessionStorage.getItem('splashShown')) return false
-    return true
-  })
-  const [fadingSplash, setFadingSplash] = useState(false)
-  const [isMuted, setIsMuted] = useState(true)
   const [savePreview, setSavePreview] = useState(false)
   const [pendingSummary, setPendingSummary] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -97,7 +91,6 @@ export default function Home() {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -234,13 +227,6 @@ export default function Home() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  useEffect(() => {
-    if (!showSplash) return
-    const fadeTimer = setTimeout(() => setFadingSplash(true), 5000)
-    const hideTimer = setTimeout(() => { setShowSplash(false); sessionStorage.setItem('splashShown', '1') }, 6500)
-    return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer) }
-  }, [])
 
   // Request notification permission on mount
   useEffect(() => {
@@ -1204,20 +1190,6 @@ export default function Home() {
   async function signOut() {
     await supabase.auth.signOut()
     window.location.href = '/login'
-  }
-
-  if (showSplash) {
-    return (
-      <div style={{ position: 'relative', height: '100vh', background: '#080b12', opacity: fadingSplash ? 0 : 1, transition: 'opacity 1.2s ease', fontFamily: 'system-ui, sans-serif' }}>
-        <video ref={videoRef} src="/COR.Opener.mp4" autoPlay muted playsInline preload="auto" style={{ width: '100vw', height: '100vh', objectFit: 'cover' }} />
-        <button
-          onClick={() => { if (videoRef.current) { videoRef.current.muted = !videoRef.current.muted; setIsMuted(!isMuted) } }}
-          style={{ position: 'absolute', bottom: '2rem', right: '2rem', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '1.2rem', zIndex: 10 }}
-        >
-          {isMuted ? '🔇' : '🔊'}
-        </button>
-      </div>
-    )
   }
 
   return (
