@@ -1262,7 +1262,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <div style={{ padding: '0.75rem 0.5rem', flex: 1 }}>
+        <div style={{ padding: '0.75rem 0.5rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
           <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginBottom: '0.5rem' }}>Knowledge Base</div>
           {SIDEBAR_ITEMS.map(item => (
             <button
@@ -1303,7 +1303,7 @@ export default function Home() {
             </>
           )}
         </div>
-        <div style={{ padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
           {userGroupName && (
             <div style={{ fontSize: '0.6rem', color: '#e63946', marginBottom: '0.3rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               {userGroupName}
