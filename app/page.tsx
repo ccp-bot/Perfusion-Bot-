@@ -1194,7 +1194,7 @@ export default function Home() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif", overflow: 'hidden' }}>
+    <div className="app-root" style={{ display: 'flex', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif", overflow: 'hidden' }}>
 
       <style>{`
         @keyframes runAcross { 0% { left: -180px; } 100% { left: 110%; } }
@@ -1216,6 +1216,7 @@ export default function Home() {
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+        .app-root { height: 100vh; height: 100dvh; }
         @media (max-width: 768px) {
           .desktop-sidebar { display: none !important; }
           .desktop-sidebar.mobile-open { display: flex !important; position: fixed !important; top: 0 !important; left: 0 !important; bottom: 0 !important; width: 220px !important; z-index: 100 !important; }
@@ -1223,7 +1224,7 @@ export default function Home() {
           .mobile-hamburger { display: flex !important; }
           .slide-panel { position: fixed !important; top: 0 !important; left: 0 !important; bottom: 0 !important; width: 100% !important; z-index: 90 !important; }
           .chat-area { padding: 1rem 0.75rem 0.5rem !important; }
-          .input-bar { padding: 0.5rem 0.75rem 0.75rem !important; }
+          .input-bar { padding: 0.5rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom)) !important; }
           .input-wrapper { max-width: 100% !important; }
           .msg-max-width { max-width: 85% !important; font-size: 1rem !important; }
           .idle-gif { width: 280px !important; }
