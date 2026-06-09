@@ -29,6 +29,7 @@ export default function Home() {
   const [messages, setMessages] = useState<{role: string, content: string, image?: string}[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [confirmLogout, setConfirmLogout] = useState(false)
   const [savePreview, setSavePreview] = useState(false)
   const [pendingSummary, setPendingSummary] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -1235,6 +1236,20 @@ export default function Home() {
       {/* MOBILE OVERLAY */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 90 }} />}
 
+      {/* LOG OUT CONFIRM */}
+      {confirmLogout && (
+        <div onClick={() => setConfirmLogout(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 200, backdropFilter: 'blur(4px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.75rem', width: '90%', maxWidth: '340px', animation: 'modalIn 0.2s ease', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#ffffff', marginBottom: '0.5rem' }}>Log out?</div>
+            <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '1.5rem' }}>Are you sure you want to log out of COR?</div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setConfirmLogout(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={signOut} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#ffffff', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer' }}>Log out</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* LEFT SIDEBAR */}
       <div className={`desktop-sidebar${sidebarOpen ? ' mobile-open' : ''}`} style={{ width: '200px', background: '#0d1117', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', flexShrink: 0, zIndex: 100 }}>
         <div style={{ padding: '1.25rem 1rem 1rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1300,7 +1315,7 @@ export default function Home() {
           )}
           <div style={{ fontSize: '0.75rem', color: '#e2e8f0', marginBottom: '0.2rem', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName || user?.email?.split('@')[0]}</div>
           <div style={{ fontSize: '0.6rem', color: '#4a5568', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
-          <button onClick={signOut} style={{ width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#4a5568', fontSize: '0.72rem', cursor: 'pointer' }}>Sign out</button>
+          <button onClick={() => setConfirmLogout(true)} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#ffffff', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em' }}>Log out</button>
         </div>
       </div>
 
