@@ -1252,7 +1252,7 @@ export default function Home() {
           .chat-area { padding: 1rem 0.75rem 0.5rem !important; }
           .input-bar { padding: 0.5rem 0.75rem 0.75rem !important; }
           .input-wrapper { max-width: 100% !important; }
-          .msg-max-width { max-width: 85% !important; }
+          .msg-max-width { max-width: 85% !important; font-size: 1rem !important; }
           .idle-gif { width: 280px !important; }
           .idle-container { min-height: 300px !important; }
           .idle-title { font-size: 1.2rem !important; }
