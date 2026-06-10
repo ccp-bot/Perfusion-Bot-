@@ -61,3 +61,35 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ users })
 }
+
+// DELETE /api/admin/users — owner deletes another user's account + data
+export async function DELETE(req: NextRequest) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: 'Not configured (missing service role key).' }, { status: 500 })
+  }
+
+  const token = req.headers.get('authorization')?.replace('Bearer ', '')
+  if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 401 })
+
+  const { data: { user }, error: authErr } = await admin.auth.getUser(token)
+  if (authErr || !user || user.email?.toLowerCase() !== SUPER_OWNER) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  const { targetUserId, targetEmail } = await req.json()
+  if (!targetUserId) return NextResponse.json({ error: 'Missing targetUserId' }, { status: 400 })
+  if (targetEmail && targetEmail.toLowerCase() === SUPER_OWNER) {
+    return NextResponse.json({ error: 'Cannot delete the owner account.' }, { status: 403 })
+  }
+
+  await admin.from('documents').delete().eq('user_id', targetUserId)
+  await admin.from('conversations').delete().eq('user_id', targetUserId)
+  await admin.from('group_members').delete().eq('user_id', targetUserId)
+  if (targetEmail) await admin.from('group_members').delete().eq('email', targetEmail)
+  await admin.from('profiles').delete().eq('user_id', targetUserId)
+
+  const { error } = await admin.auth.admin.deleteUser(targetUserId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ success: true })
+}

@@ -61,6 +61,8 @@ export default function Home() {
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
+  const [deleteUserTarget, setDeleteUserTarget] = useState<any>(null)
+  const [deletingUser, setDeletingUser] = useState(false)
   const [savePreview, setSavePreview] = useState(false)
   const [pendingSummary, setPendingSummary] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -732,6 +734,25 @@ export default function Home() {
     } catch { alert('Network error.') }
   }
 
+  // Owner-only: permanently delete another user's account and data.
+  async function deleteUserAccount() {
+    if (!deleteUserTarget) return
+    setDeletingUser(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ targetUserId: deleteUserTarget.id, targetEmail: deleteUserTarget.email })
+      })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error || 'Could not delete user.'); setDeletingUser(false); return }
+      setDeleteUserTarget(null)
+      setDeletingUser(false)
+      fetchAllUsers()
+    } catch { alert('Network error.'); setDeletingUser(false) }
+  }
+
   async function deletePanelEntry(id: number) {
     try {
       await fetch('/api/logbook', {
@@ -1333,6 +1354,20 @@ export default function Home() {
       {/* MOBILE OVERLAY */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 90 }} />}
 
+      {/* DELETE USER CONFIRM (owner removing another user) */}
+      {deleteUserTarget && (
+        <div onClick={() => !deletingUser && setDeleteUserTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 310, backdropFilter: 'blur(4px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#0d1117', border: '1px solid rgba(230,57,70,0.3)', borderRadius: '16px', padding: '1.75rem', width: '90%', maxWidth: '360px', animation: 'modalIn 0.2s ease', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#ffffff', marginBottom: '0.5rem' }}>Delete this user?</div>
+            <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '1.5rem', lineHeight: '1.6' }}>This permanently deletes <strong style={{ color: '#e2e8f0' }}>{deleteUserTarget.email}</strong> and all of their data (logbook, case notes, history). This <strong style={{ color: '#e2e8f0' }}>cannot be undone.</strong></div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setDeleteUserTarget(null)} disabled={deletingUser} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={deleteUserAccount} disabled={deletingUser} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#ffffff', fontSize: '0.85rem', fontWeight: '600', cursor: deletingUser ? 'not-allowed' : 'pointer' }}>{deletingUser ? 'Deleting…' : 'Delete user'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* DELETE ACCOUNT CONFIRM */}
       {showDeleteAccount && (
         <div onClick={() => !deletingAccount && setShowDeleteAccount(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 310, backdropFilter: 'blur(4px)' }}>
@@ -1536,8 +1571,15 @@ export default function Home() {
                 )}
                 {!usersLoading && allUsers.map((u) => (
                   <div key={u.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.75rem', marginBottom: '0.6rem' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500' }}>{u.name || (u.email || '').split('@')[0]}</div>
-                    <div style={{ fontSize: '0.68rem', color: '#4a5568', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500' }}>{u.name || (u.email || '').split('@')[0]}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#4a5568', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                      </div>
+                      {u.email?.toLowerCase() !== SUPER_OWNER_EMAIL && (
+                        <button onClick={() => setDeleteUserTarget(u)} title="Delete user" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', flexShrink: 0, padding: '2px' }}>&#128465;</button>
+                      )}
+                    </div>
                     <div style={{ fontSize: '0.63rem', color: '#4a5568', marginTop: '2px' }}>Joined {new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
                     <div style={{ marginTop: '0.4rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
                       {u.groups && u.groups.length > 0 ? (
