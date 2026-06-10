@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from './lib/supabase'
+import CorThinking from './CorThinking'
 
 const CATEGORIES = ['Protocol', 'Case Notes', 'Equipment', 'Policy', 'Logbook', 'Checklists', 'Charting']
 const SUPER_OWNER_EMAIL = 'cliftonmarschel@gmail.com'
@@ -1234,8 +1235,6 @@ export default function Home() {
     <div className="app-root" style={{ display: 'flex', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif", overflow: 'hidden' }}>
 
       <style>{`
-        @keyframes runAcross { 0% { left: -180px; } 100% { left: 110%; } }
-        @keyframes flyAcross { 0% { left: -150px; transform: translateY(-5px); } 50% { transform: translateY(5px); } 100% { left: 110%; transform: translateY(-5px); } }
         @keyframes pulseBar { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
         @keyframes fadeInOut { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
         @keyframes bob { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }
@@ -1267,7 +1266,6 @@ export default function Home() {
           .idle-gif { width: 280px !important; }
           .idle-container { min-height: 300px !important; }
           .idle-title { font-size: 1.2rem !important; }
-          .thinking-bots { display: none !important; }
         }
       `}</style>
 
@@ -1931,13 +1929,6 @@ export default function Home() {
         {/* MOBILE HAMBURGER */}
         <button className="mobile-hamburger" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ display: 'none', position: 'absolute', top: '0.75rem', left: '0.75rem', zIndex: 50, width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1.1rem' }}>☰</button>
 
-        {loading && (
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}>
-            <div style={{ position: 'absolute', bottom: '80px', left: 0, right: 0, height: '1px', background: 'linear-gradient(90deg, transparent, #e63946, transparent)', animation: 'pulseBar 1.2s ease-in-out infinite' }} />
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#e63946', fontSize: '0.75rem', fontWeight: '500', letterSpacing: '0.15em', textTransform: 'uppercase', opacity: 0.6, animation: 'fadeInOut 1.5s ease-in-out infinite' }}>searching knowledge base</div>
-          </div>
-        )}
-
         <div className="chat-area" style={{ flex: 1, overflowY: 'auto', padding: '2rem 2rem 1rem' }}>
           {messages.length === 0 && (
             <div className="idle-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', height: '100%', minHeight: '400px' }}>
@@ -1960,9 +1951,8 @@ export default function Home() {
             </div>
           ))}
           {loading && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-              <img src="/COR-1.PNG" alt="COR" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
-              <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', padding: '0.7rem 1rem', borderRadius: '18px 18px 18px 4px', color: '#4a5568', fontSize: '0.85rem' }}>COR is thinking...</div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.75rem', paddingLeft: '2px' }}>
+              <CorThinking />
             </div>
           )}
           <div ref={bottomRef} />
