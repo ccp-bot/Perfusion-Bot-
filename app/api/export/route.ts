@@ -13,6 +13,9 @@ export async function GET(req: NextRequest) {
   const userId = searchParams.get('userId')
   const category = searchParams.get('category')
   const groupId = searchParams.get('groupId')
+  // Optional ordered field list (so every column shows even when a case left it blank).
+  const fieldsParam = searchParams.get('fields')
+  const orderedFields = fieldsParam ? fieldsParam.split('||').filter(Boolean) : null
 
   if (!userId || !category) {
     return NextResponse.json({ error: 'Missing userId or category' }, { status: 400 })
@@ -43,7 +46,7 @@ export async function GET(req: NextRequest) {
   // Parse structured content into rows
   const rows: Record<string, string>[] = []
   for (const entry of data) {
-    const row: Record<string, string> = {}
+    const parsed: Record<string, string> = {}
     const lines = (entry.content || '').split('\n')
     for (const line of lines) {
       // Match patterns like "Field: value" or "**Field:** value"
@@ -52,19 +55,23 @@ export async function GET(req: NextRequest) {
       if (match) {
         const key = match[1].replace(/\*/g, '').trim()
         const val = match[2].replace(/\*/g, '').trim()
-        if (key && val) row[key] = val
+        if (key && val) parsed[key] = val
       }
     }
-    if (entry.uploaded_by) row['Logged By'] = entry.uploaded_by
-    row['Date Logged'] = new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
-    // Only add if we parsed at least one field
-    if (Object.keys(row).length > 2) {
-      rows.push(row)
+    const row: Record<string, string> = {}
+    if (orderedFields && orderedFields.length > 0) {
+      // Every chosen field gets a column, blank if this case didn't fill it.
+      for (const f of orderedFields) row[f] = parsed[f] || ''
+      // Keep any extra fields the case had that aren't in the standard list.
+      for (const k of Object.keys(parsed)) if (!(k in row)) row[k] = parsed[k]
     } else {
-      // Fallback — just put raw content
-      rows.push({ Content: entry.content, 'Logged By': entry.uploaded_by || '', 'Date Logged': row['Date Logged'] })
+      Object.assign(row, parsed)
     }
+    if (Object.keys(parsed).length === 0) row['Content'] = entry.content
+    row['Logged By'] = entry.uploaded_by || ''
+    row['Date Logged'] = new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    rows.push(row)
   }
 
   // Build Excel

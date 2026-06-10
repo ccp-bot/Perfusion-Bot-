@@ -1618,7 +1618,8 @@ export default function Home() {
               )}
               {(activePanel === 'Logbook' || activePanel === 'Case Notes') && panelEntries.length > 0 && (
                 <button onClick={() => {
-                  const params = new URLSearchParams({ userId: user?.id, category: activePanel!, groupId: userGroupId || '' })
+                  const fields = activePanel === 'Logbook' ? ['Surgery Date', ...logbookFields] : activePanel === 'Case Notes' ? caseNotesFields : []
+                  const params = new URLSearchParams({ userId: user?.id, category: activePanel!, groupId: userGroupId || '', fields: fields.join('||') })
                   window.open(`/api/export?${params.toString()}`, '_blank')
                 }} style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>
                   &#11015; Excel
