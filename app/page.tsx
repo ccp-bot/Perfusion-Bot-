@@ -29,10 +29,31 @@ const SIDEBAR_ITEMS = [
 // Tier 2 (linked to a hospital group) and the super owner see everything.
 const TIER1_ITEMS = ['History', 'Logbook', 'Case Notes']
 
+// Rotating, perfusion-themed prompts shown in the empty chat input box.
+const COR_PLACEHOLDERS = [
+  'Pump us for info...',
+  "What's pumping through your mind?",
+  'Prime your question here...',
+  "Don't bypass us — ask away...",
+  'Cannulate your curiosity here...',
+  "Ask COR — we won't clamp down...",
+  'Let your questions flow...',
+  'Keep the conversation circulating...',
+  "Got a Q? We'll keep it flowing.",
+  'Get to the heart of it...',
+  "Whatever's on your heart...",
+  'Ask COR — straight from the heart...',
+  "Spill it — we'll circulate an answer",
+  'No question too clotted...',
+  'Perfuse us with your questions...',
+  "Ask away — we've got the flow",
+]
+
 export default function Home() {
   const [messages, setMessages] = useState<{role: string, content: string, image?: string}[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [savePreview, setSavePreview] = useState(false)
   const [pendingSummary, setPendingSummary] = useState('')
@@ -149,6 +170,15 @@ export default function Home() {
     setDisplayName(nameInput.trim())
     setShowNamePrompt(false)
   }
+
+  // Rotate the chat input placeholder through COR_PLACEHOLDERS every 5s.
+  useEffect(() => {
+    setPlaceholderIndex(Math.floor(Math.random() * COR_PLACEHOLDERS.length))
+    const id = setInterval(() => {
+      setPlaceholderIndex(i => (i + 1) % COR_PLACEHOLDERS.length)
+    }, 5000)
+    return () => clearInterval(id)
+  }, [])
 
   // Fetch group membership when user is set
   useEffect(() => {
@@ -1993,7 +2023,7 @@ export default function Home() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                placeholder={listening ? 'Recording... click mic to stop' : caseLogExtraMode ? 'Item name + qty (e.g. "Cell Saver tubing 2") or "done"' : caseLogging ? `Answer: ${caseLogMissing[caseLogCurrentField] || ''}...` : 'Ask COR anything about perfusion...'}
+                placeholder={listening ? 'Recording... click mic to stop' : caseLogExtraMode ? 'Item name + qty (e.g. "Cell Saver tubing 2") or "done"' : caseLogging ? `Answer: ${caseLogMissing[caseLogCurrentField] || ''}...` : COR_PLACEHOLDERS[placeholderIndex]}
                 rows={1}
                 style={{ width: '100%', padding: '0.75rem 3rem 0.75rem 1.1rem', borderRadius: '18px', border: `1px solid ${listening ? 'rgba(230,57,70,0.5)' : 'rgba(255,255,255,0.1)'}`, background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s ease', resize: 'none', overflow: 'hidden', minHeight: '42px', maxHeight: '120px', fontFamily: 'inherit', lineHeight: '1.4' }}
                 ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px' } }}
