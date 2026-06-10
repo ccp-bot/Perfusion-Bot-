@@ -2131,7 +2131,7 @@ export default function Home() {
           )}
           {messages.map((m, i) => (
             <div key={i} className="msg-bubble" style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: '0.75rem' }}>
-              {m.role === 'assistant' && <img src="/COR-1.PNG" alt="COR" style={{ width: '26px', height: '26px', objectFit: 'contain', marginRight: '8px', flexShrink: 0, marginTop: '4px' }} />}
+              {m.role === 'assistant' && <img src="/icon.app.png" alt="COR" style={{ width: '26px', height: '26px', objectFit: 'contain', marginRight: '8px', flexShrink: 0, marginTop: '4px' }} />}
               <div className="msg-max-width" style={{ maxWidth: '68%', padding: '0.7rem 1rem', borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: m.role === 'user' ? '#e63946' : 'rgba(255,255,255,0.05)', border: m.role === 'user' ? 'none' : '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0', fontSize: '0.88rem', lineHeight: '1.65', whiteSpace: 'pre-wrap' }}>
                 {m.image && <img src={m.image} alt="attachment" style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: '0.5rem', display: 'block' }} />}
                 {m.content}
