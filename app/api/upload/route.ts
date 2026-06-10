@@ -43,8 +43,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing category or userId' }, { status: 400 })
   }
 
-  // Only owner and admin can upload
-  if (userRole !== 'owner' && userRole !== 'admin') {
+  // Logbook and Case Notes are personal — any signed-in user can add their own.
+  // Other categories (Protocol, Policy, etc.) are shared institutional content — owner/admin only.
+  const personalCategories = ['Logbook', 'Case Notes']
+  if (!personalCategories.includes(category) && userRole !== 'owner' && userRole !== 'admin') {
     return NextResponse.json({ error: 'Only owners and admins can upload content' }, { status: 403 })
   }
 

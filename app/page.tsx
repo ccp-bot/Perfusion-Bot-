@@ -1975,8 +1975,8 @@ export default function Home() {
 
             {activePanel !== 'History' && activePanel !== 'Admin' && activePanel !== 'Checklists' && activePanel !== 'Equipment' && !panelLoading && (
               <>
-                {/* Upload controls — Owner/Admin only */}
-                {(userRole === 'owner' || userRole === 'admin') && (
+                {/* Add controls — Logbook/Case Notes: anyone (their own cases). Protocol/Policy: owner/admin only. */}
+                {(activePanel === 'Logbook' || activePanel === 'Case Notes' || userRole === 'owner' || userRole === 'admin') && (
                   <div
                     onDragOver={e => { e.preventDefault(); setDragOver(true) }}
                     onDragLeave={() => setDragOver(false)}
@@ -2006,7 +2006,7 @@ export default function Home() {
                   <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                     <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128195;</div>
                     <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No {activePanel} entries yet.</div>
-                    {(userRole === 'owner' || userRole === 'admin') && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>}
+                    {(activePanel === 'Logbook' || activePanel === 'Case Notes' || userRole === 'owner' || userRole === 'admin') && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>}
                   </div>
                 )}
                 {panelEntries.map((entry) => {
