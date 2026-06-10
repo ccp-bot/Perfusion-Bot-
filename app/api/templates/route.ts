@@ -7,13 +7,10 @@ const supabase = createClient(
 )
 
 const DEFAULT_LOGBOOK_FIELDS = [
-  'MRN',
   'Surgeon',
   'Case Type',
-  'Bypass Time',
-  'Cross-Clamp Time',
-  'Lowest Temp',
-  'Complications',
+  'CPB Time',
+  'Clamp Time',
 ]
 
 const DEFAULT_CASENOTES_FIELDS = [
