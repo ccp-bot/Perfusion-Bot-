@@ -56,6 +56,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const [showDisclaimer, setShowDisclaimer] = useState(false)
   const [savePreview, setSavePreview] = useState(false)
   const [pendingSummary, setPendingSummary] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -171,6 +172,13 @@ export default function Home() {
     setDisplayName(nameInput.trim())
     setShowNamePrompt(false)
   }
+
+  // Show the medical/legal disclaimer once per device until acknowledged.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !localStorage.getItem('corDisclaimerAccepted')) {
+      setShowDisclaimer(true)
+    }
+  }, [])
 
   // Rotate the chat input placeholder through COR_PLACEHOLDERS every 5s.
   useEffect(() => {
@@ -1271,6 +1279,28 @@ export default function Home() {
 
       {/* MOBILE OVERLAY */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 90 }} />}
+
+      {/* MEDICAL DISCLAIMER (shown once until acknowledged) */}
+      {showDisclaimer && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 300, backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem' }}>
+          <div style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.75rem', width: '100%', maxWidth: '440px', maxHeight: '85vh', overflowY: 'auto', animation: 'modalIn 0.2s ease' }}>
+            <div style={{ fontSize: '1.15rem', fontWeight: '700', color: '#ffffff', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#e63946' }}>⚠️</span> Before you start
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: '1.65', marginBottom: '1.25rem' }}>
+              COR is an <strong style={{ color: '#e2e8f0' }}>informational and educational tool</strong> for trained cardiovascular perfusionists. It does <strong style={{ color: '#e2e8f0' }}>not</strong> provide medical advice, diagnosis, or treatment, and is <strong style={{ color: '#e2e8f0' }}>not a substitute</strong> for your professional clinical judgment, your institution&apos;s protocols, or applicable standards of care.
+              <br /><br />
+              AI responses may be inaccurate or incomplete. Always verify critical information independently, and never rely on COR for emergency or patient-specific decisions. By continuing, you confirm you are a qualified professional using this tool at your own discretion.
+            </div>
+            <button
+              onClick={() => { localStorage.setItem('corDisclaimerAccepted', '1'); setShowDisclaimer(false) }}
+              style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: 'none', background: '#e63946', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em' }}
+            >
+              I understand and agree
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* LOG OUT CONFIRM */}
       {confirmLogout && (
