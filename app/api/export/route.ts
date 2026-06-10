@@ -71,11 +71,11 @@ export async function GET(req: NextRequest) {
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(rows)
 
-  // Auto-size columns
-  const colWidths = Object.keys(rows[0] || {}).map(key => ({
-    wch: Math.max(key.length, ...rows.map(r => (r[key] || '').length)).toString().length + 5
+  // Auto-size columns to the widest value (header or cell), with padding, capped at 50.
+  const allKeys = Array.from(new Set(rows.flatMap(r => Object.keys(r))))
+  ws['!cols'] = allKeys.map(key => ({
+    wch: Math.min(50, Math.max(key.length, ...rows.map(r => String(r[key] ?? '').length)) + 4)
   }))
-  ws['!cols'] = colWidths
 
   XLSX.utils.book_append_sheet(wb, ws, category)
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
