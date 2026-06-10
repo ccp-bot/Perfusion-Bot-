@@ -59,6 +59,8 @@ export default function Home() {
   const [showDisclaimer, setShowDisclaimer] = useState(false)
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [allUsers, setAllUsers] = useState<any[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
   const [savePreview, setSavePreview] = useState(false)
   const [pendingSummary, setPendingSummary] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -694,10 +696,40 @@ export default function Home() {
       return
     }
     setActivePanel(key)
-    fetchPanel(key)
+    if (key === 'Users') { fetchAllUsers() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
+  }
+
+  // Owner-only: load every signed-up user with their tier + signup date.
+  async function fetchAllUsers() {
+    setUsersLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/users', { headers: { Authorization: `Bearer ${session?.access_token || ''}` } })
+      const data = await res.json()
+      setAllUsers(data.users || [])
+    } catch { setAllUsers([]) }
+    setUsersLoading(false)
+  }
+
+  // Assign a user (by email) to a hospital group, then refresh the list.
+  async function assignUserToGroup(email: string, groupId: string) {
+    if (!user || !groupId || !email) return
+    try {
+      const res = await fetch('/api/groups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, groupId, action: 'invite', targetEmail: email, newRole: 'worker', userEmail: user.email })
+      })
+      const data = await res.json()
+      if (data.success || data.error === 'User is already a member of this group') {
+        fetchAllUsers()
+      } else {
+        alert(data.error || 'Could not assign user to hospital.')
+      }
+    } catch { alert('Network error.') }
   }
 
   async function deletePanelEntry(id: number) {
@@ -1400,6 +1432,17 @@ export default function Home() {
                 <span style={{ fontSize: '0.82rem', color: activePanel === 'Admin' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Admin' ? '600' : '400' }}>Admin</span>
                 {activePanel === 'Admin' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
               </button>
+              {user?.email === SUPER_OWNER_EMAIL && (
+                <button
+                  onClick={() => { openPanel('Users'); setSidebarOpen(false) }}
+                  className={`sidebar-btn${activePanel === 'Users' ? ' active' : ''}`}
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
+                >
+                  <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#128101;</span>
+                  <span style={{ fontSize: '0.82rem', color: activePanel === 'Users' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Users' ? '600' : '400' }}>Users</span>
+                  {activePanel === 'Users' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -1428,7 +1471,7 @@ export default function Home() {
             <div>
               <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -1483,6 +1526,43 @@ export default function Home() {
                   </div>
                 ))}
               </>
+            )}
+
+            {activePanel === 'Users' && (
+              <div>
+                {usersLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '2rem' }}>Loading users…</div>}
+                {!usersLoading && allUsers.length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.8rem', marginTop: '2rem' }}>No users have signed up yet.</div>
+                )}
+                {!usersLoading && allUsers.map((u) => (
+                  <div key={u.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.75rem', marginBottom: '0.6rem' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500' }}>{u.name || (u.email || '').split('@')[0]}</div>
+                    <div style={{ fontSize: '0.68rem', color: '#4a5568', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                    <div style={{ fontSize: '0.63rem', color: '#4a5568', marginTop: '2px' }}>Joined {new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                    <div style={{ marginTop: '0.4rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                      {u.groups && u.groups.length > 0 ? (
+                        u.groups.map((g: any, gi: number) => (
+                          <span key={gi} style={{ fontSize: '0.62rem', color: '#22c55e', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '6px', padding: '1px 6px', textTransform: 'capitalize' }}>{g.name} · {g.role}</span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: '0.62rem', color: '#94a3b8', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '1px 6px' }}>Free (Tier 1)</span>
+                      )}
+                    </div>
+                    {allGroups.length > 0 && (
+                      <select
+                        value=""
+                        onChange={e => { if (e.target.value) { assignUserToGroup(u.email, e.target.value); e.target.value = '' } }}
+                        style={{ width: '100%', marginTop: '0.5rem', padding: '0.35rem 0.5rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0d1117', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}
+                      >
+                        <option value="">+ Assign to hospital…</option>
+                        {allGroups.map((g) => (
+                          <option key={g.group_id} value={g.group_id}>{g.group?.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
 
             {activePanel === 'Admin' && (
