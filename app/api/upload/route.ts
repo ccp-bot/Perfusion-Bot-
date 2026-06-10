@@ -99,13 +99,20 @@ export async function POST(req: NextRequest) {
   // Chunk the text
   const chunks = chunkText(textContent)
   let savedCount = 0
+  let lastError = ''
 
   for (const chunk of chunks) {
-    const embeddingRes = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: chunk,
-    })
-    const embedding = embeddingRes.data[0].embedding
+    // Embedding is only needed for AI search — if it fails, still save the entry.
+    let embedding: number[] | null = null
+    try {
+      const embeddingRes = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: chunk,
+      })
+      embedding = embeddingRes.data[0].embedding
+    } catch (e: any) {
+      lastError = `Embedding failed: ${e?.message || 'unknown error'}`
+    }
 
     const { error } = await supabase.from('documents').insert({
       content: chunk,
@@ -120,6 +127,11 @@ export async function POST(req: NextRequest) {
     })
 
     if (!error) savedCount++
+    else lastError = error.message
+  }
+
+  if (savedCount === 0) {
+    return NextResponse.json({ error: lastError || 'Could not save entry' }, { status: 500 })
   }
 
   // Notify group members if Protocol or Policy

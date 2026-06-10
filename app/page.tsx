@@ -851,15 +851,16 @@ export default function Home() {
     formData.append('userRole', userRole || '')
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (data.error) {
-        setUploadStatus(data.error)
+      let data: any = {}
+      try { data = await res.json() } catch { /* non-JSON response */ }
+      if (!res.ok || data.error) {
+        setUploadStatus(data.error || `Save failed (${res.status})`)
       } else {
         setUploadStatus('Entry saved')
         setManualEntry('')
         fetchPanel(activePanel)
       }
-    } catch { setUploadStatus('Failed to save entry') }
+    } catch (e: any) { setUploadStatus(`Failed to save: ${e?.message || 'network error'}`) }
     setUploading(false)
   }
 
