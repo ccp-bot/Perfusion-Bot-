@@ -799,15 +799,18 @@ export default function Home() {
   }
 
   async function deletePanelEntry(id: number) {
+    if (typeof window !== 'undefined' && !window.confirm('Delete this entry? This cannot be undone.')) return
     try {
-      await fetch('/api/logbook', {
+      const res = await fetch('/api/logbook', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, userId: user?.id, userRole })
       })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not delete entry.'); return }
       setPanelEntries(prev => prev.filter(e => e.id !== id))
     } catch {
-      console.error('Failed to delete entry')
+      alert('Could not delete entry. Please try again.')
     }
   }
 
@@ -2153,8 +2156,8 @@ export default function Home() {
                         </div>
                         <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
                           {isCollapsible && <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>{isExpanded ? '▲' : '▼'}</span>}
-                          {(userRole === 'owner' || userRole === 'admin') && (
-                            <button onClick={(e) => { e.stopPropagation(); deletePanelEntry(entry.id) }} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
+                          {(userRole === 'owner' || userRole === 'admin' || entry.user_id === user?.id) && (
+                            <button onClick={(e) => { e.stopPropagation(); deletePanelEntry(entry.id) }} title="Delete" style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
                           )}
                         </div>
                       </div>

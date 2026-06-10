@@ -77,8 +77,8 @@ export async function DELETE(req: NextRequest) {
 
   if (!id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 })
 
-  // Check ownership — workers can only delete their own entries
-  if (userRole === 'worker') {
+  // Ownership check — anyone who isn't an owner/admin can only delete their own entries.
+  if (userRole !== 'owner' && userRole !== 'admin') {
     const { data: entry } = await supabase
       .from('documents')
       .select('user_id')
