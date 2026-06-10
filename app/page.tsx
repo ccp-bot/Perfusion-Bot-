@@ -120,6 +120,11 @@ export default function Home() {
   const [caseLogCurrentField, setCaseLogCurrentField] = useState(0)
   const [logbookFields, setLogbookFields] = useState<string[]>([])
   const [caseNotesFields, setCaseNotesFields] = useState<string[]>([])
+  const [caseForm, setCaseForm] = useState<{[k: string]: string}>({})
+  const [caseDate, setCaseDate] = useState('')
+  const [editingFields, setEditingFields] = useState(false)
+  const [newFieldInput, setNewFieldInput] = useState('')
+  const [savingCase, setSavingCase] = useState(false)
   const [newLogbookField, setNewLogbookField] = useState('')
   const [newCaseNotesField, setNewCaseNotesField] = useState('')
   const [dragIdx, setDragIdx] = useState<number | null>(null)
@@ -214,18 +219,28 @@ export default function Home() {
     fetchGroup()
   }, [user])
 
-  // Fetch case log template when group is set
+  // Load logbook/case-note fields: personal (localStorage) override > group template > defaults.
   useEffect(() => {
-    if (!userGroupId) return
+    const lb = typeof window !== 'undefined' ? localStorage.getItem('cor_logbook_fields') : null
+    const cn = typeof window !== 'undefined' ? localStorage.getItem('cor_casenotes_fields') : null
+    let personalLb = false, personalCn = false
+    try { if (lb) { setLogbookFields(JSON.parse(lb)); personalLb = true } } catch {}
+    try { if (cn) { setCaseNotesFields(JSON.parse(cn)); personalCn = true } } catch {}
+    if (personalLb && personalCn) return
     async function fetchTemplate() {
       try {
-        const res = await fetch(`/api/templates?groupId=${userGroupId}`)
+        const res = await fetch(`/api/templates${userGroupId ? `?groupId=${userGroupId}` : ''}`)
         const data = await res.json()
-        setLogbookFields(data.logbookFields || [])
-        setCaseNotesFields(data.caseNotesFields || [])
+        if (!personalLb) setLogbookFields(data.logbookFields || [])
+        if (!personalCn) setCaseNotesFields(data.caseNotesFields || [])
       } catch { /* use defaults */ }
     }
     fetchTemplate()
+  }, [userGroupId])
+
+  // Group-only: case equipment mapping.
+  useEffect(() => {
+    if (!userGroupId) return
     async function fetchCaseEquipment() {
       try {
         const res = await fetch(`/api/case-equipment?groupId=${userGroupId}`)
@@ -838,6 +853,57 @@ export default function Home() {
     if (files.length > 0) uploadFiles(files)
   }
 
+  // ── Per-user structured case fields (Logbook / Case Notes) ──
+  function currentCaseFields(): string[] {
+    return activePanel === 'Logbook' ? logbookFields : caseNotesFields
+  }
+  function persistCaseFields(fields: string[]) {
+    if (activePanel === 'Logbook') {
+      setLogbookFields(fields)
+      try { localStorage.setItem('cor_logbook_fields', JSON.stringify(fields)) } catch {}
+    } else {
+      setCaseNotesFields(fields)
+      try { localStorage.setItem('cor_casenotes_fields', JSON.stringify(fields)) } catch {}
+    }
+  }
+  function addCaseField() {
+    const name = newFieldInput.trim()
+    if (!name || currentCaseFields().includes(name)) { setNewFieldInput(''); return }
+    persistCaseFields([...currentCaseFields(), name])
+    setNewFieldInput('')
+  }
+  function removeCaseField(idx: number) {
+    persistCaseFields(currentCaseFields().filter((_, i) => i !== idx))
+  }
+  async function saveCase() {
+    if (!activePanel || !user) return
+    const lines: string[] = []
+    if (activePanel === 'Logbook' && caseDate) lines.push(`Surgery Date: ${caseDate}`)
+    for (const f of currentCaseFields()) { const v = (caseForm[f] || '').trim(); if (v) lines.push(`${f}: ${v}`) }
+    if (lines.length === 0) { setUploadStatus('Fill in at least one field first'); return }
+    setSavingCase(true); setUploadStatus('')
+    const formData = new FormData()
+    formData.append('content', lines.join('\n'))
+    formData.append('category', activePanel)
+    formData.append('userId', user.id)
+    formData.append('userEmail', user.email)
+    formData.append('groupId', userGroupId || '')
+    formData.append('userRole', userRole || '')
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      let data: any = {}
+      try { data = await res.json() } catch { /* non-JSON */ }
+      if (!res.ok || data.error) {
+        setUploadStatus(data.error || `Save failed (${res.status})`)
+      } else {
+        setUploadStatus('Case saved')
+        setCaseForm({}); setCaseDate('')
+        fetchPanel(activePanel)
+      }
+    } catch (e: any) { setUploadStatus(`Failed to save: ${e?.message || 'network error'}`) }
+    setSavingCase(false)
+  }
+
   async function saveManualEntry() {
     if (!manualEntry.trim() || !activePanel || !user) return
     setUploading(true)
@@ -1343,6 +1409,7 @@ export default function Home() {
 
   // Tier 2 = linked to a hospital group (or the super owner). Tier 1 = everyone else.
   const hasFullAccess = !!userGroupId || user?.email === SUPER_OWNER_EMAIL
+  const fieldInputStyle = { width: '100%', padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' as const }
 
   return (
     <div className="app-root" style={{ display: 'flex', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif", overflow: 'hidden' }}>
@@ -1990,16 +2057,54 @@ export default function Home() {
                         {uploading ? 'Uploading...' : dragOver ? 'Drop file here' : 'Upload or drag file (PDF, Word, Excel)'}
                       </button>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <input
-                        value={manualEntry}
-                        onChange={e => setManualEntry(e.target.value)}
-                        placeholder="Type a manual entry..."
-                        style={{ flex: 1, padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
-                      />
-                      <button onClick={saveManualEntry} disabled={uploading || !manualEntry.trim()} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: 'none', background: !manualEntry.trim() ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', cursor: !manualEntry.trim() ? 'not-allowed' : 'pointer', flexShrink: 0 }}>+</button>
-                    </div>
-                    {uploadStatus && <div style={{ fontSize: '0.7rem', color: uploadStatus.includes('fail') || uploadStatus.includes('error') || uploadStatus.includes('Only') ? '#e63946' : '#22c55e', marginTop: '0.4rem' }}>{uploadStatus}</div>}
+                    {(activePanel === 'Logbook' || activePanel === 'Case Notes') ? (
+                      editingFields ? (
+                        <div>
+                          <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.4rem' }}>Customize your {activePanel} fields</div>
+                          {currentCaseFields().map((f, idx) => (
+                            <div key={f} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.3rem' }}>
+                              <div style={{ flex: 1, padding: '0.35rem 0.6rem', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', fontSize: '0.75rem', color: '#94a3b8' }}>{f}</div>
+                              <button onClick={() => removeCaseField(idx)} title="Remove field" style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.8rem', cursor: 'pointer' }}>&#10005;</button>
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.4rem' }}>
+                            <input value={newFieldInput} onChange={e => setNewFieldInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCaseField()} placeholder="Add a field (e.g. Cannulation)" style={fieldInputStyle} />
+                            <button onClick={addCaseField} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}>+</button>
+                          </div>
+                          <button onClick={() => setEditingFields(false)} style={{ width: '100%', marginTop: '0.5rem', padding: '0.45rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Done editing fields</button>
+                        </div>
+                      ) : (
+                        <div>
+                          {activePanel === 'Logbook' && (
+                            <div style={{ marginBottom: '0.4rem' }}>
+                              <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>Surgery Date</div>
+                              <input type="date" value={caseDate} onChange={e => setCaseDate(e.target.value)} style={fieldInputStyle} />
+                            </div>
+                          )}
+                          {currentCaseFields().map((f) => (
+                            <div key={f} style={{ marginBottom: '0.4rem' }}>
+                              <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>{f}</div>
+                              <input value={caseForm[f] || ''} onChange={e => setCaseForm(p => ({ ...p, [f]: e.target.value }))} placeholder={f} style={fieldInputStyle} />
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
+                            <button onClick={saveCase} disabled={savingCase} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.78rem', fontWeight: '600', cursor: savingCase ? 'not-allowed' : 'pointer' }}>{savingCase ? 'Saving…' : 'Save case'}</button>
+                            <button onClick={() => setEditingFields(true)} style={{ padding: '0.5rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer', flexShrink: 0 }}>&#9998; Fields</button>
+                          </div>
+                        </div>
+                      )
+                    ) : (
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <input
+                          value={manualEntry}
+                          onChange={e => setManualEntry(e.target.value)}
+                          placeholder="Type a manual entry..."
+                          style={{ flex: 1, padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                        <button onClick={saveManualEntry} disabled={uploading || !manualEntry.trim()} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: 'none', background: !manualEntry.trim() ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', cursor: !manualEntry.trim() ? 'not-allowed' : 'pointer', flexShrink: 0 }}>+</button>
+                      </div>
+                    )}
+                    {uploadStatus && <div style={{ fontSize: '0.7rem', color: uploadStatus.includes('fail') || uploadStatus.includes('error') || uploadStatus.includes('Only') || uploadStatus.includes('Fill') ? '#e63946' : '#22c55e', marginTop: '0.4rem' }}>{uploadStatus}</div>}
                   </div>
                 )}
 
