@@ -8,6 +8,17 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// Admin client (service role) for the usage-tracking table.
+const admin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+)
+
+// Free (Tier 1) users get this many questions per day. Hospital users + owner are unlimited.
+const FREE_DAILY_LIMIT = 20
+const SUPER_OWNER = 'cliftonmarschel@gmail.com'
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -195,6 +206,32 @@ Return only the summary, no preamble.`
       savePreview: true,
       summary
     })
+  }
+
+  // ── FREE-TIER DAILY USAGE LIMIT ────────────────────────────
+  // Tier 1 (no hospital group, not the owner) is capped per day. Checked before any
+  // paid AI calls. Fails open on any error (e.g. table not created yet) so chat never breaks.
+  const isFreeTier = !groupId && userEmail?.toLowerCase() !== SUPER_OWNER
+  if (isFreeTier && userId && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const { data: usage } = await admin
+        .from('daily_usage')
+        .select('count')
+        .eq('user_id', userId)
+        .eq('usage_date', today)
+        .maybeSingle()
+      const current = usage?.count || 0
+      if (current >= FREE_DAILY_LIMIT) {
+        return NextResponse.json({
+          answer: `You've reached today's limit of ${FREE_DAILY_LIMIT} questions on the free plan. Your questions reset tomorrow.\n\nFor unlimited access, ask your hospital or group to set up COR for your team.`,
+          limitReached: true,
+        })
+      }
+      await admin
+        .from('daily_usage')
+        .upsert({ user_id: userId, usage_date: today, count: current + 1 }, { onConflict: 'user_id,usage_date' })
+    } catch { /* table missing or transient error — don't block the user */ }
   }
 
   // ── NORMAL CHAT ────────────────────────────────────────────
