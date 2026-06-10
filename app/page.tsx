@@ -57,6 +57,8 @@ export default function Home() {
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const [confirmLogout, setConfirmLogout] = useState(false)
   const [showDisclaimer, setShowDisclaimer] = useState(false)
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
   const [savePreview, setSavePreview] = useState(false)
   const [pendingSummary, setPendingSummary] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -1236,6 +1238,25 @@ export default function Home() {
     window.location.href = '/login'
   }
 
+  async function deleteAccount() {
+    if (!user) return
+    setDeletingAccount(true)
+    try {
+      const res = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, email: user.email })
+      })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error || 'Could not delete account.'); setDeletingAccount(false); return }
+      await supabase.auth.signOut()
+      window.location.href = '/login'
+    } catch {
+      alert('Could not delete account. Please try again.')
+      setDeletingAccount(false)
+    }
+  }
+
   // Tier 2 = linked to a hospital group (or the super owner). Tier 1 = everyone else.
   const hasFullAccess = !!userGroupId || user?.email === SUPER_OWNER_EMAIL
 
@@ -1279,6 +1300,20 @@ export default function Home() {
 
       {/* MOBILE OVERLAY */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} style={{ display: 'none', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 90 }} />}
+
+      {/* DELETE ACCOUNT CONFIRM */}
+      {showDeleteAccount && (
+        <div onClick={() => !deletingAccount && setShowDeleteAccount(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 310, backdropFilter: 'blur(4px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#0d1117', border: '1px solid rgba(230,57,70,0.3)', borderRadius: '16px', padding: '1.75rem', width: '90%', maxWidth: '360px', animation: 'modalIn 0.2s ease', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#ffffff', marginBottom: '0.5rem' }}>Delete your account?</div>
+            <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '1.5rem', lineHeight: '1.6' }}>This permanently deletes your account, your saved logbook, case notes, and conversation history. This <strong style={{ color: '#e2e8f0' }}>cannot be undone.</strong></div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setShowDeleteAccount(false)} disabled={deletingAccount} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#e2e8f0', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={deleteAccount} disabled={deletingAccount} style={{ flex: 1, padding: '0.75rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#ffffff', fontSize: '0.85rem', fontWeight: '600', cursor: deletingAccount ? 'not-allowed' : 'pointer' }}>{deletingAccount ? 'Deleting…' : 'Delete forever'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MEDICAL DISCLAIMER (shown once until acknowledged) */}
       {showDisclaimer && (
@@ -1382,6 +1417,7 @@ export default function Home() {
           <div style={{ fontSize: '0.75rem', color: '#e2e8f0', marginBottom: '0.2rem', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName || user?.email?.split('@')[0]}</div>
           <div style={{ fontSize: '0.6rem', color: '#4a5568', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
           <button onClick={() => setConfirmLogout(true)} style={{ width: '100%', padding: '0.7rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#ffffff', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em' }}>Log out</button>
+          <button onClick={() => setShowDeleteAccount(true)} style={{ width: '100%', padding: '0.35rem', marginTop: '0.4rem', borderRadius: '6px', border: 'none', background: 'transparent', color: '#6b7280', fontSize: '0.68rem', cursor: 'pointer', textDecoration: 'underline' }}>Delete account</button>
         </div>
       </div>
 
