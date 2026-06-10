@@ -25,6 +25,10 @@ const SIDEBAR_ITEMS = [
   { key: 'Schedule', emoji: null, image: '/Schedule.Icon.png', label: 'Schedule' },
 ]
 
+// Tier 1 (no hospital group): only these knowledge-base icons are available.
+// Tier 2 (linked to a hospital group) and the super owner see everything.
+const TIER1_ITEMS = ['History', 'Logbook', 'Case Notes']
+
 export default function Home() {
   const [messages, setMessages] = useState<{role: string, content: string, image?: string}[]>([])
   const [input, setInput] = useState('')
@@ -1193,6 +1197,9 @@ export default function Home() {
     window.location.href = '/login'
   }
 
+  // Tier 2 = linked to a hospital group (or the super owner). Tier 1 = everyone else.
+  const hasFullAccess = !!userGroupId || user?.email === SUPER_OWNER_EMAIL
+
   return (
     <div className="app-root" style={{ display: 'flex', background: '#080b12', color: '#e2e8f0', fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif", overflow: 'hidden' }}>
 
@@ -1264,7 +1271,7 @@ export default function Home() {
         </div>
         <div style={{ padding: '0.75rem 0.5rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
           <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginBottom: '0.5rem' }}>Knowledge Base</div>
-          {SIDEBAR_ITEMS.map(item => (
+          {SIDEBAR_ITEMS.filter(item => hasFullAccess || TIER1_ITEMS.includes(item.key)).map(item => (
             <button
               key={item.key}
               onClick={() => { if (item.key === 'Schedule') { window.location.href = '/schedule'; return } if (item.key === 'Charting') { window.location.href = '/chart'; return } openPanel(item.key); setSidebarOpen(false) }}
