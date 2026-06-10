@@ -16,7 +16,7 @@ const admin = createClient(
 )
 
 // Free (Tier 1) users get this many questions per day. Hospital users + owner are unlimited.
-const FREE_DAILY_LIMIT = 20
+const FREE_DAILY_LIMIT = 10
 const SUPER_OWNER = 'cliftonmarschel@gmail.com'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
