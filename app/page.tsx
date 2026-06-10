@@ -753,6 +753,36 @@ export default function Home() {
     } catch { alert('Network error.'); setDeletingUser(false) }
   }
 
+  // Open a clean, printable page for a single case (Case Note or Logbook entry).
+  function printEntry(entry: any) {
+    const w = window.open('', '_blank', 'width=800,height=900')
+    if (!w) { alert('Please allow pop-ups to print this case.'); return }
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const dateStr = new Date(entry.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    const body = (entry.content || '').split('\n').map((line: string) => {
+      const t = line.replace(/\r/g, '').trim()
+      if (!t) return '<div style="height:6px"></div>'
+      if (/^-{2,}.*-{2,}$/.test(t)) {
+        return `<h3 style="margin:18px 0 6px;font-size:14px;border-bottom:1px solid #ccc;padding-bottom:4px">${esc(t.replace(/-/g, '').trim())}</h3>`
+      }
+      const m = t.match(/^\*\*(.+?):\*\*\s*(.*)$/) || t.match(/^([^:]+):\s+(.*)$/)
+      if (m && m[2] !== undefined) {
+        return `<div style="margin:4px 0"><strong>${esc(m[1].replace(/\*\*/g, '').trim())}:</strong> ${esc(m[2].trim())}</div>`
+      }
+      return `<div style="margin:4px 0">${esc(t.replace(/\*\*/g, ''))}</div>`
+    }).join('')
+    w.document.write(`<!DOCTYPE html><html><head><title>Case — ${esc(dateStr)}</title>
+      <style>body{font-family:-apple-system,Arial,sans-serif;color:#111;max-width:700px;margin:32px auto;padding:0 24px;line-height:1.5}h1{font-size:20px;margin:0 0 4px}.meta{color:#666;font-size:13px;margin-bottom:20px}@media print{body{margin:0}}</style>
+      </head><body>
+      <h1>COR Case Record</h1>
+      <div class="meta">${esc(dateStr)}${entry.uploaded_by ? ' &middot; ' + esc(entry.uploaded_by) : ''}</div>
+      ${body}
+      </body></html>`)
+    w.document.close()
+    w.focus()
+    setTimeout(() => { try { w.print() } catch { /* user can print manually */ } }, 350)
+  }
+
   async function deletePanelEntry(id: number) {
     try {
       await fetch('/api/logbook', {
@@ -1520,7 +1550,7 @@ export default function Home() {
                   const params = new URLSearchParams({ userId: user?.id, category: activePanel!, groupId: userGroupId || '' })
                   window.open(`/api/export?${params.toString()}`, '_blank')
                 }} style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>
-                  Export
+                  &#11015; Excel
                 </button>
               )}
               <button onClick={() => setActivePanel(null)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '1rem', cursor: 'pointer', width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
@@ -2025,6 +2055,9 @@ export default function Home() {
                       {(!isCollapsible || isExpanded) && (
                         <>
                           <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{entry.content.length > 300 && !isExpanded ? entry.content.slice(0, 300) + '...' : entry.content}</div>
+                          {isCollapsible && isExpanded && (
+                            <button onClick={(e) => { e.stopPropagation(); printEntry(entry) }} style={{ marginTop: '0.6rem', padding: '0.4rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>&#128424; Print this case</button>
+                          )}
                           {activePanel === 'Case Notes' && isExpanded && entry.user_id === user?.id && (
                             <div
                               style={{ marginTop: '0.6rem' }}
