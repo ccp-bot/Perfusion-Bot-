@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   const rows: Record<string, string>[] = []
   for (const entry of data) {
     const parsed: Record<string, string> = {}
-    const lines = (entry.content || '').split('\n')
+    const lines = (entry.content || '').replace(/\r/g, '').split('\n')
     for (const line of lines) {
       // Match patterns like "Field: value" or "**Field:** value"
       const match = line.match(/^\*?\*?([^:*]+?):?\*?\*?\s*[:]\s*(.+)$/i) ||

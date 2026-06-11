@@ -87,7 +87,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Failed to parse file: ${err.message}` }, { status: 500 })
     }
   } else if (manualContent) {
-    textContent = manualContent
+    // Form fields normalize newlines to CRLF over the wire — store clean LF.
+    textContent = manualContent.replace(/\r\n/g, '\n')
   } else {
     return NextResponse.json({ error: 'No file or content provided' }, { status: 400 })
   }
