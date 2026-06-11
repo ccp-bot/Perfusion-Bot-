@@ -1513,7 +1513,7 @@ export default function Home() {
         ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
         .app-root { height: 100vh; height: 100dvh; }
         /* The in-app mic is only useful on desktop (mouse). Phones/tablets use the keyboard's dictation. */
-        @media (pointer: coarse) { .desktop-only-mic { display: none !important; } }
+        @media (pointer: coarse) { .desktop-only-mic { display: none !important; } .chat-input { padding-right: 1.1rem !important; } }
         @media (max-width: 768px) {
           .desktop-sidebar { display: none !important; }
           .desktop-sidebar.mobile-open { display: flex !important; position: fixed !important; top: 0 !important; left: 0 !important; bottom: 0 !important; width: 220px !important; z-index: 100 !important; }
@@ -2474,6 +2474,7 @@ export default function Home() {
             <button onClick={() => fileInputRef.current?.click()} style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.25rem', color: '#94a3b8' }}>+</button>
             <div style={{ flex: 1, position: 'relative' }}>
               <textarea
+                className="chat-input"
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
