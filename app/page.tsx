@@ -122,6 +122,7 @@ export default function Home() {
   const [caseNotesFields, setCaseNotesFields] = useState<string[]>([])
   const [caseForm, setCaseForm] = useState<{[k: string]: string}>({})
   const [caseDate, setCaseDate] = useState('')
+  const [caseNote, setCaseNote] = useState('')
   const [editingFields, setEditingFields] = useState(false)
   const [newFieldInput, setNewFieldInput] = useState('')
   const [savingCase, setSavingCase] = useState(false)
@@ -883,6 +884,7 @@ export default function Home() {
     const lines: string[] = []
     if (activePanel === 'Logbook' && caseDate) lines.push(`Surgery Date: ${caseDate}`)
     for (const f of currentCaseFields()) { const v = (caseForm[f] || '').trim(); if (v) lines.push(`${f}: ${v}`) }
+    if (activePanel === 'Logbook' && caseNote.trim()) lines.push(`Case Notes: ${caseNote.trim()}`)
     if (lines.length === 0) { setUploadStatus('Fill in at least one field first'); return }
     setSavingCase(true); setUploadStatus('')
     const formData = new FormData()
@@ -900,7 +902,7 @@ export default function Home() {
         setUploadStatus(data.error || `Save failed (${res.status})`)
       } else {
         setUploadStatus('Case saved')
-        setCaseForm({}); setCaseDate('')
+        setCaseForm({}); setCaseDate(''); setCaseNote('')
         fetchPanel(activePanel)
       }
     } catch (e: any) { setUploadStatus(`Failed to save: ${e?.message || 'network error'}`) }
@@ -2091,6 +2093,12 @@ export default function Home() {
                               <input value={caseForm[f] || ''} onChange={e => setCaseForm(p => ({ ...p, [f]: e.target.value }))} placeholder={f} style={fieldInputStyle} />
                             </div>
                           ))}
+                          {activePanel === 'Logbook' && (
+                            <div style={{ marginBottom: '0.4rem' }}>
+                              <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>Case Notes (optional)</div>
+                              <textarea value={caseNote} onChange={e => setCaseNote(e.target.value)} placeholder="Any notes about this case…" rows={3} style={{ ...fieldInputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
                             <button onClick={saveCase} disabled={savingCase} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.78rem', fontWeight: '600', cursor: savingCase ? 'not-allowed' : 'pointer' }}>{savingCase ? 'Saving…' : 'Save case'}</button>
                             <button onClick={() => setEditingFields(true)} style={{ padding: '0.5rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer', flexShrink: 0 }}>&#9998; Fields</button>
