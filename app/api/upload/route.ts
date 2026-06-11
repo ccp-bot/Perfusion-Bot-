@@ -38,14 +38,15 @@ export async function POST(req: NextRequest) {
   const userEmail = formData.get('userEmail') as string
   const groupId = formData.get('groupId') as string
   const userRole = formData.get('userRole') as string
+  const folder = formData.get('folder') as string
 
   if (!category || !userId) {
     return NextResponse.json({ error: 'Missing category or userId' }, { status: 400 })
   }
 
-  // Logbook and Case Notes are personal — any signed-in user can add their own.
+  // Personal categories — any signed-in user can add their own.
   // Other categories (Protocol, Policy, etc.) are shared institutional content — owner/admin only.
-  const personalCategories = ['Logbook', 'Case Notes']
+  const personalCategories = ['Logbook', 'Case Notes', 'Notes']
   if (!personalCategories.includes(category) && userRole !== 'owner' && userRole !== 'admin') {
     return NextResponse.json({ error: 'Only owners and admins can upload content' }, { status: 403 })
   }
@@ -123,6 +124,7 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       group_id: groupId || null,
       source_file: fileName,
+      folder: folder || null,
       uploaded_by: userEmail || null,
       created_at: new Date().toISOString(),
     })

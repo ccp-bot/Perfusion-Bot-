@@ -17,7 +17,7 @@ function getMonday(d: Date): Date {
 const SIDEBAR_ITEMS = [
   { key: 'History', emoji: null, image: '/History.Icon.png', label: 'History' },
   { key: 'Logbook', emoji: null, image: '/Logbook.icon.png', label: 'Logbook' },
-  { key: 'Case Notes', emoji: null, image: '/CaseNotes.Icon.png', label: 'Case Notes' },
+  { key: 'Notes', emoji: null, image: '/CaseNotes.Icon.png', label: 'Notes' },
   { key: 'Protocol', emoji: null, image: '/Protocol.Icon.png', label: 'Protocol' },
   { key: 'Policy', emoji: null, image: '/Policy.Icon.png', label: 'Policy' },
   { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
@@ -28,7 +28,7 @@ const SIDEBAR_ITEMS = [
 
 // Tier 1 (no hospital group): only these knowledge-base icons are available.
 // Tier 2 (linked to a hospital group) and the super owner see everything.
-const TIER1_ITEMS = ['History', 'Logbook', 'Case Notes']
+const TIER1_ITEMS = ['History', 'Logbook', 'Notes']
 
 // Rotating, perfusion-themed prompts shown in the empty chat input box.
 const COR_PLACEHOLDERS = [
@@ -123,6 +123,13 @@ export default function Home() {
   const [caseForm, setCaseForm] = useState<{[k: string]: string}>({})
   const [caseDate, setCaseDate] = useState('')
   const [caseNote, setCaseNote] = useState('')
+  const [notesList, setNotesList] = useState<any[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
+  const [openNoteId, setOpenNoteId] = useState<number | 'new' | null>(null)
+  const [noteTitle, setNoteTitle] = useState('')
+  const [noteBody, setNoteBody] = useState('')
+  const [noteFolder, setNoteFolder] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
   const [editingFields, setEditingFields] = useState(false)
   const [newFieldInput, setNewFieldInput] = useState('')
   const [savingCase, setSavingCase] = useState(false)
@@ -714,7 +721,8 @@ export default function Home() {
       return
     }
     setActivePanel(key)
-    if (key === 'Users') { fetchAllUsers() } else { fetchPanel(key) }
+    setOpenNoteId(null)
+    if (key === 'Users') { fetchAllUsers() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
@@ -907,6 +915,72 @@ export default function Home() {
       }
     } catch (e: any) { setUploadStatus(`Failed to save: ${e?.message || 'network error'}`) }
     setSavingCase(false)
+  }
+
+  // ── Notes (free-form, foldered, COR-readable) ──
+  async function fetchNotes() {
+    if (!user) return
+    setNotesLoading(true)
+    try {
+      const res = await fetch(`/api/notes?userId=${user.id}`)
+      const data = await res.json()
+      setNotesList(data.notes || [])
+    } catch { setNotesList([]) }
+    setNotesLoading(false)
+  }
+  function openNoteEditor(note: any | null) {
+    if (note) {
+      setOpenNoteId(note.id)
+      setNoteTitle(note.title === 'Untitled' ? '' : note.title)
+      setNoteBody(note.content || '')
+      setNoteFolder(note.folder || '')
+    } else {
+      setOpenNoteId('new')
+      setNoteTitle(''); setNoteBody(''); setNoteFolder('')
+    }
+  }
+  async function saveNote() {
+    if (!user || (!noteTitle.trim() && !noteBody.trim())) return
+    setSavingNote(true)
+    try {
+      const isNew = openNoteId === 'new'
+      const res = await fetch('/api/notes', {
+        method: isNew ? 'POST' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: isNew ? undefined : openNoteId, userId: user.id, title: noteTitle.trim() || 'Untitled', body: noteBody, folder: noteFolder.trim() || null })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not save note.'); setSavingNote(false); return }
+      setOpenNoteId(null)
+      fetchNotes()
+    } catch { alert('Could not save note.') }
+    setSavingNote(false)
+  }
+  async function deleteNote(id: number) {
+    if (!user || !window.confirm('Delete this note? This cannot be undone.')) return
+    try {
+      await fetch('/api/notes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, userId: user.id }) })
+      setOpenNoteId(null)
+      fetchNotes()
+    } catch { alert('Could not delete note.') }
+  }
+  async function insertNoteDocument(file: File) {
+    if (!user) return
+    setSavingNote(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('category', 'Notes')
+    formData.append('userId', user.id)
+    formData.append('userEmail', user.email)
+    formData.append('folder', noteFolder.trim() || '')
+    formData.append('userRole', userRole || '')
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not insert document.') }
+      else fetchNotes()
+    } catch { alert('Could not insert document.') }
+    setSavingNote(false)
   }
 
   async function saveManualEntry() {
@@ -1609,7 +1683,7 @@ export default function Home() {
             <div>
               <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -2047,10 +2121,59 @@ export default function Home() {
               </>
             )}
 
-            {activePanel !== 'History' && activePanel !== 'Admin' && activePanel !== 'Checklists' && activePanel !== 'Equipment' && !panelLoading && (
+            {activePanel === 'Notes' && (
+              <div>
+                {notesLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '2rem' }}>Loading…</div>}
+
+                {!notesLoading && openNoteId !== null && (
+                  <div>
+                    <input value={noteTitle} onChange={e => setNoteTitle(e.target.value)} placeholder="Title" style={{ ...fieldInputStyle, marginBottom: '0.4rem' }} />
+                    <input value={noteFolder} onChange={e => setNoteFolder(e.target.value)} placeholder="Folder (optional)" style={{ ...fieldInputStyle, marginBottom: '0.4rem' }} />
+                    <textarea value={noteBody} onChange={e => setNoteBody(e.target.value)} placeholder="Write your note…" rows={10} style={{ ...fieldInputStyle, resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.4rem' }} />
+                    {openNoteId === 'new' && (
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <input type="file" id="note-doc" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" onChange={e => { const f = e.target.files?.[0]; if (f) insertNoteDocument(f); e.target.value = '' }} style={{ display: 'none' }} />
+                        <label htmlFor="note-doc" style={{ display: 'block', textAlign: 'center', padding: '0.5rem', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.03)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>&#128206; …or insert a document (PDF, Word, Excel)</label>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <button onClick={saveNote} disabled={savingNote} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer' }}>{savingNote ? 'Saving…' : 'Save note'}</button>
+                      <button onClick={() => setOpenNoteId(null)} style={{ padding: '0.5rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>Cancel</button>
+                      {openNoteId !== 'new' && <button onClick={() => deleteNote(openNoteId as number)} style={{ padding: '0.5rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(230,57,70,0.3)', background: 'transparent', color: '#e63946', fontSize: '0.75rem', cursor: 'pointer' }}>Delete</button>}
+                    </div>
+                  </div>
+                )}
+
+                {!notesLoading && openNoteId === null && (
+                  <div>
+                    <button onClick={() => openNoteEditor(null)} style={{ width: '100%', padding: '0.55rem', borderRadius: '8px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer', marginBottom: '0.75rem' }}>+ New note</button>
+                    {notesList.length === 0 && (
+                      <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.8rem', marginTop: '2rem' }}>No notes yet. Create one above.</div>
+                    )}
+                    {(() => {
+                      const folders: {[k: string]: any[]} = {}
+                      for (const n of notesList) { const f = n.folder || 'Unfiled'; (folders[f] = folders[f] || []).push(n) }
+                      return Object.keys(folders).sort().map(folderName => (
+                        <div key={folderName} style={{ marginBottom: '0.75rem' }}>
+                          <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>&#128193; {folderName}</div>
+                          {folders[folderName].map(n => (
+                            <div key={n.id} onClick={() => openNoteEditor(n)} className="history-item" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.6rem 0.7rem', marginBottom: '0.35rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.8rem', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
+                              <span style={{ fontSize: '0.6rem', color: '#4a5568', flexShrink: 0 }}>{new Date(n.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(activePanel === 'Logbook' || activePanel === 'Protocol' || activePanel === 'Policy') && !panelLoading && (
               <>
                 {/* Add controls — Logbook/Case Notes: anyone (their own cases). Protocol/Policy: owner/admin only. */}
-                {(activePanel === 'Logbook' || activePanel === 'Case Notes' || userRole === 'owner' || userRole === 'admin') && (
+                {(activePanel === 'Logbook' || userRole === 'owner' || userRole === 'admin') && (
                   <div
                     onDragOver={e => { e.preventDefault(); setDragOver(true) }}
                     onDragLeave={() => setDragOver(false)}
@@ -2063,7 +2186,7 @@ export default function Home() {
                         {uploading ? 'Uploading...' : dragOver ? 'Drop file here' : 'Upload or drag file (PDF, Word, Excel)'}
                       </button>
                     </div>
-                    {(activePanel === 'Logbook' || activePanel === 'Case Notes') ? (
+                    {activePanel === 'Logbook' ? (
                       editingFields ? (
                         <div>
                           <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.4rem' }}>Customize your {activePanel} fields</div>
@@ -2124,11 +2247,11 @@ export default function Home() {
                   <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                     <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128195;</div>
                     <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No {activePanel} entries yet.</div>
-                    {(activePanel === 'Logbook' || activePanel === 'Case Notes' || userRole === 'owner' || userRole === 'admin') && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>}
+                    {(activePanel === 'Logbook' || userRole === 'owner' || userRole === 'admin') && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>}
                   </div>
                 )}
                 {panelEntries.map((entry) => {
-                  const isCollapsible = activePanel === 'Case Notes' || activePanel === 'Logbook'
+                  const isCollapsible = activePanel === 'Logbook'
                   const isExpanded = expandedEntries.has(entry.id)
                   const mrnMatch = entry.content?.match(/\*?\*?MRN:?\*?\*?\s*(.+?)(?:\n|$)/i)
                   const mrn = mrnMatch ? mrnMatch[1].trim() : null
@@ -2176,7 +2299,7 @@ export default function Home() {
                           {isCollapsible && isExpanded && (
                             <button onClick={(e) => { e.stopPropagation(); printEntry(entry) }} style={{ marginTop: '0.6rem', padding: '0.4rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>&#128424; Print this case</button>
                           )}
-                          {activePanel === 'Case Notes' && isExpanded && entry.user_id === user?.id && (
+                          {activePanel === 'Logbook' && isExpanded && entry.user_id === user?.id && (
                             <div
                               style={{ marginTop: '0.6rem' }}
                               onClick={e => e.stopPropagation()}

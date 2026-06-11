@@ -268,6 +268,26 @@ Return only the summary, no preamble.`
     }
   } catch { /* institutional search failure shouldn't block chat */ }
 
+  // Pull the user's own notes so COR can reference them (scoped to this user).
+  let userNotesContext = ''
+  if (userId) {
+    try {
+      const { data: notes } = await supabase
+        .from('documents')
+        .select('content, source_file')
+        .eq('category', 'Notes')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(8)
+      if (notes && notes.length > 0) {
+        userNotesContext = notes
+          .map((n: any) => `${n.source_file ? n.source_file + ': ' : ''}${(n.content || '').slice(0, 800)}`)
+          .join('\n\n')
+          .slice(0, 4000)
+      }
+    } catch { /* notes fetch failure shouldn't block chat */ }
+  }
+
   const conversationHistory = messages.map((m: any) => ({
     role: m.role as 'user' | 'assistant',
     content: m.content
@@ -276,6 +296,11 @@ Return only the summary, no preamble.`
   const institutionalSection = institutionalContext
     ? `\n\nINSTITUTIONAL KNOWLEDGE (from your institution's saved protocols, policies, and case notes — use this to supplement your answers when relevant, and note when information comes from institutional records):
 ${institutionalContext}`
+    : ''
+
+  const notesSection = userNotesContext
+    ? `\n\nTHE USER'S PERSONAL NOTES (their own saved notes — draw on these when relevant to their question, and mention when you're referencing their notes):
+${userNotesContext}`
     : ''
 
   const response = await anthropic.messages.create({
@@ -332,7 +357,7 @@ When a user tells you about a change to a protocol, procedure, equipment prefere
    [PROTOCOL_UPDATE: your concise summary of the change here] — if it's a protocol/procedure/equipment change
    [POLICY_UPDATE: your concise summary of the change here] — if it's an institutional policy change
 
-Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).${institutionalSection}`,
+Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).${institutionalSection}${notesSection}`,
     messages: [
       ...conversationHistory,
       { role: 'user', content: message }
