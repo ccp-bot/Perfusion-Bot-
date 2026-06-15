@@ -891,7 +891,7 @@ export default function Home() {
     if (!activePanel || !user) return
     const lines: string[] = []
     if (activePanel === 'Logbook' && caseDate) lines.push(`Surgery Date: ${caseDate}`)
-    for (const f of currentCaseFields()) { const v = (caseForm[f] || '').trim(); if (v) lines.push(`${f}: ${v}`) }
+    for (const f of currentCaseFields()) { if (f.toLowerCase() === 'surgery date') continue; const v = (caseForm[f] || '').trim(); if (v) lines.push(`${f}: ${v}`) }
     if (activePanel === 'Logbook' && caseNote.trim()) lines.push(`Case Notes: ${caseNote.trim()}`)
     if (lines.length === 0) { setUploadStatus('Fill in at least one field first'); return }
     setSavingCase(true); setUploadStatus('')
@@ -2212,7 +2212,7 @@ export default function Home() {
                               <input type="date" value={caseDate} onChange={e => setCaseDate(e.target.value)} style={fieldInputStyle} />
                             </div>
                           )}
-                          {currentCaseFields().map((f) => (
+                          {currentCaseFields().filter(f => f.toLowerCase() !== 'surgery date').map((f) => (
                             <div key={f} style={{ marginBottom: '0.4rem' }}>
                               <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>{f}</div>
                               <input value={caseForm[f] || ''} onChange={e => setCaseForm(p => ({ ...p, [f]: e.target.value }))} placeholder={f} style={fieldInputStyle} />
