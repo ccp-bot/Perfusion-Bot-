@@ -15,24 +15,20 @@ export async function GET(req: NextRequest) {
 
   if (!userId) return NextResponse.json({ error: 'No user ID' }, { status: 400 })
 
-  let query = supabase
-    .from('documents')
-    .select('id, content, category, created_at, user_id, group_id, source_file, folder, archived, uploaded_by')
-    .order('created_at', { ascending: false })
-
-  if (category) {
-    query = query.eq('category', category)
+  function build(selectStr: string) {
+    let q = supabase.from('documents').select(selectStr).order('created_at', { ascending: false })
+    if (category) q = q.eq('category', category)
+    if (groupId) q = q.or(`group_id.eq.${groupId},user_id.eq.${userId}`)
+    else q = q.eq('user_id', userId)
+    return q
   }
 
-  if (groupId) {
-    // Show group-shared entries + user's own entries
-    query = query.or(`group_id.eq.${groupId},user_id.eq.${userId}`)
-  } else {
-    // No group — show only user's own entries
-    query = query.eq('user_id', userId)
+  // Try the full select; fall back if the newer columns (folder/archived) aren't added yet.
+  let { data, error } = await build('id, content, category, created_at, user_id, group_id, source_file, folder, archived, uploaded_by')
+  if (error) {
+    const r = await build('id, content, category, created_at, user_id, group_id, source_file, uploaded_by')
+    data = r.data; error = r.error
   }
-
-  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
