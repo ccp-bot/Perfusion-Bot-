@@ -1572,6 +1572,8 @@ export default function Home() {
               COR is an <strong style={{ color: '#e2e8f0' }}>informational and educational tool</strong> for trained cardiovascular perfusionists. It does <strong style={{ color: '#e2e8f0' }}>not</strong> provide medical advice, diagnosis, or treatment, and is <strong style={{ color: '#e2e8f0' }}>not a substitute</strong> for your professional clinical judgment, your institution&apos;s protocols, or applicable standards of care.
               <br /><br />
               AI responses may be inaccurate or incomplete. Always verify critical information independently, and never rely on COR for emergency or patient-specific decisions. By continuing, you confirm you are a qualified professional using this tool at your own discretion.
+              <br /><br />
+              <strong style={{ color: '#e63946' }}>Do not enter patient-identifying information</strong> (such as full patient names, MRN, or dates of birth). Keep all entries de-identified.
             </div>
             <button
               onClick={() => { localStorage.setItem('corDisclaimerAccepted', '1'); setShowDisclaimer(false) }}
@@ -2255,8 +2257,8 @@ export default function Home() {
                 {panelEntries.map((entry) => {
                   const isCollapsible = activePanel === 'Logbook'
                   const isExpanded = expandedEntries.has(entry.id)
-                  const mrnMatch = entry.content?.match(/\*?\*?MRN:?\*?\*?\s*(.+?)(?:\n|$)/i)
-                  const mrn = mrnMatch ? mrnMatch[1].trim() : null
+                  const initialsMatch = entry.content?.match(/\*?\*?Patient Initials:?\*?\*?\s*(.+?)(?:\n|$)/i)
+                  const mrn = initialsMatch ? initialsMatch[1].trim() : null
                   const dateMatch = entry.content?.match(/\*?\*?Surgery Date:?\*?\*?\s*(.+?)(?:\n|$)/i)
                   const surgeryDate = dateMatch ? dateMatch[1].trim() : null
 
@@ -2282,7 +2284,7 @@ export default function Home() {
                             {entry.uploaded_by && <span style={{ marginLeft: '0.4rem' }}>by {entry.uploaded_by}</span>}
                           </div>
                           {isCollapsible && mrn && (
-                            <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500', marginTop: '2px' }}>MRN: {mrn}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500', marginTop: '2px' }}>Patient: {mrn}</div>
                           )}
                           {!isCollapsible && entry.source_file && entry.source_file !== 'Manual Entry' && (
                             <div style={{ fontSize: '0.65rem', color: '#3b82f6', marginTop: '2px' }}>{entry.source_file}</div>

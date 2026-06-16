@@ -7,6 +7,7 @@ const supabase = createClient(
 )
 
 const DEFAULT_LOGBOOK_FIELDS = [
+  'Patient Initials',
   'Surgeon',
   'Case Type',
   'CPB Time',
