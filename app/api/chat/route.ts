@@ -249,16 +249,16 @@ Return only the summary, no preamble.`
       const { data } = await supabase.rpc('match_documents', {
         query_embedding: embedding,
         match_threshold: 0.65,
-        match_count: 3,
+        match_count: 10,
       })
       documents = (data || []).filter((d: any) =>
-        d.group_id === groupId || d.institution_id === 'hospital_a'
-      )
+        String(d.group_id) === String(groupId) || d.institution_id === 'hospital_a'
+      ).slice(0, 5)
     } else {
       const { data } = await supabase.rpc('match_documents', {
         query_embedding: embedding,
         match_threshold: 0.65,
-        match_count: 3,
+        match_count: 5,
       })
       documents = data || []
     }
