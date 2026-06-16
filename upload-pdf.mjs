@@ -4,12 +4,16 @@ import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 
+// Secrets are read from .env.local — NEVER hardcode keys here (this file is in a public repo).
+const env = fs.readFileSync('.env.local', 'utf8')
+const getEnv = k => { const m = env.match(new RegExp('^' + k + '=(.*)$', 'm')); return m ? m[1].trim() : null }
+
 const supabase = createClient(
-  'https://sqnosvhrvctucmvrogev.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxbm9zdmhydmN0dWNtdnJvZ2V2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTYxNzMsImV4cCI6MjA4OTI3MjE3M30.87YUEecX5jIZnU494Wu15Ac_OjR6YqC9oGc2pGOhgts'
+  getEnv('NEXT_PUBLIC_SUPABASE_URL'),
+  getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
 )
 
-const openai = new OpenAI({ apiKey: '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' })
+const openai = new OpenAI({ apiKey: getEnv('OPENAI_API_KEY') })
 
 async function isAlreadyUploaded(filename) {
   const { data } = await supabase
