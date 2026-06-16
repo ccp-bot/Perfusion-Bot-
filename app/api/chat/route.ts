@@ -245,22 +245,28 @@ Return only the summary, no preamble.`
     const embedding = embeddingResponse.data[0].embedding
 
     let documents: any[] = []
-    if (groupId) {
-      const { data } = await supabase.rpc('match_documents', {
-        query_embedding: embedding,
-        match_threshold: 0.65,
-        match_count: 10,
-      })
-      documents = (data || []).filter((d: any) =>
-        String(d.group_id) === String(groupId) || d.institution_id === 'hospital_a'
-      ).slice(0, 5)
-    } else {
-      const { data } = await supabase.rpc('match_documents', {
-        query_embedding: embedding,
-        match_threshold: 0.65,
-        match_count: 5,
-      })
-      documents = data || []
+    const { data: rawMatches } = await supabase.rpc('match_documents', {
+      query_embedding: embedding,
+      match_threshold: 0.65,
+      match_count: 10,
+    })
+    const matches = rawMatches || []
+    if (matches.length > 0) {
+      // match_documents only returns id/content/similarity — so look up each match's
+      // group/institution separately to scope results to this user's institution.
+      const ids = matches.map((m: any) => m.id)
+      const { data: meta } = await supabase
+        .from('documents')
+        .select('id, group_id, institution_id, archived')
+        .in('id', ids)
+      const metaById: Record<string, any> = {}
+      for (const m of (meta || [])) metaById[m.id] = m
+      documents = matches.filter((m: any) => {
+        const info = metaById[m.id]
+        if (!info || info.archived) return false
+        if (!groupId) return true
+        return String(info.group_id) === String(groupId) || info.institution_id === 'hospital_a'
+      }).slice(0, 5)
     }
 
     if (documents.length > 0) {
