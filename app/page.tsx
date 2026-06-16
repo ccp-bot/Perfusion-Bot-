@@ -877,9 +877,10 @@ export default function Home() {
     } catch { alert('Could not delete.') }
   }
 
-  // Delete a whole folder (every protocol/policy file inside it).
+  // Delete a whole folder and everything nested inside it.
   async function deleteProtocolFolder(folder: string) {
-    if (!activePanel || !window.confirm(`Delete the folder "${folder}" and everything in it? This cannot be undone.`)) return
+    const label = folder.split('/').pop()
+    if (!activePanel || !window.confirm(`Delete the folder "${label}" and everything in it (including sub-folders)? This cannot be undone.`)) return
     try {
       const res = await fetch('/api/logbook', {
         method: 'DELETE',
@@ -888,9 +889,20 @@ export default function Home() {
       })
       const data = await res.json()
       if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
-      if (currentFolder === folder) setCurrentFolder('')
+      // If we were inside the deleted folder (or a child of it), step back to its parent.
+      if (currentFolder === folder || currentFolder.startsWith(folder + '/')) {
+        setCurrentFolder(folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : '')
+      }
       fetchPanel(activePanel)
     } catch { alert('Could not delete.') }
+  }
+
+  // Create a (sub)folder under the folder you're currently viewing, and open it.
+  function openNewFolder() {
+    const name = newFolderName.trim().replace(/\//g, '-') // slashes are path separators
+    if (!name) return
+    setCurrentFolder(currentFolder ? `${currentFolder}/${name}` : name)
+    setNewFolderName('')
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -2212,28 +2224,35 @@ export default function Home() {
 
             {(activePanel === 'Logbook' || activePanel === 'Protocol' || activePanel === 'Policy') && !panelLoading && (
               <>
-                {/* Folder navigation (Protocol/Policy) — breadcrumb + create folder. Visible to everyone for browsing. */}
+                {/* Folder navigation (Protocol/Policy) — breadcrumb path + create (sub)folder. Visible to everyone for browsing. */}
                 {(activePanel === 'Protocol' || activePanel === 'Policy') && (
                   <div style={{ marginBottom: '0.85rem' }}>
-                    {currentFolder ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                        <button onClick={() => setCurrentFolder('')} style={{ background: 'transparent', border: 'none', color: '#e63946', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#8592; All folders</button>
-                        <span style={{ color: '#4a5568', fontSize: '0.8rem' }}>/</span>
-                        <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>&#128193; {currentFolder}</span>
+                    {/* Breadcrumb path */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap', marginBottom: (userRole === 'owner' || userRole === 'admin') ? '0.55rem' : 0 }}>
+                      <button onClick={() => setCurrentFolder('')} style={{ background: 'transparent', border: 'none', color: currentFolder ? '#e63946' : '#e2e8f0', fontSize: '0.82rem', fontWeight: currentFolder ? 400 : 600, cursor: currentFolder ? 'pointer' : 'default', padding: 0 }}>&#128193; All folders</button>
+                      {currentFolder && currentFolder.split('/').map((seg, i, arr) => {
+                        const path = arr.slice(0, i + 1).join('/')
+                        const isLast = i === arr.length - 1
+                        return (
+                          <span key={path} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <span style={{ color: '#4a5568', fontSize: '0.8rem' }}>/</span>
+                            <button onClick={() => { if (!isLast) setCurrentFolder(path) }} style={{ background: 'transparent', border: 'none', color: isLast ? '#e2e8f0' : '#e63946', fontSize: '0.82rem', fontWeight: isLast ? 600 : 400, cursor: isLast ? 'default' : 'pointer', padding: 0 }}>{seg}</button>
+                          </span>
+                        )
+                      })}
+                    </div>
+                    {/* Create a folder here */}
+                    {(userRole === 'owner' || userRole === 'admin') && (
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <input
+                          value={newFolderName}
+                          onChange={e => setNewFolderName(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') openNewFolder() }}
+                          placeholder={currentFolder ? `\u{1F4C1} New folder inside ${currentFolder.split('/').pop()}…` : '\u{1F4C1} Name a new folder…'}
+                          style={fieldInputStyle}
+                        />
+                        <button onClick={openNewFolder} disabled={!newFolderName.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: newFolderName.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: newFolderName.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
                       </div>
-                    ) : (
-                      (userRole === 'owner' || userRole === 'admin') && (
-                        <div style={{ display: 'flex', gap: '0.4rem' }}>
-                          <input
-                            value={newFolderName}
-                            onChange={e => setNewFolderName(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter' && newFolderName.trim()) { setCurrentFolder(newFolderName.trim()); setNewFolderName('') } }}
-                            placeholder="&#128193; Name a new folder…"
-                            style={fieldInputStyle}
-                          />
-                          <button onClick={() => { if (newFolderName.trim()) { setCurrentFolder(newFolderName.trim()); setNewFolderName('') } }} disabled={!newFolderName.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: newFolderName.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: newFolderName.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
-                        </div>
-                      )
                     )}
                   </div>
                 )}
@@ -2367,56 +2386,57 @@ export default function Home() {
                     )
                   }
 
-                  // ── Inside a folder: show its files ──
-                  if (currentFolder) {
-                    const inFolder = active.filter((e: any) => (e.folder || '') === currentFolder)
-                    if (inFolder.length === 0) {
-                      return (
-                        <div style={{ textAlign: 'center', marginTop: '1.5rem', color: '#4a5568', fontSize: '0.78rem' }}>
-                          This folder is empty.{isAdmin ? ' Upload a file above to add to it.' : ''}
-                        </div>
-                      )
-                    }
-                    return renderItems(inFolder)
+                  const countItems = (its: any[]) => {
+                    const files = new Set(its.filter((e: any) => e.source_file && e.source_file !== 'Manual Entry').map((e: any) => e.source_file)).size
+                    const manual = its.filter((e: any) => !e.source_file || e.source_file === 'Manual Entry').length
+                    return files + manual
                   }
 
-                  // ── Root: folder cards + any unfiled files ──
-                  const folderNames = Array.from(new Set(active.filter((e: any) => e.folder).map((e: any) => e.folder as string))).sort()
-                  const unfiled = active.filter((e: any) => !e.folder)
-                  if (folderNames.length === 0 && unfiled.length === 0) {
+                  // Direct sub-folders of the folder we're currently viewing.
+                  const childSet = new Set<string>()
+                  for (const e of active) {
+                    const f = (e.folder || '') as string
+                    if (!f) continue
+                    if (currentFolder === '') childSet.add(f.split('/')[0])
+                    else if (f !== currentFolder && f.startsWith(currentFolder + '/')) childSet.add(f.slice(currentFolder.length + 1).split('/')[0])
+                  }
+                  const subfolders = Array.from(childSet).sort()
+                  // Files that live directly at this level (not in a sub-folder).
+                  const directFiles = active.filter((e: any) => (e.folder || '') === currentFolder)
+
+                  if (subfolders.length === 0 && directFiles.length === 0) {
                     return (
                       <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                         <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128193;</div>
-                        <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No {activePanel.toLowerCase()}s yet.</div>
-                        {isAdmin && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Name a folder above, then upload files into it.</div>}
+                        <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>{currentFolder ? 'This folder is empty.' : `No ${activePanel.toLowerCase()}s yet.`}</div>
+                        {isAdmin && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>{currentFolder ? 'Upload a file above, or create a folder inside this one.' : 'Name a folder above, then open it and upload files.'}</div>}
                       </div>
                     )
                   }
                   return (
                     <>
-                      {folderNames.map((folder: string) => {
-                        const items = active.filter((e: any) => e.folder === folder)
-                        const fileCount = new Set(items.filter((e: any) => e.source_file && e.source_file !== 'Manual Entry').map((e: any) => e.source_file)).size
-                        const manualCount = items.filter((e: any) => !e.source_file || e.source_file === 'Manual Entry').length
-                        const total = fileCount + manualCount
+                      {subfolders.map((seg: string) => {
+                        const path = currentFolder ? `${currentFolder}/${seg}` : seg
+                        const under = active.filter((e: any) => (e.folder || '') === path || (e.folder || '').startsWith(path + '/'))
+                        const total = countItems(under)
                         return (
-                          <div key={folder} className="history-item" onClick={() => setCurrentFolder(folder)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                          <div key={path} className="history-item" onClick={() => setCurrentFolder(path)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
                               <span style={{ fontSize: '1rem' }}>&#128193;</span>
-                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder}</span>
+                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seg}</span>
                               <span style={{ fontSize: '0.65rem', color: '#4a5568', flexShrink: 0 }}>{total} item{total !== 1 ? 's' : ''}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
-                              {isAdmin && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(folder) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer' }}>&#10005;</button>}
+                              {isAdmin && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(path) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer' }}>&#10005;</button>}
                               <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>&#8250;</span>
                             </div>
                           </div>
                         )
                       })}
-                      {unfiled.length > 0 && (
-                        <div style={{ marginTop: folderNames.length > 0 ? '0.85rem' : 0 }}>
-                          <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Unfiled</div>
-                          {renderItems(unfiled)}
+                      {directFiles.length > 0 && (
+                        <div style={{ marginTop: subfolders.length > 0 ? '0.85rem' : 0 }}>
+                          {subfolders.length > 0 && <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Files here</div>}
+                          {renderItems(directFiles)}
                         </div>
                       )}
                     </>

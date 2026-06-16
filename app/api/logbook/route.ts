@@ -83,15 +83,21 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true })
   }
 
-  // Delete an entire folder (every file + version inside it) — owner/admin only.
+  // Delete an entire folder AND everything nested under it (sub-folders + files + versions) — owner/admin only.
   if (folder && category) {
     if (userRole !== 'owner' && userRole !== 'admin') {
       return NextResponse.json({ error: 'Only owners and admins can delete shared content' }, { status: 403 })
     }
-    let del = supabase.from('documents').delete().eq('category', category).eq('folder', folder)
-    if (groupId) del = del.eq('group_id', groupId)
-    const { error } = await del
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // The folder itself (exact match)…
+    let delExact = supabase.from('documents').delete().eq('category', category).eq('folder', folder)
+    if (groupId) delExact = delExact.eq('group_id', groupId)
+    const r1 = await delExact
+    if (r1.error) return NextResponse.json({ error: r1.error.message }, { status: 500 })
+    // …and every sub-folder beneath it (paths like "folder/anything").
+    let delChildren = supabase.from('documents').delete().eq('category', category).like('folder', `${folder}/%`)
+    if (groupId) delChildren = delChildren.eq('group_id', groupId)
+    const r2 = await delChildren
+    if (r2.error) return NextResponse.json({ error: r2.error.message }, { status: 500 })
     return NextResponse.json({ success: true })
   }
 
