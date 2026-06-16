@@ -247,7 +247,7 @@ Return only the summary, no preamble.`
     let documents: any[] = []
     const { data: rawMatches } = await supabase.rpc('match_documents', {
       query_embedding: embedding,
-      match_threshold: 0.65,
+      match_threshold: 0.4, // text-embedding-3-small puts relevant matches around 0.45–0.65; 0.65 was too strict
       match_count: 10,
     })
     const matches = rawMatches || []

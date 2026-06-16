@@ -1011,6 +1011,14 @@ export default function Home() {
       fetchNotes()
     } catch { alert('Could not delete note.') }
   }
+  // Quick one-tap delete from the notes list (no confirm dialog) — optimistic.
+  async function deleteNoteQuick(id: number) {
+    if (!user) return
+    setNotesList(prev => prev.filter((n: any) => n.id !== id))
+    try {
+      await fetch('/api/notes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, userId: user.id }) })
+    } catch { fetchNotes() }
+  }
   async function insertNoteDocument(file: File) {
     if (!user) return
     setSavingNote(true)
@@ -2210,8 +2218,9 @@ export default function Home() {
                           <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>&#128193; {folderName}</div>
                           {folders[folderName].map(n => (
                             <div key={n.id} onClick={() => openNoteEditor(n)} className="history-item" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.6rem 0.7rem', marginBottom: '0.35rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '0.8rem', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
+                              <span style={{ fontSize: '0.8rem', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{n.title}</span>
                               <span style={{ fontSize: '0.6rem', color: '#4a5568', flexShrink: 0 }}>{new Date(n.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                              <button onClick={ev => { ev.stopPropagation(); deleteNoteQuick(n.id) }} title="Delete note" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.9rem', cursor: 'pointer', flexShrink: 0, lineHeight: 1, padding: '0 0.1rem' }}>&#10005;</button>
                             </div>
                           ))}
                         </div>
