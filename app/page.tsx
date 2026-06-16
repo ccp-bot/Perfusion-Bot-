@@ -130,7 +130,8 @@ export default function Home() {
   const [noteBody, setNoteBody] = useState('')
   const [noteFolder, setNoteFolder] = useState('')
   const [savingNote, setSavingNote] = useState(false)
-  const [protocolFolder, setProtocolFolder] = useState('')
+  const [currentFolder, setCurrentFolder] = useState('')
+  const [newFolderName, setNewFolderName] = useState('')
   const [editingFields, setEditingFields] = useState(false)
   const [newFieldInput, setNewFieldInput] = useState('')
   const [savingCase, setSavingCase] = useState(false)
@@ -723,6 +724,7 @@ export default function Home() {
     }
     setActivePanel(key)
     setOpenNoteId(null)
+    setCurrentFolder('')
     if (key === 'Users') { fetchAllUsers() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
@@ -839,7 +841,7 @@ export default function Home() {
       formData.append('userEmail', user.email)
       formData.append('groupId', userGroupId || '')
       formData.append('userRole', userRole || '')
-      formData.append('folder', protocolFolder.trim() || '')
+      formData.append('folder', currentFolder.trim() || '')
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData })
         const data = await res.json()
@@ -871,6 +873,22 @@ export default function Home() {
       })
       const data = await res.json()
       if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
+      fetchPanel(activePanel)
+    } catch { alert('Could not delete.') }
+  }
+
+  // Delete a whole folder (every protocol/policy file inside it).
+  async function deleteProtocolFolder(folder: string) {
+    if (!activePanel || !window.confirm(`Delete the folder "${folder}" and everything in it? This cannot be undone.`)) return
+    try {
+      const res = await fetch('/api/logbook', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder, category: activePanel, groupId: userGroupId || '', userId: user?.id, userRole })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
+      if (currentFolder === folder) setCurrentFolder('')
       fetchPanel(activePanel)
     } catch { alert('Could not delete.') }
   }
@@ -1011,6 +1029,7 @@ export default function Home() {
     formData.append('userEmail', user.email)
     formData.append('groupId', userGroupId || '')
     formData.append('userRole', userRole || '')
+    if (activePanel === 'Protocol' || activePanel === 'Policy') formData.append('folder', currentFolder.trim() || '')
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
       let data: any = {}
@@ -2193,29 +2212,42 @@ export default function Home() {
 
             {(activePanel === 'Logbook' || activePanel === 'Protocol' || activePanel === 'Policy') && !panelLoading && (
               <>
-                {/* Add controls — Logbook/Case Notes: anyone (their own cases). Protocol/Policy: owner/admin only. */}
-                {(activePanel === 'Logbook' || userRole === 'owner' || userRole === 'admin') && (
+                {/* Folder navigation (Protocol/Policy) — breadcrumb + create folder. Visible to everyone for browsing. */}
+                {(activePanel === 'Protocol' || activePanel === 'Policy') && (
+                  <div style={{ marginBottom: '0.85rem' }}>
+                    {currentFolder ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <button onClick={() => setCurrentFolder('')} style={{ background: 'transparent', border: 'none', color: '#e63946', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#8592; All folders</button>
+                        <span style={{ color: '#4a5568', fontSize: '0.8rem' }}>/</span>
+                        <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>&#128193; {currentFolder}</span>
+                      </div>
+                    ) : (
+                      (userRole === 'owner' || userRole === 'admin') && (
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <input
+                            value={newFolderName}
+                            onChange={e => setNewFolderName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && newFolderName.trim()) { setCurrentFolder(newFolderName.trim()); setNewFolderName('') } }}
+                            placeholder="&#128193; Name a new folder…"
+                            style={fieldInputStyle}
+                          />
+                          <button onClick={() => { if (newFolderName.trim()) { setCurrentFolder(newFolderName.trim()); setNewFolderName('') } }} disabled={!newFolderName.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: newFolderName.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: newFolderName.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* Add controls — Logbook: anyone. Protocol/Policy: owner/admin, and only once inside a folder. */}
+                {(activePanel === 'Logbook' || ((userRole === 'owner' || userRole === 'admin') && !!currentFolder)) && (
                   <div
                     onDragOver={e => { e.preventDefault(); setDragOver(true) }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleDrop}
                     style={{ marginBottom: '1rem', padding: '0.75rem', background: dragOver ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.02)', border: `1px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? '#e63946' : 'rgba(255,255,255,0.06)'}`, borderRadius: '10px', transition: 'all 0.15s ease' }}
                   >
-                    {(activePanel === 'Protocol' || activePanel === 'Policy') && (
-                      <div style={{ marginBottom: '0.5rem' }}>
-                        <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.3rem' }}>Save to folder {protocolFolder.trim() ? <span style={{ color: '#22c55e' }}>→ {protocolFolder.trim()}</span> : <span style={{ color: '#4a5568' }}>(none / Unfiled)</span>}</div>
-                        {(() => {
-                          const folders = Array.from(new Set(panelEntries.filter((e: any) => e.folder).map((e: any) => e.folder))).sort()
-                          return folders.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                              {folders.map((f: any) => (
-                                <button key={f} onClick={() => setProtocolFolder(protocolFolder === f ? '' : f)} style={{ padding: '0.2rem 0.55rem', borderRadius: '14px', border: `1px solid ${protocolFolder === f ? '#e63946' : 'rgba(255,255,255,0.12)'}`, background: protocolFolder === f ? 'rgba(230,57,70,0.15)' : 'transparent', color: protocolFolder === f ? '#e63946' : '#94a3b8', fontSize: '0.7rem', cursor: 'pointer' }}>&#128193; {f}</button>
-                              ))}
-                            </div>
-                          ) : null
-                        })()}
-                        <input value={protocolFolder} onChange={e => setProtocolFolder(e.target.value)} placeholder="+ New folder name (e.g. Cardioplegia)" style={fieldInputStyle} />
-                      </div>
+                    {(activePanel === 'Protocol' || activePanel === 'Policy') && currentFolder && (
+                      <div style={{ fontSize: '0.7rem', color: '#22c55e', marginBottom: '0.5rem' }}>&#128228; Adding to &ldquo;{currentFolder}&rdquo;</div>
                     )}
                     <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
                       <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" multiple onChange={handleUploadFile} style={{ display: 'none' }} />
@@ -2280,31 +2312,30 @@ export default function Home() {
                   </div>
                 )}
 
-                {panelEntries.length === 0 && (
+                {activePanel === 'Logbook' && panelEntries.length === 0 && (
                   <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                     <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128195;</div>
                     <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No {activePanel} entries yet.</div>
-                    {(activePanel === 'Logbook' || userRole === 'owner' || userRole === 'admin') && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>}
+                    <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>
                   </div>
                 )}
                 {(activePanel === 'Protocol' || activePanel === 'Policy') && (() => {
-                  const active = panelEntries.filter((e: any) => !e.archived)
+                  const isAdmin = userRole === 'owner' || userRole === 'admin'
+                  const active = panelEntries.filter((e: any) => !e.archived && e.source_file !== '__folder__')
                   const archived = panelEntries.filter((e: any) => e.archived)
                   const archivedByFile: {[file: string]: any[]} = {}
                   for (const e of archived) { if (e.source_file) { (archivedByFile[e.source_file] = archivedByFile[e.source_file] || []).push(e) } }
-                  if (active.length === 0) return null
-                  const byFolder: {[folder: string]: any[]} = {}
-                  for (const e of active) { const f = e.folder || 'Unfiled'; (byFolder[f] = byFolder[f] || []).push(e) }
-                  return Object.keys(byFolder).sort().map(folder => {
+
+                  // Renders the files (and manual text entries) that live in a given folder value.
+                  const renderItems = (items: any[]) => {
                     const fileGroups: {[file: string]: any[]} = {}
                     const manual: any[] = []
-                    for (const e of byFolder[folder]) {
+                    for (const e of items) {
                       if (e.source_file && e.source_file !== 'Manual Entry') { (fileGroups[e.source_file] = fileGroups[e.source_file] || []).push(e) }
                       else manual.push(e)
                     }
                     return (
-                      <div key={folder} style={{ marginBottom: '0.85rem' }}>
-                        <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>&#128193; {folder}</div>
+                      <>
                         {Object.keys(fileGroups).sort().map(file => {
                           const chunks = fileGroups[file]
                           const prev = archivedByFile[file] || []
@@ -2317,8 +2348,8 @@ export default function Home() {
                                   <div style={{ fontSize: '0.65rem', color: '#4a5568', marginTop: '2px' }}>{new Date(chunks[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} &middot; {chunks.length} section{chunks.length > 1 ? 's' : ''}{chunks[0].uploaded_by ? ' · ' + chunks[0].uploaded_by : ''}</div>
                                   {prevDates.length > 0 && <div style={{ fontSize: '0.62rem', color: '#6b7280', marginTop: '3px' }}>Earlier versions (archived, not used by COR): {prevDates.join(', ')}</div>}
                                 </div>
-                                {(userRole === 'owner' || userRole === 'admin') && (
-                                  <button onClick={() => deleteProtocolFile(file)} title="Delete protocol" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
+                                {isAdmin && (
+                                  <button onClick={() => deleteProtocolFile(file)} title="Delete protocol" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
                                 )}
                               </div>
                             </div>
@@ -2327,14 +2358,69 @@ export default function Home() {
                         {manual.map((e: any) => (
                           <div key={e.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                             <div style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', color: '#94a3b8', whiteSpace: 'pre-wrap' }}>{e.content?.length > 220 ? e.content.slice(0, 220) + '…' : e.content}</div>
-                            {(userRole === 'owner' || userRole === 'admin') && (
-                              <button onClick={() => deletePanelEntry(e.id)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
+                            {isAdmin && (
+                              <button onClick={() => deletePanelEntry(e.id)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
                             )}
                           </div>
                         ))}
+                      </>
+                    )
+                  }
+
+                  // ── Inside a folder: show its files ──
+                  if (currentFolder) {
+                    const inFolder = active.filter((e: any) => (e.folder || '') === currentFolder)
+                    if (inFolder.length === 0) {
+                      return (
+                        <div style={{ textAlign: 'center', marginTop: '1.5rem', color: '#4a5568', fontSize: '0.78rem' }}>
+                          This folder is empty.{isAdmin ? ' Upload a file above to add to it.' : ''}
+                        </div>
+                      )
+                    }
+                    return renderItems(inFolder)
+                  }
+
+                  // ── Root: folder cards + any unfiled files ──
+                  const folderNames = Array.from(new Set(active.filter((e: any) => e.folder).map((e: any) => e.folder as string))).sort()
+                  const unfiled = active.filter((e: any) => !e.folder)
+                  if (folderNames.length === 0 && unfiled.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                        <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128193;</div>
+                        <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No {activePanel.toLowerCase()}s yet.</div>
+                        {isAdmin && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Name a folder above, then upload files into it.</div>}
                       </div>
                     )
-                  })
+                  }
+                  return (
+                    <>
+                      {folderNames.map((folder: string) => {
+                        const items = active.filter((e: any) => e.folder === folder)
+                        const fileCount = new Set(items.filter((e: any) => e.source_file && e.source_file !== 'Manual Entry').map((e: any) => e.source_file)).size
+                        const manualCount = items.filter((e: any) => !e.source_file || e.source_file === 'Manual Entry').length
+                        const total = fileCount + manualCount
+                        return (
+                          <div key={folder} className="history-item" onClick={() => setCurrentFolder(folder)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                              <span style={{ fontSize: '1rem' }}>&#128193;</span>
+                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder}</span>
+                              <span style={{ fontSize: '0.65rem', color: '#4a5568', flexShrink: 0 }}>{total} item{total !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                              {isAdmin && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(folder) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer' }}>&#10005;</button>}
+                              <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>&#8250;</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {unfiled.length > 0 && (
+                        <div style={{ marginTop: folderNames.length > 0 ? '0.85rem' : 0 }}>
+                          <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Unfiled</div>
+                          {renderItems(unfiled)}
+                        </div>
+                      )}
+                    </>
+                  )
                 })()}
                 {activePanel === 'Logbook' && panelEntries.map((entry) => {
                   const isCollapsible = activePanel === 'Logbook'

@@ -69,7 +69,7 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/logbook
 export async function DELETE(req: NextRequest) {
-  const { id, userId, userRole, sourceFile, category, groupId } = await req.json()
+  const { id, userId, userRole, sourceFile, category, groupId, folder } = await req.json()
 
   // Bulk delete a whole protocol/policy file (all chunks + versions) — owner/admin only.
   if (sourceFile && category) {
@@ -77,6 +77,18 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Only owners and admins can delete shared content' }, { status: 403 })
     }
     let del = supabase.from('documents').delete().eq('category', category).eq('source_file', sourceFile)
+    if (groupId) del = del.eq('group_id', groupId)
+    const { error } = await del
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  // Delete an entire folder (every file + version inside it) — owner/admin only.
+  if (folder && category) {
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      return NextResponse.json({ error: 'Only owners and admins can delete shared content' }, { status: 403 })
+    }
+    let del = supabase.from('documents').delete().eq('category', category).eq('folder', folder)
     if (groupId) del = del.eq('group_id', groupId)
     const { error } = await del
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
