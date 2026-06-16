@@ -2202,7 +2202,20 @@ export default function Home() {
                     style={{ marginBottom: '1rem', padding: '0.75rem', background: dragOver ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.02)', border: `1px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? '#e63946' : 'rgba(255,255,255,0.06)'}`, borderRadius: '10px', transition: 'all 0.15s ease' }}
                   >
                     {(activePanel === 'Protocol' || activePanel === 'Policy') && (
-                      <input value={protocolFolder} onChange={e => setProtocolFolder(e.target.value)} placeholder="Folder (optional, e.g. Cardioplegia)" style={{ ...fieldInputStyle, marginBottom: '0.4rem' }} />
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.3rem' }}>Save to folder {protocolFolder.trim() ? <span style={{ color: '#22c55e' }}>→ {protocolFolder.trim()}</span> : <span style={{ color: '#4a5568' }}>(none / Unfiled)</span>}</div>
+                        {(() => {
+                          const folders = Array.from(new Set(panelEntries.filter((e: any) => e.folder).map((e: any) => e.folder))).sort()
+                          return folders.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.35rem' }}>
+                              {folders.map((f: any) => (
+                                <button key={f} onClick={() => setProtocolFolder(protocolFolder === f ? '' : f)} style={{ padding: '0.2rem 0.55rem', borderRadius: '14px', border: `1px solid ${protocolFolder === f ? '#e63946' : 'rgba(255,255,255,0.12)'}`, background: protocolFolder === f ? 'rgba(230,57,70,0.15)' : 'transparent', color: protocolFolder === f ? '#e63946' : '#94a3b8', fontSize: '0.7rem', cursor: 'pointer' }}>&#128193; {f}</button>
+                              ))}
+                            </div>
+                          ) : null
+                        })()}
+                        <input value={protocolFolder} onChange={e => setProtocolFolder(e.target.value)} placeholder="+ New folder name (e.g. Cardioplegia)" style={fieldInputStyle} />
+                      </div>
                     )}
                     <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
                       <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" multiple onChange={handleUploadFile} style={{ display: 'none' }} />
