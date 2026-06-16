@@ -130,6 +130,7 @@ export default function Home() {
   const [noteBody, setNoteBody] = useState('')
   const [noteFolder, setNoteFolder] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [protocolFolder, setProtocolFolder] = useState('')
   const [editingFields, setEditingFields] = useState(false)
   const [newFieldInput, setNewFieldInput] = useState('')
   const [savingCase, setSavingCase] = useState(false)
@@ -838,6 +839,7 @@ export default function Home() {
       formData.append('userEmail', user.email)
       formData.append('groupId', userGroupId || '')
       formData.append('userRole', userRole || '')
+      formData.append('folder', protocolFolder.trim() || '')
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData })
         const data = await res.json()
@@ -856,6 +858,21 @@ export default function Home() {
   function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || [])
     if (files.length > 0) uploadFiles(files)
+  }
+
+  // Delete an entire protocol/policy file (all chunks + archived versions).
+  async function deleteProtocolFile(sourceFile: string) {
+    if (!activePanel || !window.confirm(`Delete "${sourceFile}" and all its versions? This cannot be undone.`)) return
+    try {
+      const res = await fetch('/api/logbook', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceFile, category: activePanel, groupId: userGroupId || '', userId: user?.id, userRole })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
+      fetchPanel(activePanel)
+    } catch { alert('Could not delete.') }
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -2184,6 +2201,9 @@ export default function Home() {
                     onDrop={handleDrop}
                     style={{ marginBottom: '1rem', padding: '0.75rem', background: dragOver ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.02)', border: `1px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? '#e63946' : 'rgba(255,255,255,0.06)'}`, borderRadius: '10px', transition: 'all 0.15s ease' }}
                   >
+                    {(activePanel === 'Protocol' || activePanel === 'Policy') && (
+                      <input value={protocolFolder} onChange={e => setProtocolFolder(e.target.value)} placeholder="Folder (optional, e.g. Cardioplegia)" style={{ ...fieldInputStyle, marginBottom: '0.4rem' }} />
+                    )}
                     <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
                       <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" multiple onChange={handleUploadFile} style={{ display: 'none' }} />
                       <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>
@@ -2254,7 +2274,56 @@ export default function Home() {
                     {(activePanel === 'Logbook' || userRole === 'owner' || userRole === 'admin') && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload a file or add a manual entry above.</div>}
                   </div>
                 )}
-                {panelEntries.map((entry) => {
+                {(activePanel === 'Protocol' || activePanel === 'Policy') && (() => {
+                  const active = panelEntries.filter((e: any) => !e.archived)
+                  const archived = panelEntries.filter((e: any) => e.archived)
+                  const archivedByFile: {[file: string]: any[]} = {}
+                  for (const e of archived) { if (e.source_file) { (archivedByFile[e.source_file] = archivedByFile[e.source_file] || []).push(e) } }
+                  if (active.length === 0) return null
+                  const byFolder: {[folder: string]: any[]} = {}
+                  for (const e of active) { const f = e.folder || 'Unfiled'; (byFolder[f] = byFolder[f] || []).push(e) }
+                  return Object.keys(byFolder).sort().map(folder => {
+                    const fileGroups: {[file: string]: any[]} = {}
+                    const manual: any[] = []
+                    for (const e of byFolder[folder]) {
+                      if (e.source_file && e.source_file !== 'Manual Entry') { (fileGroups[e.source_file] = fileGroups[e.source_file] || []).push(e) }
+                      else manual.push(e)
+                    }
+                    return (
+                      <div key={folder} style={{ marginBottom: '0.85rem' }}>
+                        <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>&#128193; {folder}</div>
+                        {Object.keys(fileGroups).sort().map(file => {
+                          const chunks = fileGroups[file]
+                          const prev = archivedByFile[file] || []
+                          const prevDates = Array.from(new Set(prev.map((v: any) => new Date(v.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))))
+                          return (
+                            <div key={file} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&#128196; {file}</div>
+                                  <div style={{ fontSize: '0.65rem', color: '#4a5568', marginTop: '2px' }}>{new Date(chunks[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} &middot; {chunks.length} section{chunks.length > 1 ? 's' : ''}{chunks[0].uploaded_by ? ' · ' + chunks[0].uploaded_by : ''}</div>
+                                  {prevDates.length > 0 && <div style={{ fontSize: '0.62rem', color: '#6b7280', marginTop: '3px' }}>Earlier versions (archived, not used by COR): {prevDates.join(', ')}</div>}
+                                </div>
+                                {(userRole === 'owner' || userRole === 'admin') && (
+                                  <button onClick={() => deleteProtocolFile(file)} title="Delete protocol" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {manual.map((e: any) => (
+                          <div key={e.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                            <div style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', color: '#94a3b8', whiteSpace: 'pre-wrap' }}>{e.content?.length > 220 ? e.content.slice(0, 220) + '…' : e.content}</div>
+                            {(userRole === 'owner' || userRole === 'admin') && (
+                              <button onClick={() => deletePanelEntry(e.id)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })
+                })()}
+                {activePanel === 'Logbook' && panelEntries.map((entry) => {
                   const isCollapsible = activePanel === 'Logbook'
                   const isExpanded = expandedEntries.has(entry.id)
                   const initialsMatch = entry.content?.match(/\*?\*?Patient Initials:?\*?\*?\s*(.+?)(?:\n|$)/i)

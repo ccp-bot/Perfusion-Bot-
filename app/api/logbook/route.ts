@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('documents')
-    .select('id, content, category, created_at, user_id, group_id')
+    .select('id, content, category, created_at, user_id, group_id, source_file, folder, archived, uploaded_by')
     .order('created_at', { ascending: false })
 
   if (category) {
@@ -73,7 +73,19 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/logbook
 export async function DELETE(req: NextRequest) {
-  const { id, userId, userRole } = await req.json()
+  const { id, userId, userRole, sourceFile, category, groupId } = await req.json()
+
+  // Bulk delete a whole protocol/policy file (all chunks + versions) — owner/admin only.
+  if (sourceFile && category) {
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      return NextResponse.json({ error: 'Only owners and admins can delete shared content' }, { status: 403 })
+    }
+    let del = supabase.from('documents').delete().eq('category', category).eq('source_file', sourceFile)
+    if (groupId) del = del.eq('group_id', groupId)
+    const { error } = await del
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
 
   if (!id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 })
 

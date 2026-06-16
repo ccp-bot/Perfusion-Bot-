@@ -98,6 +98,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No text content could be extracted' }, { status: 400 })
   }
 
+  // Re-uploading a Protocol/Policy file with the same name = a new version.
+  // Archive the previous version: keep it viewable, but remove its embeddings so
+  // COR no longer searches it (only the current version drives answers).
+  if (file && (category === 'Protocol' || category === 'Policy')) {
+    let arch = supabase.from('documents').update({ archived: true, embedding: null })
+      .eq('category', category).eq('source_file', fileName).eq('archived', false)
+    if (groupId) arch = arch.eq('group_id', groupId)
+    await arch
+  }
+
   // Chunk the text
   const chunks = chunkText(textContent)
   let savedCount = 0
