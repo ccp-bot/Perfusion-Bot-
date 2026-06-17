@@ -2926,9 +2926,6 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-                      {currentFolder && (
-                        <div style={{ fontSize: '0.7rem', color: '#22c55e', marginBottom: '0.6rem' }}>&#128228; New cases you save go into &ldquo;{currentFolder.split('/').pop()}&rdquo;</div>
-                      )}
                       {children.map((childPath: string) => {
                         const name = childPath.split('/').pop()
                         const count = panelEntries.filter((e: any) => e.source_file !== '__folder__' && (e.folder === childPath || (e.folder || '').startsWith(childPath + '/'))).length
@@ -3209,7 +3206,7 @@ export default function Home() {
                 {listening ? <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: 'white' }} /> : <img src="/Microphone.icon.png" alt="mic" style={{ width: '32px', height: '32px', objectFit: 'contain', opacity: 0.5 }} />}
               </button>
             </div>
-            <button onClick={openTeachModal} title="Teach COR (save this as a rule)" style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.05rem', color: '#94a3b8' }}>&#128218;</button>
+            <button onClick={openTeachModal} title="Teach COR (save this as a rule)" style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.25rem', lineHeight: 1, color: '#94a3b8' }}>&#128218;</button>
             <button onClick={sendMessage} disabled={loading} style={{ width: '38px', height: '38px', borderRadius: '50%', background: loading ? 'rgba(255,255,255,0.06)' : '#e63946', color: 'white', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem' }}>➤</button>
           </div>
         </div>
