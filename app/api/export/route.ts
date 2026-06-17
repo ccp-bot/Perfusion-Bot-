@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
   // Parse structured content into rows
   const rows: Record<string, string>[] = []
   for (const entry of data) {
+    if (!(entry.content || '').trim()) continue // skip empty-folder placeholders
     const parsed: Record<string, string> = {}
     const lines = (entry.content || '').replace(/\r/g, '').split('\n')
     for (const line of lines) {

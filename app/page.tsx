@@ -946,7 +946,7 @@ export default function Home() {
     if (!wp) { alert('Pick a workplace first.'); return }
     const cols = ['Date', 'Surgeon', 'CC', 'Hospital Name', 'Hospital Street Address', 'Hospital State', 'Hospital City', 'Hospital Zip Code', 'Authority Name', 'Authority Title', 'Authority Phone Number', 'Authority Email Address']
     const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s }
-    const rows = panelEntries.map((e: any) => {
+    const rows = panelEntries.filter((e: any) => e.source_file !== '__folder__' && (e.content || '').trim()).map((e: any) => {
       const c = e.content || ''
       const date = fmtMDY(readField(c, 'Surgery Date') || e.created_at)
       const surgeon = readField(c, 'Surgeon')
@@ -1120,6 +1120,23 @@ export default function Home() {
       if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
       fetchPanel(activePanel)
     } catch { alert('Could not delete.') }
+  }
+
+  // Create a (persistent) folder/sub-folder in the current panel at the current path.
+  async function createCurrentFolder() {
+    const name = newFolderName.trim().replace(/\//g, '-')
+    if (!name || !user || !activePanel) return
+    const path = currentFolder ? `${currentFolder}/${name}` : name
+    try {
+      const res = await fetch('/api/logbook', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'createFolder', category: activePanel, folder: path, userId: user.id, groupId: userGroupId || '', userRole })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not create folder'); return }
+      setNewFolderName('')
+      fetchPanel(activePanel)
+    } catch { alert('Could not create folder') }
   }
 
   // Delete a whole folder and everything nested inside it.
@@ -2011,7 +2028,7 @@ export default function Home() {
             <div>
               <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel === 'Brain' ? 'COR Brain' : activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.filter((e: any) => e.source_file !== '__folder__').length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -2847,46 +2864,61 @@ export default function Home() {
                 {activePanel === 'Logbook' && (() => {
                   // Solo users manage their own logbook fully; in a company only owner/admin manage folders & deletes.
                   const canManage = !userGroupId || userRole === 'owner' || userRole === 'admin'
-                  const folders = !currentFolder ? Array.from(new Set(panelEntries.filter((e: any) => e.folder).map((e: any) => e.folder as string))).sort() : []
+                  const P = currentFolder
+                  const prefix = P ? P + '/' : ''
+                  // All known folder paths (from cases + empty-folder placeholders), then the direct children of P.
+                  const allFolders = Array.from(new Set(panelEntries.filter((e: any) => e.folder).map((e: any) => e.folder as string)))
+                  const childSet = new Set<string>()
+                  for (const f of allFolders) {
+                    if (!P) { const top = f.split('/')[0]; if (top) childSet.add(top) }
+                    else if (f !== P && f.startsWith(prefix)) { const seg = f.slice(prefix.length).split('/')[0]; if (seg) childSet.add(P + '/' + seg) }
+                  }
+                  const children = Array.from(childSet).sort()
+                  const crumbStyle = (active: boolean) => ({ background: 'transparent', border: 'none', color: active ? '#e2e8f0' : '#e63946', fontSize: '0.82rem', fontWeight: active ? 600 : 400, cursor: 'pointer', padding: 0 })
                   return (
                     <>
                       <div style={{ marginBottom: '0.7rem' }}>
-                        {currentFolder ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                            <button onClick={() => setCurrentFolder('')} style={{ background: 'transparent', border: 'none', color: '#e63946', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#8592; All folders</button>
-                            <span style={{ color: '#4a5568', fontSize: '0.8rem' }}>/</span>
-                            <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>&#128193; {currentFolder}</span>
-                          </div>
-                        ) : canManage ? (
+                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.3rem', marginBottom: canManage ? '0.5rem' : 0 }}>
+                          <button onClick={() => setCurrentFolder('')} style={crumbStyle(!P)}>&#128193; All</button>
+                          {P && P.split('/').map((seg, i, arr) => {
+                            const path = arr.slice(0, i + 1).join('/')
+                            return <span key={path} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><span style={{ color: '#4a5568' }}>/</span><button onClick={() => setCurrentFolder(path)} style={crumbStyle(i === arr.length - 1)}>{seg}</button></span>
+                          })}
+                        </div>
+                        {canManage && (
                           <div style={{ display: 'flex', gap: '0.4rem' }}>
-                            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newFolderName.trim()) { setCurrentFolder(newFolderName.trim()); setNewFolderName('') } }} placeholder="&#128193; New folder (e.g. ECMO, Bypass)…" style={fieldInputStyle} />
-                            <button onClick={() => { if (newFolderName.trim()) { setCurrentFolder(newFolderName.trim()); setNewFolderName('') } }} disabled={!newFolderName.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: newFolderName.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: newFolderName.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
+                            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createCurrentFolder() }} placeholder={P ? `New sub-folder in ${P.split('/').pop()}…` : '📁 New folder (e.g. ECMO, Bypass)…'} style={fieldInputStyle} />
+                            <button onClick={createCurrentFolder} disabled={!newFolderName.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: newFolderName.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: newFolderName.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
                           </div>
-                        ) : null}
+                        )}
                       </div>
-                      {!currentFolder && folders.map((f: string) => {
-                        const count = panelEntries.filter((e: any) => e.folder === f).length
+                      {currentFolder && (
+                        <div style={{ fontSize: '0.7rem', color: '#22c55e', marginBottom: '0.6rem' }}>&#128228; New cases you save go into &ldquo;{currentFolder.split('/').pop()}&rdquo;</div>
+                      )}
+                      {children.map((childPath: string) => {
+                        const name = childPath.split('/').pop()
+                        const count = panelEntries.filter((e: any) => e.source_file !== '__folder__' && (e.folder === childPath || (e.folder || '').startsWith(childPath + '/'))).length
                         return (
-                          <div key={f} className="history-item" onClick={() => setCurrentFolder(f)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                          <div key={childPath} className="history-item" onClick={() => setCurrentFolder(childPath)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
                               <span style={{ fontSize: '1rem' }}>&#128193;</span>
-                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f}</span>
+                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                               <span style={{ fontSize: '0.65rem', color: '#4a5568', flexShrink: 0 }}>{count} case{count !== 1 ? 's' : ''}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
-                              {canManage && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(f) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer' }}>&#10005;</button>}
+                              {canManage && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(childPath) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer' }}>&#10005;</button>}
                               <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>&#8250;</span>
                             </div>
                           </div>
                         )
                       })}
-                      {!currentFolder && folders.length > 0 && panelEntries.some((e: any) => !e.folder) && (
-                        <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0.7rem 0 0.4rem' }}>Unfiled</div>
+                      {children.length > 0 && panelEntries.some((e: any) => e.source_file !== '__folder__' && (e.folder || '') === P) && (
+                        <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0.7rem 0 0.4rem' }}>Cases here</div>
                       )}
                     </>
                   )
                 })()}
-                {activePanel === 'Logbook' && panelEntries.filter((e: any) => currentFolder ? (e.folder || '') === currentFolder : !e.folder).map((entry) => {
+                {activePanel === 'Logbook' && panelEntries.filter((e: any) => e.source_file !== '__folder__' && ((e.folder || '') === currentFolder)).map((entry) => {
                   const isCollapsible = activePanel === 'Logbook'
                   const isExpanded = expandedEntries.has(entry.id)
                   const initialsMatch = entry.content?.match(/\*?\*?Patient Initials:?\*?\*?\s*(.+?)(?:\n|$)/i)

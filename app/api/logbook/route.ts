@@ -35,6 +35,33 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ entries: data || [] })
 }
 
+// POST /api/logbook — create an (empty) folder so it persists before any case is added.
+// Stored as a placeholder document (source_file '__folder__', empty content, no embedding).
+export async function POST(req: NextRequest) {
+  const { action, category, folder, userId, groupId, userRole } = await req.json()
+  if (action !== 'createFolder' || !folder || !category) {
+    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  }
+  // Company folders are owner/admin-only; personal folders are the user's own.
+  if (groupId && userRole !== 'owner' && userRole !== 'admin') {
+    return NextResponse.json({ error: 'Only owners and admins can create company folders' }, { status: 403 })
+  }
+  if (!groupId && !userId) return NextResponse.json({ error: 'Not signed in' }, { status: 400 })
+  const { error } = await supabase.from('documents').insert({
+    content: '',
+    category,
+    folder,
+    source_file: '__folder__',
+    user_id: userId || null,
+    group_id: groupId || null,
+    institution_id: groupId || 'hospital_a',
+    archived: false,
+    created_at: new Date().toISOString(),
+  })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}
+
 // PATCH /api/logbook — append a timestamped note to an entry
 export async function PATCH(req: NextRequest) {
   const { id, note, userId } = await req.json()
