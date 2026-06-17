@@ -31,9 +31,22 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { userId, title, messages } = await req.json()
+  const { userId, title, messages, id } = await req.json()
 
   if (!userId || !messages) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+
+  // If an id is passed, this is the same chat session — update it in place (one chat = one entry).
+  if (id) {
+    const { data, error } = await supabase
+      .from('conversations')
+      .update({ title: title || 'Conversation', messages })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single()
+    if (!error && data) return NextResponse.json({ conversation: data })
+    // If the row vanished (e.g. expired/deleted), fall through and insert a fresh one.
+  }
 
   const { data, error } = await supabase
     .from('conversations')

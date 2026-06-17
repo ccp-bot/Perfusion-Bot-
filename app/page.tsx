@@ -148,6 +148,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const userRef = useRef<any>(null)
   const activePanelRef = useRef<string | null>(null)
+  const currentConvIdRef = useRef<number | null>(null)
 
   // Keep refs in sync
   useEffect(() => { userRef.current = user }, [user])
@@ -363,10 +364,12 @@ export default function Home() {
       const res = await fetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUser.id, title, messages: currentMessages })
+        body: JSON.stringify({ userId: currentUser.id, title, messages: currentMessages, id: currentConvIdRef.current })
       })
       const data = await res.json()
       if (data.error) console.error('Auto-save error:', data.error)
+      // Remember this chat's id so later messages update the same entry (one chat = one entry).
+      if (data.conversation?.id) currentConvIdRef.current = data.conversation.id
       if (activePanelRef.current === 'History') {
         await fetchHistory()
       }
@@ -725,6 +728,13 @@ export default function Home() {
 
   function loadConversation(conv: any) {
     setMessages(conv.messages || [])
+    currentConvIdRef.current = conv.id   // keep adding to this same entry
+    setActivePanel(null)
+  }
+
+  function startNewChat() {
+    setMessages([])
+    currentConvIdRef.current = null   // next message starts a fresh entry
     setActivePanel(null)
   }
 
@@ -2616,6 +2626,11 @@ export default function Home() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
         {/* MOBILE HAMBURGER */}
         <button className="mobile-hamburger" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ display: 'none', position: 'absolute', top: 'calc(0.6rem + env(safe-area-inset-top))', left: '0.9rem', zIndex: 50, width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: '1.45rem' }}>☰</button>
+
+        {/* NEW CHAT — start a fresh conversation (only when a chat is in progress) */}
+        {messages.length > 0 && (
+          <button onClick={startNewChat} title="Start a new chat" style={{ position: 'absolute', top: 'calc(0.6rem + env(safe-area-inset-top))', right: '0.9rem', zIndex: 50, padding: '0.4rem 0.8rem', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer', color: '#cbd5e1', fontSize: '0.78rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>+ New chat</button>
+        )}
 
         <div className="chat-area" style={{ flex: 1, overflowY: 'auto', padding: '2rem 2rem 1rem' }}>
           {messages.length === 0 && (
