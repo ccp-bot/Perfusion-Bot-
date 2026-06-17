@@ -160,6 +160,7 @@ export default function Home() {
   const [caseNotesFields, setCaseNotesFields] = useState<string[]>([])
   const [caseForm, setCaseForm] = useState<{[k: string]: string}>({})
   const [caseDate, setCaseDate] = useState('')
+  const [caseFolder, setCaseFolder] = useState('')
   const [caseNote, setCaseNote] = useState('')
   const [notesList, setNotesList] = useState<any[]>([])
   const [notesLoading, setNotesLoading] = useState(false)
@@ -192,6 +193,7 @@ export default function Home() {
   useEffect(() => { userRef.current = user }, [user])
   useEffect(() => { activePanelRef.current = activePanel }, [activePanel])
   useEffect(() => { if (user?.id) fetchWorkplaces() }, [user])
+  useEffect(() => { setCaseFolder(currentFolder) }, [currentFolder]) // default the case form to the folder you're viewing
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -1227,7 +1229,7 @@ export default function Home() {
     formData.append('userEmail', user.email)
     formData.append('groupId', userGroupId || '')
     formData.append('userRole', userRole || '')
-    if (activePanel === 'Logbook') formData.append('folder', currentFolder.trim() || '')
+    if (activePanel === 'Logbook') formData.append('folder', caseFolder.trim() || '')
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
       let data: any = {}
@@ -2731,6 +2733,18 @@ export default function Home() {
                         </div>
                       ) : (
                         <div>
+                          {activePanel === 'Logbook' && (() => {
+                            const folderOpts = Array.from(new Set(panelEntries.filter((e: any) => e.folder).map((e: any) => e.folder as string))).sort()
+                            return (
+                              <div style={{ marginBottom: '0.4rem' }}>
+                                <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>Folder</div>
+                                <select value={caseFolder} onChange={e => setCaseFolder(e.target.value)} style={{ ...fieldInputStyle, cursor: 'pointer' }}>
+                                  <option value="">Unfiled (no folder)</option>
+                                  {folderOpts.map(f => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                              </div>
+                            )
+                          })()}
                           {activePanel === 'Logbook' && (
                             <div style={{ marginBottom: '0.4rem' }}>
                               <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>Surgery Date</div>
