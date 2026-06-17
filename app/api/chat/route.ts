@@ -302,6 +302,22 @@ Return only the summary, no preamble.`
     }
   } catch { /* institutional search failure shouldn't block chat */ }
 
+  // ALWAYS load taught rules (platform-global + this group's team rules) — these are explicit
+  // corrections that must apply on every answer, not depend on fuzzy retrieval, and must override protocols.
+  let overrideRules: string[] = []
+  try {
+    const { data: g } = await supabase.from('documents').select('content').eq('institution_id', 'GLOBAL').eq('category', 'Protocol').neq('archived', true).limit(50)
+    let team: any[] = []
+    if (groupId) {
+      const r = await supabase.from('documents').select('content').eq('group_id', groupId).eq('folder', 'Team Rules').neq('archived', true).limit(50)
+      team = r.data || []
+    }
+    overrideRules = [...(g || []), ...team].map((r: any) => (r.content || '').trim()).filter(Boolean)
+  } catch { /* ignore */ }
+  const overrideSection = overrideRules.length > 0
+    ? `\n\nCORRECTIONS YOU MUST APPLY (taught by the COR team and this institution) — these are AUTHORITATIVE and OVERRIDE everything below, including saved protocol documents and your own general knowledge. If a protocol document or your default answer conflicts with any rule here, FOLLOW THE RULE and briefly note the correction. Apply them even when not explicitly asked:\n- ${overrideRules.join('\n- ')}`
+    : ''
+
   // Pull the user's own notes so COR can reference them (scoped to this user).
   let userNotesContext = ''
   if (userId) {
@@ -392,7 +408,7 @@ When a user tells you about a change to a protocol, procedure, equipment prefere
    [PROTOCOL_UPDATE: your concise summary of the change here] — if it's a protocol/procedure/equipment change
    [POLICY_UPDATE: your concise summary of the change here] — if it's an institutional policy change
 
-Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).${institutionalSection}${notesSection}`,
+Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).${overrideSection}${institutionalSection}${notesSection}`,
     messages: [
       ...conversationHistory,
       { role: 'user', content: message }
