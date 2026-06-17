@@ -3043,7 +3043,9 @@ export default function Home() {
                 <div style={{ fontSize: '0.88rem', color: '#4a5568', lineHeight: '1.6' }}>Your cardiovascular perfusion assistant.<br/>Ask me anything about CPB, ECMO, or perfusion guidelines.</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', paddingBottom: '1rem' }}>
-                <img className="idle-gif" src="/CORx3Dance.gif" alt="COR dancing" style={{ width: '500px', height: 'auto', objectFit: 'contain' }} />
+                <div className="idle-gif" style={{ width: '500px', maxWidth: '90vw', aspectRatio: '800 / 375', overflow: 'hidden' }}>
+                  <img src="/CORx3Dance.gif" alt="COR dancing" style={{ width: '100%', display: 'block' }} />
+                </div>
               </div>
             </div>
           )}
