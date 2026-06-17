@@ -190,7 +190,7 @@ export default function Home() {
   // Keep refs in sync
   useEffect(() => { userRef.current = user }, [user])
   useEffect(() => { activePanelRef.current = activePanel }, [activePanel])
-  useEffect(() => { try { const w = localStorage.getItem('cor_workplaces'); if (w) setWorkplaces(JSON.parse(w)) } catch {} }, [])
+  useEffect(() => { if (user?.id) fetchWorkplaces() }, [user])
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -897,25 +897,36 @@ export default function Home() {
     try { await fetch('/api/teach', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, email: user.email }) }) } catch {}
   }
 
-  // ── Workplace profiles (filled once, reused for ABCP export) — stored per device ──
+  // ── Workplace profiles (filled once, reused for ABCP export) — synced to the user's account ──
   const EMPTY_WP = { id: '', label: '', hospitalName: '', hospitalStreet: '', hospitalCity: '', hospitalState: '', hospitalZip: '', authorityName: '', authorityTitle: '', authorityPhone: '', authorityEmail: '' }
-  function persistWorkplaces(list: any[]) {
-    setWorkplaces(list)
-    try { localStorage.setItem('cor_workplaces', JSON.stringify(list)) } catch {}
+  async function fetchWorkplaces() {
+    if (!user?.id) return
+    try {
+      const res = await fetch(`/api/workplaces?userId=${user.id}`)
+      const data = await res.json()
+      setWorkplaces(data.workplaces || [])
+    } catch { /* ignore */ }
   }
-  function saveWorkplace() {
-    if (!wpForm?.label?.trim()) { alert('Give this workplace a name (e.g. UC Davis).'); return }
-    const id = wpForm.id || `${Date.now()}`
-    const entry = { ...wpForm, id }
-    const list = wpForm.id ? workplaces.map(w => w.id === id ? entry : w) : [...workplaces, entry]
-    persistWorkplaces(list)
-    setSelectedWp(id)
-    setWpForm(null)
+  async function saveWorkplace() {
+    if (!wpForm?.label?.trim() || !user?.id) { if (!wpForm?.label?.trim()) alert('Give this workplace a name (e.g. UC Davis).'); return }
+    const { id, ...data } = wpForm
+    try {
+      const res = await fetch('/api/workplaces', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, id: id || null, data })
+      })
+      const out = await res.json()
+      if (!res.ok || out.error) { alert(out.error || 'Could not save workplace'); return }
+      await fetchWorkplaces()
+      if (out.id) setSelectedWp(out.id)
+      setWpForm(null)
+    } catch { alert('Could not save workplace — try again') }
   }
-  function deleteWorkplace(id: string) {
-    if (!window.confirm('Delete this workplace?')) return
-    persistWorkplaces(workplaces.filter(w => w.id !== id))
+  async function deleteWorkplace(id: any) {
+    if (!user?.id || !window.confirm('Delete this workplace?')) return
+    setWorkplaces(prev => prev.filter(w => w.id !== id))
     if (selectedWp === id) setSelectedWp('')
+    try { await fetch('/api/workplaces', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, userId: user.id }) }) } catch {}
   }
   function exportPersonalExcel() {
     const fields = activePanel === 'Logbook' ? ['Surgery Date', ...logbookFields.filter(f => f.toLowerCase() !== 'mrn')] : activePanel === 'Case Notes' ? caseNotesFields : []
