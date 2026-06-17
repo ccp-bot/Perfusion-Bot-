@@ -1194,6 +1194,7 @@ export default function Home() {
     formData.append('userEmail', user.email)
     formData.append('groupId', userGroupId || '')
     formData.append('userRole', userRole || '')
+    if (activePanel === 'Logbook') formData.append('folder', currentFolder.trim() || '')
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
       let data: any = {}
@@ -2843,7 +2844,49 @@ export default function Home() {
                     </>
                   )
                 })()}
-                {activePanel === 'Logbook' && panelEntries.map((entry) => {
+                {activePanel === 'Logbook' && (() => {
+                  // Solo users manage their own logbook fully; in a company only owner/admin manage folders & deletes.
+                  const canManage = !userGroupId || userRole === 'owner' || userRole === 'admin'
+                  const folders = !currentFolder ? Array.from(new Set(panelEntries.filter((e: any) => e.folder).map((e: any) => e.folder as string))).sort() : []
+                  return (
+                    <>
+                      <div style={{ marginBottom: '0.7rem' }}>
+                        {currentFolder ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            <button onClick={() => setCurrentFolder('')} style={{ background: 'transparent', border: 'none', color: '#e63946', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#8592; All folders</button>
+                            <span style={{ color: '#4a5568', fontSize: '0.8rem' }}>/</span>
+                            <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>&#128193; {currentFolder}</span>
+                          </div>
+                        ) : canManage ? (
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newFolderName.trim()) { setCurrentFolder(newFolderName.trim()); setNewFolderName('') } }} placeholder="&#128193; New folder (e.g. ECMO, Bypass)…" style={fieldInputStyle} />
+                            <button onClick={() => { if (newFolderName.trim()) { setCurrentFolder(newFolderName.trim()); setNewFolderName('') } }} disabled={!newFolderName.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: newFolderName.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: newFolderName.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
+                          </div>
+                        ) : null}
+                      </div>
+                      {!currentFolder && folders.map((f: string) => {
+                        const count = panelEntries.filter((e: any) => e.folder === f).length
+                        return (
+                          <div key={f} className="history-item" onClick={() => setCurrentFolder(f)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                              <span style={{ fontSize: '1rem' }}>&#128193;</span>
+                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f}</span>
+                              <span style={{ fontSize: '0.65rem', color: '#4a5568', flexShrink: 0 }}>{count} case{count !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                              {canManage && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(f) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer' }}>&#10005;</button>}
+                              <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>&#8250;</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {!currentFolder && folders.length > 0 && panelEntries.some((e: any) => !e.folder) && (
+                        <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0.7rem 0 0.4rem' }}>Unfiled</div>
+                      )}
+                    </>
+                  )
+                })()}
+                {activePanel === 'Logbook' && panelEntries.filter((e: any) => currentFolder ? (e.folder || '') === currentFolder : !e.folder).map((entry) => {
                   const isCollapsible = activePanel === 'Logbook'
                   const isExpanded = expandedEntries.has(entry.id)
                   const initialsMatch = entry.content?.match(/\*?\*?Patient Initials:?\*?\*?\s*(.+?)(?:\n|$)/i)
@@ -2884,7 +2927,7 @@ export default function Home() {
                         </div>
                         <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
                           {isCollapsible && <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>{isExpanded ? '▲' : '▼'}</span>}
-                          {(userRole === 'owner' || userRole === 'admin' || entry.user_id === user?.id) && (
+                          {(!userGroupId || userRole === 'owner' || userRole === 'admin') && (
                             <button onClick={(e) => { e.stopPropagation(); deletePanelEntry(entry.id) }} title="Delete" style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
                           )}
                         </div>
