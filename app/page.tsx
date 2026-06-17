@@ -2705,12 +2705,14 @@ export default function Home() {
                     {(activePanel === 'Protocol' || activePanel === 'Policy') && currentFolder && (
                       <div style={{ fontSize: '0.7rem', color: '#22c55e', marginBottom: '0.5rem' }}>&#128228; Adding to &ldquo;{currentFolder}&rdquo;</div>
                     )}
-                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
-                      <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" multiple onChange={handleUploadFile} style={{ display: 'none' }} />
-                      <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>
-                        {uploading ? 'Uploading...' : dragOver ? 'Drop file here' : 'Upload or drag file (PDF, Word, Excel)'}
-                      </button>
-                    </div>
+                    {activePanel !== 'Logbook' && (
+                      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                        <input ref={uploadInputRef} type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" multiple onChange={handleUploadFile} style={{ display: 'none' }} />
+                        <button onClick={() => uploadInputRef.current?.click()} disabled={uploading} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.75rem', cursor: 'pointer' }}>
+                          {uploading ? 'Uploading...' : dragOver ? 'Drop file here' : 'Upload or drag file (PDF, Word, Excel)'}
+                        </button>
+                      </div>
+                    )}
                     {activePanel === 'Logbook' ? (
                       editingFields ? (
                         <div>
@@ -2931,7 +2933,7 @@ export default function Home() {
                         )
                       })}
                       {children.length > 0 && panelEntries.some((e: any) => e.source_file !== '__folder__' && (e.folder || '') === P) && (
-                        <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0.7rem 0 0.4rem' }}>Cases here</div>
+                        <div style={{ height: '0.5rem' }} />
                       )}
                     </>
                   )
