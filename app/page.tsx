@@ -161,6 +161,7 @@ export default function Home() {
   const [caseForm, setCaseForm] = useState<{[k: string]: string}>({})
   const [caseDate, setCaseDate] = useState('')
   const [caseFolder, setCaseFolder] = useState('')
+  const [caseFolderOpen, setCaseFolderOpen] = useState(false)
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
   const [draggingCaseId, setDraggingCaseId] = useState<number | null>(null)
   const [caseNote, setCaseNote] = useState('')
@@ -2745,12 +2746,28 @@ export default function Home() {
                           {activePanel === 'Logbook' && (() => {
                             const folderOpts = Array.from(new Set(panelEntries.filter((e: any) => e.folder).map((e: any) => e.folder as string))).sort()
                             return (
-                              <div style={{ marginBottom: '0.4rem' }}>
+                              <div style={{ marginBottom: '0.4rem', position: 'relative' }}>
                                 <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>Folder</div>
-                                <select value={caseFolder} onChange={e => setCaseFolder(e.target.value)} style={{ ...fieldInputStyle, cursor: 'pointer' }}>
-                                  <option value="">Unfiled (no folder)</option>
-                                  {folderOpts.map(f => <option key={f} value={f}>{f}</option>)}
-                                </select>
+                                <button type="button" onClick={() => setCaseFolderOpen(o => !o)} style={{ ...fieldInputStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', textAlign: 'left' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                                    {caseFolder && <span style={{ color: '#f59e0b' }}>&#128193;</span>}
+                                    <span style={{ color: caseFolder ? '#e2e8f0' : '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{caseFolder || 'Unfiled (no folder)'}</span>
+                                  </span>
+                                  <span style={{ color: '#64748b', fontSize: '0.7rem', transform: caseFolderOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>&#9662;</span>
+                                </button>
+                                {caseFolderOpen && (
+                                  <>
+                                    <div onClick={() => setCaseFolderOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                                    <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '0.3rem', maxHeight: '230px', overflowY: 'auto', boxShadow: '0 12px 34px rgba(0,0,0,0.55)' }}>
+                                      {[''].concat(folderOpts).map(opt => (
+                                        <button key={opt || '__none__'} type="button" onClick={() => { setCaseFolder(opt); setCaseFolderOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', width: '100%', textAlign: 'left', padding: '0.5rem 0.6rem', borderRadius: '7px', border: 'none', background: caseFolder === opt ? 'rgba(230,57,70,0.14)' : 'transparent', color: caseFolder === opt ? '#fca5a5' : '#cbd5e1', fontSize: '0.8rem', cursor: 'pointer' }} onMouseEnter={e => { if (caseFolder !== opt) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)' }} onMouseLeave={e => { if (caseFolder !== opt) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+                                          {opt ? <span style={{ color: '#f59e0b' }}>&#128193;</span> : <span style={{ width: '1rem', display: 'inline-block', textAlign: 'center', color: '#64748b' }}>&#8212;</span>}
+                                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt || 'Unfiled (no folder)'}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             )
                           })()}
@@ -2882,16 +2899,21 @@ export default function Home() {
                         const under = active.filter((e: any) => (e.folder || '') === path || (e.folder || '').startsWith(path + '/'))
                         const total = countItems(under)
                         return (
-                          <div key={path} className="history-item" onClick={() => setCurrentFolder(path)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                              <span style={{ fontSize: '1rem' }}>&#128193;</span>
-                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seg}</span>
-                              <span style={{ fontSize: '0.65rem', color: '#4a5568', flexShrink: 0 }}>{total} item{total !== 1 ? 's' : ''}</span>
+                          <div key={path} onClick={() => setCurrentFolder(path)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', background: 'linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.7rem 0.85rem', marginBottom: '0.55rem', cursor: 'pointer', transition: 'transform 0.12s ease, border-color 0.15s ease', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.18)' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'none'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.08)' }}>
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                              <defs><linearGradient id={`pfg${path.replace(/[^a-z0-9]/gi, '')}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#fbbf24" /><stop offset="100%" stopColor="#f59e0b" /></linearGradient></defs>
+                              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill={`url(#pfg${path.replace(/[^a-z0-9]/gi, '')})`} />
+                              <path d="M3 9h18v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" fill="#fff" opacity="0.12" />
+                            </svg>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seg}</div>
+                              <div style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '1px' }}>{total} item{total !== 1 ? 's' : ''}</div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
-                              {isAdmin && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(path) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer' }}>&#10005;</button>}
-                              <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>&#8250;</span>
-                            </div>
+                            {isAdmin && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(path) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>}
+                            <span style={{ color: '#475569', fontSize: '1.1rem', flexShrink: 0 }}>&#8250;</span>
                           </div>
                         )
                       })}
