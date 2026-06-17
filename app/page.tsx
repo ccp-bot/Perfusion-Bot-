@@ -2789,7 +2789,7 @@ export default function Home() {
                 {m.content}
                 {m.role === 'assistant' && (
                   <div style={{ marginTop: '0.55rem' }}>
-                    <button onClick={() => openReportModal(i)} title="Report a wrong answer to the COR team" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.66rem', cursor: 'pointer', padding: 0, opacity: 0.75 }}>&#9888; Something&rsquo;s wrong</button>
+                    <button onClick={() => openReportModal(i)} title="Report a wrong answer to the COR team" style={{ background: 'transparent', border: 'none', fontSize: '0.7rem', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ color: '#f59e0b', fontSize: '0.82rem' }}>&#9888;</span><span style={{ color: '#94a3b8' }}>Something&rsquo;s wrong</span></button>
                   </div>
                 )}
               </div>
