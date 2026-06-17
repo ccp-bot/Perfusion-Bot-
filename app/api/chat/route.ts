@@ -235,42 +235,66 @@ Return only the summary, no preamble.`
   }
 
   // ── NORMAL CHAT ────────────────────────────────────────────
-  // Search institutional knowledge base for supplementary context
+  // Search institutional knowledge base for relevant protocols/policies.
+  // Build the search query from the last couple of user turns + the current message, so
+  // follow-up questions ("did you use his protocol?") still retrieve the right documents.
+  const priorUserMsgs = (messages || []).filter((m: any) => m.role === 'user').slice(-2).map((m: any) => m.content)
+  const retrievalQuery = [...priorUserMsgs, message].filter(Boolean).join('\n').slice(0, 2000)
   let institutionalContext = ''
   try {
     const embeddingResponse = await openai.embeddings.create({
       model: 'text-embedding-3-small',
-      input: message,
+      input: retrievalQuery || message,
     })
     const embedding = embeddingResponse.data[0].embedding
 
-    let documents: any[] = []
+    const inGroup = (info: any) =>
+      info && !info.archived && (!groupId || String(info.group_id) === String(groupId) || info.institution_id === 'hospital_a')
+
+    // 1) Semantic search across all docs.
     const { data: rawMatches } = await supabase.rpc('match_documents', {
       query_embedding: embedding,
-      match_threshold: 0.4, // text-embedding-3-small puts relevant matches around 0.45–0.65; 0.65 was too strict
+      match_threshold: 0.4,
       match_count: 10,
     })
     const matches = rawMatches || []
+    let semanticDocs: any[] = []
     if (matches.length > 0) {
-      // match_documents only returns id/content/similarity — so look up each match's
-      // group/institution separately to scope results to this user's institution.
+      // match_documents only returns id/content/similarity — look up each match's group/institution to scope it.
       const ids = matches.map((m: any) => m.id)
-      const { data: meta } = await supabase
-        .from('documents')
-        .select('id, group_id, institution_id, archived')
-        .in('id', ids)
+      const { data: meta } = await supabase.from('documents').select('id, group_id, institution_id, archived').in('id', ids)
       const metaById: Record<string, any> = {}
       for (const m of (meta || [])) metaById[m.id] = m
-      documents = matches.filter((m: any) => {
-        const info = metaById[m.id]
-        if (!info || info.archived) return false
-        if (!groupId) return true
-        return String(info.group_id) === String(groupId) || info.institution_id === 'hospital_a'
-      }).slice(0, 5)
+      semanticDocs = matches.filter((m: any) => inGroup(metaById[m.id])).map((m: any) => ({ id: m.id, content: m.content })).slice(0, 5)
     }
 
-    if (documents.length > 0) {
-      institutionalContext = documents.map((d: any) => d.content).join('\n\n')
+    // 2) Keyword pass — a named protocol (e.g. a surgeon like "Catrip") can rank low semantically
+    //    yet be exactly what's wanted. Pull Protocol/Policy docs that literally mention the query's terms.
+    const STOP = new Set(['need','with','what','does','your','this','that','from','have','they','will','about','give','patient','using','used','should','when','were','here','there','their','would','much','many','some','then','than','into','over','under','also','like','want','tell','make','these','those','them','please'])
+    const terms = Array.from(new Set((retrievalQuery.toLowerCase().match(/[a-z]{4,}/g) || []).filter((w: string) => !STOP.has(w)))).slice(0, 8)
+    let keywordDocs: any[] = []
+    if (terms.length > 0) {
+      const orExpr = terms.map((t: string) => `content.ilike.%${t}%`).join(',')
+      const { data: kw } = await supabase.from('documents')
+        .select('id, content, group_id, institution_id, archived')
+        .in('category', ['Protocol', 'Policy'])
+        .or(orExpr)
+        .limit(20)
+      keywordDocs = (kw || []).filter(inGroup)
+        .map((d: any) => ({ id: d.id, content: d.content, score: terms.filter((t: string) => (d.content || '').toLowerCase().includes(t)).length }))
+        .sort((a: any, b: any) => b.score - a.score)
+        .slice(0, 3)
+    }
+
+    // 3) Merge — keyword-matched protocols first (most specific), then semantic; dedup by id.
+    const seen = new Set<any>()
+    const merged: any[] = []
+    for (const d of [...keywordDocs, ...semanticDocs]) {
+      if (!seen.has(d.id)) { seen.add(d.id); merged.push(d) }
+    }
+    const finalDocs = merged.slice(0, 6)
+    if (finalDocs.length > 0) {
+      institutionalContext = finalDocs.map((d: any) => d.content).join('\n\n')
     }
   } catch { /* institutional search failure shouldn't block chat */ }
 
@@ -300,7 +324,7 @@ Return only the summary, no preamble.`
   }))
 
   const institutionalSection = institutionalContext
-    ? `\n\nINSTITUTIONAL KNOWLEDGE (from your institution's saved protocols, policies, and case notes — use this to supplement your answers when relevant, and note when information comes from institutional records):
+    ? `\n\nINSTITUTIONAL KNOWLEDGE — these are THIS institution's own saved protocols, policies, and case notes. They are the AUTHORITATIVE source for how this institution does things. When any of it is relevant to the question, base your answer on it FIRST and state plainly that it comes from the institution's saved protocols. Only after that should you add general best-practice guidance to supplement.
 ${institutionalContext}`
     : ''
 
@@ -346,10 +370,11 @@ Your formatting style:
 - One idea per bullet point
 - No filler phrases like "Great question!" or "That's a really important topic"
 
-When answering:
-- Lead with the answer, not the context
-- Use your full perfusion knowledge first — you ARE the expert
-- If the institutional knowledge base has relevant protocols or policies for this institution, incorporate those and note them
+When answering — ALWAYS in this order:
+1. CHECK INSTITUTIONAL KNOWLEDGE AND THE USER'S NOTES FIRST. If anything above is relevant to the question, lead with it and label it clearly (e.g. "Per your institution's saved protocol:" or "From Dr. Catrip's saved preferences:"). This is the most important rule — the user wants their own institution's protocols to drive the answer.
+2. THEN supplement with general/outside knowledge only if it genuinely adds value, and clearly mark it as such (e.g. "To supplement (general practice):").
+3. If there is NO relevant institutional knowledge above for this question, say so plainly (e.g. "I don't have an institutional protocol saved for this — here's general guidance:") and then answer from your expertise.
+- Be honest about sources: NEVER say information came from institutional records if it did not, and NEVER claim you lack a protocol when relevant institutional knowledge IS provided above. If a protocol is shown above, you HAVE it — use it.
 - Be direct and clinical. Say what needs to be said, nothing more.
 - When guidelines differ between institutions or societies, note it briefly
 - Always prioritize patient safety
