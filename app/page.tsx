@@ -93,6 +93,18 @@ export default function Home() {
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [groupName, setGroupName] = useState('')
   const [notifications, setNotifications] = useState<any[]>([])
+  // Teach / report / reports-review
+  const [teachModal, setTeachModal] = useState(false)
+  const [teachText, setTeachText] = useState('')
+  const [teachSaving, setTeachSaving] = useState(false)
+  const [teachStatus, setTeachStatus] = useState('')
+  const [reportModal, setReportModal] = useState<{ question: string; answer: string } | null>(null)
+  const [reportWrong, setReportWrong] = useState('')
+  const [reportAnswer, setReportAnswer] = useState('')
+  const [reportSending, setReportSending] = useState(false)
+  const [reportStatus, setReportStatus] = useState('')
+  const [reports, setReports] = useState<any[]>([])
+  const [reportsLoading, setReportsLoading] = useState(false)
   const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({})
   const [uploading, setUploading] = useState(false)
   const [manualEntry, setManualEntry] = useState('')
@@ -283,6 +295,7 @@ export default function Home() {
       } catch { /* ignore */ }
     }
     fetchNotifications()
+    if (user.email === SUPER_OWNER_EMAIL) fetchReports()
     const interval = setInterval(fetchNotifications, 30000)
     return () => clearInterval(interval)
   }, [user])
@@ -738,6 +751,83 @@ export default function Home() {
     setActivePanel(null)
   }
 
+  // ── Teach COR (save a rule at personal / company / global scope) ──
+  function openTeachModal() {
+    setTeachText(input.trim())
+    setTeachStatus('')
+    setTeachModal(true)
+  }
+  async function saveTeaching(scope: 'personal' | 'company' | 'global') {
+    if (!teachText.trim() || !user) return
+    setTeachSaving(true); setTeachStatus('')
+    try {
+      const res = await fetch('/api/teach', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope, text: teachText.trim(), userId: user.id, userEmail: user.email, groupId: userGroupId, userRole })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { setTeachStatus(data.error || 'Could not save'); }
+      else {
+        setTeachStatus(`Saved to ${data.savedTo}. COR will use it.`)
+        setTeachText(''); setInput('')
+        setTimeout(() => setTeachModal(false), 1200)
+      }
+    } catch { setTeachStatus('Could not save — try again') }
+    setTeachSaving(false)
+  }
+
+  // ── Report a wrong COR answer (goes to the platform owner) ──
+  function openReportModal(answerIndex: number) {
+    const answer = messages[answerIndex]?.content || ''
+    let question = ''
+    for (let i = answerIndex - 1; i >= 0; i--) { if (messages[i].role === 'user') { question = messages[i].content; break } }
+    setReportModal({ question, answer })
+    setReportWrong(''); setReportAnswer(''); setReportStatus('')
+  }
+  async function submitReport() {
+    if (!reportModal || (!reportWrong.trim() && !reportAnswer.trim())) return
+    setReportSending(true); setReportStatus('')
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user?.id, userEmail: user?.email, groupId: userGroupId, question: reportModal.question, corAnswer: reportModal.answer, whatsWrong: reportWrong.trim(), suggestedAnswer: reportAnswer.trim() })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { setReportStatus(data.error || 'Could not send'); }
+      else { setReportStatus('Sent — thank you!'); setTimeout(() => setReportModal(null), 1100) }
+    } catch { setReportStatus('Could not send — try again') }
+    setReportSending(false)
+  }
+
+  // ── Owner-only: review reports ──
+  async function fetchReports() {
+    if (user?.email !== SUPER_OWNER_EMAIL) return
+    setReportsLoading(true)
+    try {
+      const res = await fetch(`/api/reports?status=open&email=${encodeURIComponent(user.email)}`)
+      const data = await res.json()
+      setReports(data.reports || [])
+    } catch { setReports([]) }
+    setReportsLoading(false)
+  }
+  async function teachGloballyFromReport(r: any) {
+    const text = (r.suggested_answer?.trim() || r.whats_wrong?.trim() || '')
+    if (!text || !user) return
+    try {
+      await fetch('/api/teach', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'global', text, userId: user.id, userEmail: user.email })
+      })
+      await fetch('/api/reports', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, status: 'resolved', email: user.email }) })
+      setReports(prev => prev.filter(x => x.id !== r.id))
+    } catch { alert('Could not apply this report.') }
+  }
+  async function dismissReport(r: any) {
+    if (!user) return
+    setReports(prev => prev.filter(x => x.id !== r.id))
+    try { await fetch('/api/reports', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, status: 'dismissed', email: user.email }) }) } catch {}
+  }
+
   function openPanel(key: string) {
     if (activePanel === key) {
       setActivePanel(null)
@@ -746,7 +836,7 @@ export default function Home() {
     setActivePanel(key)
     setOpenNoteId(null)
     setCurrentFolder('')
-    if (key === 'Users') { fetchAllUsers() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
+    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
@@ -1736,6 +1826,17 @@ export default function Home() {
                   {activePanel === 'Users' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
                 </button>
               )}
+              {user?.email === SUPER_OWNER_EMAIL && (
+                <button
+                  onClick={() => { openPanel('Reports'); setSidebarOpen(false) }}
+                  className={`sidebar-btn${activePanel === 'Reports' ? ' active' : ''}`}
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
+                >
+                  <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#9888;</span>
+                  <span style={{ fontSize: '0.82rem', color: activePanel === 'Reports' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Reports' ? '600' : '400' }}>Reports</span>
+                  {reports.length > 0 && <span style={{ marginLeft: 'auto', minWidth: '16px', height: '16px', borderRadius: '8px', background: '#e63946', color: 'white', fontSize: '0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{reports.length}</span>}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -1764,7 +1865,7 @@ export default function Home() {
             <div>
               <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -1875,6 +1976,30 @@ export default function Home() {
                         ))}
                       </select>
                     )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activePanel === 'Reports' && (
+              <div>
+                {reportsLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '2rem' }}>Loading reports…</div>}
+                {!reportsLoading && reports.length === 0 && (
+                  <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                    <div style={{ fontSize: '1.8rem', marginBottom: '0.5rem', opacity: 0.4 }}>&#9989;</div>
+                    <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No open reports. All clear.</div>
+                  </div>
+                )}
+                {!reportsLoading && reports.map((r: any) => (
+                  <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.8rem', marginBottom: '0.7rem' }}>
+                    <div style={{ fontSize: '0.62rem', color: '#4a5568', marginBottom: '0.4rem' }}>{r.user_email || 'unknown'} · {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                    {r.question && <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.3rem' }}><span style={{ color: '#6b7280' }}>Q:</span> {r.question.slice(0, 160)}</div>}
+                    <div style={{ fontSize: '0.78rem', color: '#e2e8f0', marginBottom: '0.3rem' }}><span style={{ color: '#e63946' }}>Wrong:</span> {r.whats_wrong || '—'}</div>
+                    {r.suggested_answer && <div style={{ fontSize: '0.78rem', color: '#22c55e', marginBottom: '0.4rem' }}><span style={{ color: '#6b7280' }}>Fix:</span> {r.suggested_answer}</div>}
+                    <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
+                      <button onClick={() => teachGloballyFromReport(r)} disabled={!r.suggested_answer && !r.whats_wrong} title="Save the fix as global knowledge for all companies" style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#6366f1', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127758; Teach COR globally</button>
+                      <button onClick={() => dismissReport(r)} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>Dismiss</button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2650,6 +2775,11 @@ export default function Home() {
               <div className="msg-max-width" style={{ maxWidth: '68%', padding: '0.7rem 1rem', borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: m.role === 'user' ? '#e63946' : 'rgba(255,255,255,0.05)', border: m.role === 'user' ? 'none' : '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0', fontSize: '0.88rem', lineHeight: '1.65', whiteSpace: 'pre-wrap' }}>
                 {m.image && <img src={m.image} alt="attachment" style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: '0.5rem', display: 'block' }} />}
                 {m.content}
+                {m.role === 'assistant' && (
+                  <div style={{ marginTop: '0.55rem' }}>
+                    <button onClick={() => openReportModal(i)} title="Report a wrong answer to the COR team" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.66rem', cursor: 'pointer', padding: 0, opacity: 0.75 }}>&#9888; Something&rsquo;s wrong</button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -2733,10 +2863,51 @@ export default function Home() {
                 {listening ? <div style={{ width: '9px', height: '9px', borderRadius: '2px', background: 'white' }} /> : <img src="/Microphone.icon.png" alt="mic" style={{ width: '32px', height: '32px', objectFit: 'contain', opacity: 0.5 }} />}
               </button>
             </div>
+            <button onClick={openTeachModal} title="Teach COR (save this as a rule)" style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.05rem', color: '#94a3b8' }}>&#128218;</button>
             <button onClick={sendMessage} disabled={loading} style={{ width: '38px', height: '38px', borderRadius: '50%', background: loading ? 'rgba(255,255,255,0.06)' : '#e63946', color: 'white', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem' }}>➤</button>
           </div>
         </div>
       </div>
-    </div>  
+
+      {teachModal && (
+        <div onClick={() => setTeachModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.25rem', width: '100%', maxWidth: '440px' }}>
+            <div style={{ fontSize: '1rem', color: '#e2e8f0', fontWeight: 600, marginBottom: '0.3rem' }}>Teach COR</div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.75rem' }}>Type a rule or correction and choose who it&rsquo;s for. COR will remember it.</div>
+            <textarea value={teachText} onChange={e => setTeachText(e.target.value)} placeholder="e.g. For an MVR we never use a three-stage venous cannula — always bicaval." rows={3} style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.4rem' }} />
+            {teachStatus && <div style={{ fontSize: '0.75rem', color: teachStatus.startsWith('Saved') ? '#22c55e' : '#e63946', marginBottom: '0.5rem' }}>{teachStatus}</div>}
+            <div style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '0.5rem 0 0.4rem' }}>Save this for:</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+              <button onClick={() => saveTeaching('personal')} disabled={teachSaving || !teachText.trim()} style={{ padding: '0.6rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', color: '#e2e8f0', fontSize: '0.82rem', cursor: 'pointer', textAlign: 'left' }}>&#128100; Just me <span style={{ color: '#4a5568', fontSize: '0.7rem' }}>· private note</span></button>
+              {(userRole === 'owner' || userRole === 'admin') && (
+                <button onClick={() => saveTeaching('company')} disabled={teachSaving || !teachText.trim()} style={{ padding: '0.6rem', borderRadius: '10px', border: '1px solid rgba(230,57,70,0.4)', background: 'rgba(230,57,70,0.1)', color: '#e2e8f0', fontSize: '0.82rem', cursor: 'pointer', textAlign: 'left' }}>&#127973; My company{userGroupName ? ` (${userGroupName})` : ''} <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>· whole team is notified</span></button>
+              )}
+              {user?.email === SUPER_OWNER_EMAIL && (
+                <button onClick={() => saveTeaching('global')} disabled={teachSaving || !teachText.trim()} style={{ padding: '0.6rem', borderRadius: '10px', border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.1)', color: '#e2e8f0', fontSize: '0.82rem', cursor: 'pointer', textAlign: 'left' }}>&#127758; COR Global <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>· every company on the platform</span></button>
+              )}
+            </div>
+            <button onClick={() => setTeachModal(false)} style={{ width: '100%', marginTop: '0.7rem', padding: '0.5rem', borderRadius: '10px', border: 'none', background: 'transparent', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {reportModal && (
+        <div onClick={() => setReportModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.25rem', width: '100%', maxWidth: '440px' }}>
+            <div style={{ fontSize: '1rem', color: '#e2e8f0', fontWeight: 600, marginBottom: '0.3rem' }}>&#9888; Report a wrong answer</div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.75rem' }}>This goes to the COR team to review and fix. Thank you!</div>
+            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.2rem' }}>What was wrong?</div>
+            <textarea value={reportWrong} onChange={e => setReportWrong(e.target.value)} placeholder="e.g. It listed a three-stage cannula for an MVR — that's never used." rows={2} style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.5rem' }} />
+            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.2rem' }}>The correct answer (optional)</div>
+            <textarea value={reportAnswer} onChange={e => setReportAnswer(e.target.value)} placeholder="What should COR have said?" rows={2} style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.5rem' }} />
+            {reportStatus && <div style={{ fontSize: '0.75rem', color: reportStatus.startsWith('Sent') ? '#22c55e' : '#e63946', marginBottom: '0.5rem' }}>{reportStatus}</div>}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={() => setReportModal(null)} style={{ flex: 1, padding: '0.55rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={submitReport} disabled={reportSending || (!reportWrong.trim() && !reportAnswer.trim())} style={{ flex: 1, padding: '0.55rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>{reportSending ? 'Sending…' : 'Send report'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

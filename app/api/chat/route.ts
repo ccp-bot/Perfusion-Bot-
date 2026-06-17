@@ -248,8 +248,12 @@ Return only the summary, no preamble.`
     })
     const embedding = embeddingResponse.data[0].embedding
 
+    // Visible if: platform-wide GLOBAL knowledge (everyone), this user's company, or legacy 'hospital_a'.
     const inGroup = (info: any) =>
-      info && !info.archived && (!groupId || String(info.group_id) === String(groupId) || info.institution_id === 'hospital_a')
+      info && !info.archived && (
+        info.institution_id === 'GLOBAL' ||
+        !groupId || String(info.group_id) === String(groupId) || info.institution_id === 'hospital_a'
+      )
 
     // 1) Semantic search across all docs.
     const { data: rawMatches } = await supabase.rpc('match_documents', {
@@ -324,7 +328,7 @@ Return only the summary, no preamble.`
   }))
 
   const institutionalSection = institutionalContext
-    ? `\n\nINSTITUTIONAL KNOWLEDGE — these are THIS institution's own saved protocols, policies, and case notes. They are the AUTHORITATIVE source for how this institution does things. When any of it is relevant to the question, base your answer on it FIRST and state plainly that it comes from the institution's saved protocols. Only after that should you add general best-practice guidance to supplement.
+    ? `\n\nINSTITUTIONAL KNOWLEDGE — these are THIS institution's own saved protocols, policies, and case notes. They are the AUTHORITATIVE source for how this institution does things. When any of it is relevant to the question, base your answer on it FIRST and state plainly that it comes from the institution's saved protocols. Only after that should you add general best-practice guidance to supplement. If two saved rules appear to conflict, prefer the one specific to this institution over a general one.
 ${institutionalContext}`
     : ''
 
