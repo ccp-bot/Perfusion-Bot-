@@ -107,6 +107,7 @@ export default function Home() {
   const [reportSuggLoading, setReportSuggLoading] = useState(false)
   const [reports, setReports] = useState<any[]>([])
   const [reportsLoading, setReportsLoading] = useState(false)
+  const [reportEdits, setReportEdits] = useState<{ [id: number]: string }>({})
   const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({})
   const [uploading, setUploading] = useState(false)
   const [manualEntry, setManualEntry] = useState('')
@@ -823,7 +824,7 @@ export default function Home() {
     setReportsLoading(false)
   }
   async function teachGloballyFromReport(r: any) {
-    const text = (r.suggested_answer?.trim() || r.whats_wrong?.trim() || '')
+    const text = (reportEdits[r.id] ?? (r.suggested_answer || r.whats_wrong) ?? '').trim()
     if (!text || !user) return
     try {
       await fetch('/api/teach', {
@@ -2006,10 +2007,16 @@ export default function Home() {
                   <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.8rem', marginBottom: '0.7rem' }}>
                     <div style={{ fontSize: '0.62rem', color: '#4a5568', marginBottom: '0.4rem' }}>{r.user_email || 'unknown'} · {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                     {r.question && <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.3rem' }}><span style={{ color: '#6b7280' }}>Q:</span> {r.question.slice(0, 160)}</div>}
-                    <div style={{ fontSize: '0.78rem', color: '#e2e8f0', marginBottom: '0.3rem' }}><span style={{ color: '#e63946' }}>Wrong:</span> {r.whats_wrong || '—'}</div>
-                    {r.suggested_answer && <div style={{ fontSize: '0.78rem', color: '#22c55e', marginBottom: '0.4rem' }}><span style={{ color: '#6b7280' }}>Fix:</span> {r.suggested_answer}</div>}
-                    <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
-                      <button onClick={() => teachGloballyFromReport(r)} disabled={!r.suggested_answer && !r.whats_wrong} title="Save the fix as global knowledge for all companies" style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#6366f1', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127758; Teach COR globally</button>
+                    <div style={{ fontSize: '0.78rem', color: '#e2e8f0', marginBottom: '0.45rem' }}><span style={{ color: '#e63946' }}>Wrong:</span> {r.whats_wrong || '—'}</div>
+                    <div style={{ fontSize: '0.66rem', color: '#6366f1', marginBottom: '0.25rem' }}>Lesson COR will learn (edit before saving):</div>
+                    <textarea
+                      value={reportEdits[r.id] ?? (r.suggested_answer || r.whats_wrong) ?? ''}
+                      onChange={e => setReportEdits(prev => ({ ...prev, [r.id]: e.target.value }))}
+                      rows={3}
+                      style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(99,102,241,0.35)', background: 'rgba(99,102,241,0.06)', color: '#e2e8f0', fontSize: '0.76rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.45, marginBottom: '0.5rem' }}
+                    />
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <button onClick={() => teachGloballyFromReport(r)} disabled={!(reportEdits[r.id] ?? (r.suggested_answer || r.whats_wrong) ?? '').trim()} title="Save this lesson as global knowledge for all companies" style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#6366f1', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127758; Teach COR globally</button>
                       <button onClick={() => dismissReport(r)} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>Dismiss</button>
                     </div>
                   </div>
