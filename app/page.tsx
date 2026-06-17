@@ -7,6 +7,15 @@ import CorThinking from './CorThinking'
 const CATEGORIES = ['Protocol', 'Case Notes', 'Equipment', 'Policy', 'Logbook', 'Checklists', 'Charting']
 const SUPER_OWNER_EMAIL = 'cliftonmarschel@gmail.com'
 
+// Format any date string as MM/DD/YYYY (e.g. 06/15/2026). Handles yyyy-mm-dd without timezone drift.
+function fmtMDY(s: string): string {
+  if (!s) return ''
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[2]}/${m[3]}/${m[1]}`
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? s : d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
+}
+
 function formatDate(d: Date): string { return d.toISOString().split('T')[0] }
 function getMonday(d: Date): Date {
   const day = d.getDay()
@@ -116,6 +125,11 @@ export default function Home() {
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
   const [editRuleText, setEditRuleText] = useState('')
   const [editRuleFolder, setEditRuleFolder] = useState('')
+  // Logbook export (ABCP vs personal) + reusable workplace profiles
+  const [exportModal, setExportModal] = useState<null | 'choice' | 'abcp'>(null)
+  const [workplaces, setWorkplaces] = useState<any[]>([])
+  const [selectedWp, setSelectedWp] = useState('')
+  const [wpForm, setWpForm] = useState<any>(null) // non-null = adding/editing a workplace
   const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({})
   const [uploading, setUploading] = useState(false)
   const [manualEntry, setManualEntry] = useState('')
@@ -176,6 +190,7 @@ export default function Home() {
   // Keep refs in sync
   useEffect(() => { userRef.current = user }, [user])
   useEffect(() => { activePanelRef.current = activePanel }, [activePanel])
+  useEffect(() => { try { const w = localStorage.getItem('cor_workplaces'); if (w) setWorkplaces(JSON.parse(w)) } catch {} }, [])
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -880,6 +895,60 @@ export default function Home() {
     if (!user || !window.confirm('Delete this taught rule from COR? This cannot be undone.')) return
     setGlobalRules(prev => prev.filter(r => r.id !== id))
     try { await fetch('/api/teach', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, email: user.email }) }) } catch {}
+  }
+
+  // ── Workplace profiles (filled once, reused for ABCP export) — stored per device ──
+  const EMPTY_WP = { id: '', label: '', hospitalName: '', hospitalStreet: '', hospitalCity: '', hospitalState: '', hospitalZip: '', authorityName: '', authorityTitle: '', authorityPhone: '', authorityEmail: '' }
+  function persistWorkplaces(list: any[]) {
+    setWorkplaces(list)
+    try { localStorage.setItem('cor_workplaces', JSON.stringify(list)) } catch {}
+  }
+  function saveWorkplace() {
+    if (!wpForm?.label?.trim()) { alert('Give this workplace a name (e.g. UC Davis).'); return }
+    const id = wpForm.id || `${Date.now()}`
+    const entry = { ...wpForm, id }
+    const list = wpForm.id ? workplaces.map(w => w.id === id ? entry : w) : [...workplaces, entry]
+    persistWorkplaces(list)
+    setSelectedWp(id)
+    setWpForm(null)
+  }
+  function deleteWorkplace(id: string) {
+    if (!window.confirm('Delete this workplace?')) return
+    persistWorkplaces(workplaces.filter(w => w.id !== id))
+    if (selectedWp === id) setSelectedWp('')
+  }
+  function exportPersonalExcel() {
+    const fields = activePanel === 'Logbook' ? ['Surgery Date', ...logbookFields.filter(f => f.toLowerCase() !== 'mrn')] : activePanel === 'Case Notes' ? caseNotesFields : []
+    const params = new URLSearchParams({ userId: user?.id || '', category: activePanel || '', groupId: userGroupId || '', fields: fields.join('||') })
+    window.open(`/api/export?${params.toString()}`, '_blank')
+    setExportModal(null)
+  }
+  // Read a "Field: value" out of a logbook entry's stored text.
+  function readField(content: string, name: string): string {
+    const c = (content || '').replace(/\r/g, '')
+    const re = new RegExp('^\\*?\\*?' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ':?\\*?\\*?\\s*[:]?\\s*(.+)$', 'im')
+    const m = c.match(re)
+    return m ? m[1].replace(/\*/g, '').trim() : ''
+  }
+  function exportABCP() {
+    const wp = workplaces.find(w => w.id === selectedWp)
+    if (!wp) { alert('Pick a workplace first.'); return }
+    const cols = ['Date', 'Surgeon', 'CC', 'Hospital Name', 'Hospital Street Address', 'Hospital State', 'Hospital City', 'Hospital Zip Code', 'Authority Name', 'Authority Title', 'Authority Phone Number', 'Authority Email Address']
+    const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s }
+    const rows = panelEntries.map((e: any) => {
+      const c = e.content || ''
+      const date = fmtMDY(readField(c, 'Surgery Date') || e.created_at)
+      const surgeon = readField(c, 'Surgeon')
+      const cc = readField(c, 'Cross-Clamp Time') || readField(c, 'Clamp Time') || readField(c, 'Cross Clamp Time')
+      return [date, surgeon, cc, wp.hospitalName, wp.hospitalStreet, wp.hospitalState, wp.hospitalCity, wp.hospitalZip, wp.authorityName, wp.authorityTitle, wp.authorityPhone, wp.authorityEmail]
+    })
+    const csv = [cols.join(','), ...rows.map(r => r.map(esc).join(','))].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'ABCP_Case_Import.csv'; a.click()
+    URL.revokeObjectURL(url)
+    setExportModal(null)
   }
 
   function openPanel(key: string) {
@@ -1940,11 +2009,7 @@ export default function Home() {
                 </button>
               )}
               {(activePanel === 'Logbook' || activePanel === 'Case Notes') && panelEntries.length > 0 && (
-                <button onClick={() => {
-                  const fields = activePanel === 'Logbook' ? ['Surgery Date', ...logbookFields] : activePanel === 'Case Notes' ? caseNotesFields : []
-                  const params = new URLSearchParams({ userId: user?.id, category: activePanel!, groupId: userGroupId || '', fields: fields.join('||') })
-                  window.open(`/api/export?${params.toString()}`, '_blank')
-                }} style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>
+                <button onClick={() => { if (activePanel === 'Logbook') setExportModal('choice'); else exportPersonalExcel() }} style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>
                   &#11015; Excel
                 </button>
               )}
@@ -2623,7 +2688,7 @@ export default function Home() {
                               <input type="date" value={caseDate} onChange={e => setCaseDate(e.target.value)} style={fieldInputStyle} />
                             </div>
                           )}
-                          {currentCaseFields().filter(f => f.toLowerCase() !== 'surgery date').map((f) => (
+                          {currentCaseFields().filter(f => f.toLowerCase() !== 'surgery date' && f.toLowerCase() !== 'mrn').map((f) => (
                             <div key={f} style={{ marginBottom: '0.4rem' }}>
                               <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>{f}</div>
                               <input value={caseForm[f] || ''} onChange={e => setCaseForm(p => ({ ...p, [f]: e.target.value }))} placeholder={f} style={fieldInputStyle} />
@@ -2793,8 +2858,11 @@ export default function Home() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isCollapsible && !isExpanded ? 0 : '0.4rem' }}>
                         <div>
                           <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
-                            {isCollapsible && surgeryDate ? surgeryDate : new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            {entry.uploaded_by && <span style={{ marginLeft: '0.4rem' }}>by {entry.uploaded_by}</span>}
+                            {fmtMDY(isCollapsible && surgeryDate ? surgeryDate : entry.created_at)}
+                            {(() => {
+                              const nm = entry.uploaded_by === user?.email ? (displayName || (user?.email || '').split('@')[0]) : (entry.uploaded_by ? entry.uploaded_by.split('@')[0] : '')
+                              return nm ? <span style={{ marginLeft: '0.4rem' }}>by {nm}</span> : null
+                            })()}
                           </div>
                           {isCollapsible && mrn && (
                             <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500', marginTop: '2px' }}>Patient: {mrn}</div>
@@ -3069,6 +3137,70 @@ export default function Home() {
               <button onClick={() => setReportModal(null)} style={{ flex: 1, padding: '0.55rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
               <button onClick={submitReport} disabled={reportSending || (!reportWrong.trim() && !reportAnswer.trim())} style={{ flex: 1, padding: '0.55rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>{reportSending ? 'Sending…' : 'Send report'}</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {exportModal && (
+        <div onClick={() => { setExportModal(null); setWpForm(null) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.25rem', width: '100%', maxWidth: '460px', maxHeight: '85vh', overflowY: 'auto' }}>
+            {exportModal === 'choice' && (
+              <>
+                <div style={{ fontSize: '1rem', color: '#e2e8f0', fontWeight: 600, marginBottom: '0.25rem' }}>Export your logbook</div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.9rem' }}>Who is this for?</div>
+                <button onClick={() => setExportModal('abcp')} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', borderRadius: '10px', border: '1px solid rgba(230,57,70,0.4)', background: 'rgba(230,57,70,0.1)', color: '#e2e8f0', fontSize: '0.85rem', cursor: 'pointer' }}>&#128203; For ABCP <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>· official case-import format</span></button>
+                <button onClick={exportPersonalExcel} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.7rem 0.8rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', color: '#e2e8f0', fontSize: '0.85rem', cursor: 'pointer' }}>&#128100; Just for me <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>· full Excel spreadsheet</span></button>
+                <button onClick={() => setExportModal(null)} style={{ width: '100%', marginTop: '0.7rem', padding: '0.5rem', borderRadius: '10px', border: 'none', background: 'transparent', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>Cancel</button>
+              </>
+            )}
+            {exportModal === 'abcp' && !wpForm && (
+              <>
+                <div style={{ fontSize: '1rem', color: '#e2e8f0', fontWeight: 600, marginBottom: '0.25rem' }}>&#128203; ABCP export</div>
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginBottom: '0.8rem' }}>Pick which workplace this is for. Hospital &amp; program-authority info is filled once here and added to every export automatically.</div>
+                {workplaces.length === 0 ? (
+                  <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '0.7rem' }}>No workplaces yet — add one to get started.</div>
+                ) : (
+                  workplaces.map(w => (
+                    <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.7rem', marginBottom: '0.4rem', borderRadius: '10px', border: `1px solid ${selectedWp === w.id ? '#e63946' : 'rgba(255,255,255,0.1)'}`, background: selectedWp === w.id ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.03)' }}>
+                      <button onClick={() => setSelectedWp(w.id)} style={{ flex: 1, textAlign: 'left', background: 'transparent', border: 'none', color: '#e2e8f0', fontSize: '0.82rem', cursor: 'pointer' }}>{selectedWp === w.id ? '◉' : '○'} {w.label} <span style={{ color: '#4a5568', fontSize: '0.68rem' }}>{w.hospitalCity}{w.hospitalState ? ', ' + w.hospitalState : ''}</span></button>
+                      <button onClick={() => setWpForm(w)} style={{ background: 'transparent', border: 'none', color: '#6366f1', fontSize: '0.72rem', cursor: 'pointer' }}>Edit</button>
+                      <button onClick={() => deleteWorkplace(w.id)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer' }}>&#10005;</button>
+                    </div>
+                  ))
+                )}
+                <button onClick={() => setWpForm({ ...EMPTY_WP })} style={{ width: '100%', padding: '0.5rem', marginTop: '0.3rem', borderRadius: '10px', border: '1px dashed rgba(255,255,255,0.15)', background: 'transparent', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>&#43; Add a workplace</button>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.8rem' }}>
+                  <button onClick={() => setExportModal('choice')} style={{ flex: 1, padding: '0.55rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>Back</button>
+                  <button onClick={exportABCP} disabled={!selectedWp} style={{ flex: 1, padding: '0.55rem', borderRadius: '10px', border: 'none', background: selectedWp ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.8rem', fontWeight: 600, cursor: selectedWp ? 'pointer' : 'not-allowed' }}>Download ABCP file</button>
+                </div>
+              </>
+            )}
+            {exportModal === 'abcp' && wpForm && (
+              <>
+                <div style={{ fontSize: '1rem', color: '#e2e8f0', fontWeight: 600, marginBottom: '0.6rem' }}>{wpForm.id ? 'Edit workplace' : 'Add a workplace'}</div>
+                <div style={{ fontSize: '0.66rem', color: '#94a3b8', marginBottom: '0.2rem' }}>Workplace name</div>
+                <input value={wpForm.label} onChange={e => setWpForm((p: any) => ({ ...p, label: e.target.value }))} placeholder="e.g. UC Davis Medical Center" style={{ ...fieldInputStyle, marginBottom: '0.5rem' }} />
+                <div style={{ fontSize: '0.62rem', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0.3rem 0' }}>Hospital</div>
+                <input value={wpForm.hospitalName} onChange={e => setWpForm((p: any) => ({ ...p, hospitalName: e.target.value }))} placeholder="Hospital name" style={{ ...fieldInputStyle, marginBottom: '0.35rem' }} />
+                <input value={wpForm.hospitalStreet} onChange={e => setWpForm((p: any) => ({ ...p, hospitalStreet: e.target.value }))} placeholder="Street address" style={{ ...fieldInputStyle, marginBottom: '0.35rem' }} />
+                <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                  <input value={wpForm.hospitalCity} onChange={e => setWpForm((p: any) => ({ ...p, hospitalCity: e.target.value }))} placeholder="City" style={fieldInputStyle} />
+                  <input value={wpForm.hospitalState} onChange={e => setWpForm((p: any) => ({ ...p, hospitalState: e.target.value }))} placeholder="State" style={{ ...fieldInputStyle, maxWidth: '80px' }} />
+                  <input value={wpForm.hospitalZip} onChange={e => setWpForm((p: any) => ({ ...p, hospitalZip: e.target.value }))} placeholder="Zip" style={{ ...fieldInputStyle, maxWidth: '90px' }} />
+                </div>
+                <div style={{ fontSize: '0.62rem', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0.5rem 0 0.3rem' }}>Program authority (contact)</div>
+                <input value={wpForm.authorityName} onChange={e => setWpForm((p: any) => ({ ...p, authorityName: e.target.value }))} placeholder="Authority name" style={{ ...fieldInputStyle, marginBottom: '0.35rem' }} />
+                <input value={wpForm.authorityTitle} onChange={e => setWpForm((p: any) => ({ ...p, authorityTitle: e.target.value }))} placeholder="Title" style={{ ...fieldInputStyle, marginBottom: '0.35rem' }} />
+                <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.6rem' }}>
+                  <input value={wpForm.authorityPhone} onChange={e => setWpForm((p: any) => ({ ...p, authorityPhone: e.target.value }))} placeholder="Phone" style={fieldInputStyle} />
+                  <input value={wpForm.authorityEmail} onChange={e => setWpForm((p: any) => ({ ...p, authorityEmail: e.target.value }))} placeholder="Email" style={fieldInputStyle} />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => setWpForm(null)} style={{ flex: 1, padding: '0.55rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={saveWorkplace} style={{ flex: 1, padding: '0.55rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Save workplace</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
