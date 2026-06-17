@@ -20,12 +20,24 @@ async function embed(text: string): Promise<number[] | null> {
 // POST /api/teach — save a taught rule at one of three scopes
 //   scope: 'personal' | 'company' | 'global'
 export async function POST(req: NextRequest) {
-  const { scope, text, title, userId, userEmail, groupId, userRole } = await req.json()
-  const content = (text || '').toString().trim()
-  if (!content) return NextResponse.json({ error: 'Nothing to save' }, { status: 400 })
-
+  const { scope, text, title, userId, userEmail, groupId, userRole, folder, action } = await req.json()
   const isAdmin = userRole === 'owner' || userRole === 'admin'
   const isSuperOwner = userEmail?.toLowerCase() === SUPER_OWNER_EMAIL
+
+  // Create a persistent (empty) folder in COR Global — super-owner only.
+  if (action === 'createFolder') {
+    if (!isSuperOwner) return NextResponse.json({ error: 'Only the platform owner can manage global folders' }, { status: 403 })
+    if (!folder) return NextResponse.json({ error: 'Missing folder' }, { status: 400 })
+    const { error } = await supabase.from('documents').insert({
+      content: '', category: 'Protocol', group_id: null, institution_id: 'GLOBAL',
+      user_id: userId || null, folder, source_file: '__folder__', archived: false, created_at: new Date().toISOString(),
+    })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  const content = (text || '').toString().trim()
+  if (!content) return NextResponse.json({ error: 'Nothing to save' }, { status: 400 })
 
   // ── Personal: a private note for this user ──
   if (scope === 'personal') {
@@ -70,7 +82,7 @@ export async function POST(req: NextRequest) {
     const embedding = await embed(content)
     const { error } = await supabase.from('documents').insert({
       content, embedding, category: 'Protocol', group_id: null, institution_id: 'GLOBAL',
-      user_id: userId || null, folder: 'COR Global', source_file: (title || 'Global rule').toString().slice(0, 200),
+      user_id: userId || null, folder: folder ? String(folder) : null, source_file: (title || 'Global rule').toString().slice(0, 200),
       archived: false, uploaded_by: userEmail || null, created_at: new Date().toISOString(),
     })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -111,10 +123,17 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
-// DELETE /api/teach { id, email } — owner removes a global rule
+// DELETE /api/teach { id | folder, email } — owner removes a global rule, or a whole folder + its sub-folders
 export async function DELETE(req: NextRequest) {
-  const { id, email } = await req.json()
+  const { id, folder, email } = await req.json()
   if (email?.toLowerCase() !== SUPER_OWNER_EMAIL) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  if (folder) {
+    const r1 = await supabase.from('documents').delete().eq('institution_id', 'GLOBAL').eq('folder', folder)
+    if (r1.error) return NextResponse.json({ error: r1.error.message }, { status: 500 })
+    const r2 = await supabase.from('documents').delete().eq('institution_id', 'GLOBAL').like('folder', `${folder}/%`)
+    if (r2.error) return NextResponse.json({ error: r2.error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
   const { error } = await supabase.from('documents').delete().eq('id', id).eq('institution_id', 'GLOBAL')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

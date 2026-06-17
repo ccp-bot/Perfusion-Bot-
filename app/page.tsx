@@ -126,6 +126,7 @@ export default function Home() {
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
   const [editRuleText, setEditRuleText] = useState('')
   const [editRuleFolder, setEditRuleFolder] = useState('')
+  const [addingRule, setAddingRule] = useState(false)
   // Logbook export (ABCP vs personal) + reusable workplace profiles
   const [exportModal, setExportModal] = useState<null | 'choice' | 'abcp'>(null)
   const [workplaces, setWorkplaces] = useState<any[]>([])
@@ -903,6 +904,42 @@ export default function Home() {
       setEditingRuleId(null)
     } catch { alert('Could not save the change.') }
   }
+  // Create a persistent (sub-)folder in COR Global.
+  async function createGlobalFolder() {
+    const name = brainNewFolder.trim().replace(/\//g, '-')
+    if (!name || !user) return
+    const path = brainFolder ? `${brainFolder}/${name}` : name
+    try {
+      const res = await fetch('/api/teach', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'createFolder', folder: path, userId: user.id, userEmail: user.email }) })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not create folder'); return }
+      setBrainNewFolder('')
+      fetchGlobalRules()
+    } catch { alert('Could not create folder') }
+  }
+  // Write a brand-new global rule (into the current folder).
+  function startAddRule() { setAddingRule(true); setEditingRuleId(null); setEditRuleText(''); setEditRuleFolder(brainFolder) }
+  async function saveNewRule() {
+    if (!editRuleText.trim() || !user) return
+    try {
+      const res = await fetch('/api/teach', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: 'global', text: editRuleText.trim(), folder: editRuleFolder.trim() || null, userId: user.id, userEmail: user.email }) })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not save rule'); return }
+      setAddingRule(false); setEditRuleText('')
+      fetchGlobalRules()
+    } catch { alert('Could not save rule') }
+  }
+  function deleteGlobalFolder(path: string) {
+    if (!user) return
+    const label = path.split('/').pop()
+    askConfirm(`Delete the folder "${label}" and every rule in it? This cannot be undone.`, async () => {
+      if (brainFolder === path || brainFolder.startsWith(path + '/')) setBrainFolder(path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '')
+      try {
+        await fetch('/api/teach', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder: path, email: user.email }) })
+        fetchGlobalRules()
+      } catch { alert('Could not delete folder.') }
+    }, 'Delete')
+  }
   function deleteGlobalRule(id: number) {
     if (!user) return
     askConfirm('Delete this taught rule from COR? This cannot be undone.', async () => {
@@ -986,7 +1023,7 @@ export default function Home() {
     setActivePanel(key)
     setOpenNoteId(null)
     setCurrentFolder('')
-    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); fetchGlobalRules() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
+    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); setAddingRule(false); fetchGlobalRules() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
@@ -2200,90 +2237,95 @@ export default function Home() {
               </div>
             )}
 
-            {activePanel === 'Brain' && (
-              <div>
-                {/* Folder navigation — breadcrumb + create folder */}
-                <div style={{ marginBottom: '0.85rem' }}>
-                  {brainFolder ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                      <button onClick={() => setBrainFolder('')} style={{ background: 'transparent', border: 'none', color: '#e63946', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#8592; All folders</button>
-                      <span style={{ color: '#4a5568', fontSize: '0.8rem' }}>/</span>
-                      <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>&#128193; {brainFolder}</span>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <input value={brainNewFolder} onChange={e => setBrainNewFolder(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && brainNewFolder.trim()) { setBrainFolder(brainNewFolder.trim()); setBrainNewFolder('') } }} placeholder="&#128193; New folder…" style={fieldInputStyle} />
-                      <button onClick={() => { if (brainNewFolder.trim()) { setBrainFolder(brainNewFolder.trim()); setBrainNewFolder('') } }} disabled={!brainNewFolder.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: brainNewFolder.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: brainNewFolder.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
-                    </div>
-                  )}
+            {activePanel === 'Brain' && (() => {
+              const P = brainFolder
+              const prefix = P ? P + '/' : ''
+              const active = globalRules.filter((r: any) => r.source_file !== '__folder__')
+              const allFolders = Array.from(new Set(globalRules.filter((r: any) => r.folder).map((r: any) => r.folder as string)))
+              const childSet = new Set<string>()
+              for (const f of allFolders) {
+                if (!P) { const top = f.split('/')[0]; if (top) childSet.add(top) }
+                else if (f !== P && f.startsWith(prefix)) { const seg = f.slice(prefix.length).split('/')[0]; if (seg) childSet.add(P + '/' + seg) }
+              }
+              const children = Array.from(childSet).sort()
+              const crumb = (a: boolean) => ({ background: 'transparent', border: 'none', color: a ? '#e2e8f0' : '#e63946', fontSize: '0.82rem', fontWeight: a ? 600 : 400, cursor: 'pointer', padding: 0 })
+              const rulesHere = active.filter((r: any) => (r.folder || '') === P)
+              const ruleCard = (r: any) => editingRuleId === r.id ? (
+                <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem' }}>
+                  <textarea value={editRuleText} onChange={e => setEditRuleText(e.target.value)} rows={3} style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.4rem' }} />
+                  <input value={editRuleFolder} onChange={e => setEditRuleFolder(e.target.value)} placeholder="&#128193; Folder (blank = Unfiled)" style={{ ...fieldInputStyle, marginBottom: '0.4rem' }} />
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button onClick={saveRuleEdit} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#fff', fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                    <button onClick={() => setEditingRuleId(null)} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.74rem', cursor: 'pointer' }}>Cancel</button>
+                  </div>
                 </div>
-
-                {globalRulesLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '2rem' }}>Loading…</div>}
-                {!globalRulesLoading && (() => {
-                  const ruleCard = (r: any) => editingRuleId === r.id ? (
-                    <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem' }}>
-                      <textarea value={editRuleText} onChange={e => setEditRuleText(e.target.value)} rows={3} style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.4rem' }} />
+              ) : (
+                <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#e2e8f0', lineHeight: 1.5, whiteSpace: 'pre-wrap', marginBottom: '0.35rem' }}>{r.content}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>{new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                      <button onClick={() => startEditRule(r)} style={{ background: 'transparent', border: 'none', color: '#6366f1', fontSize: '0.72rem', cursor: 'pointer', padding: 0 }}>Edit</button>
+                      <button onClick={() => deleteGlobalRule(r.id)} title="Delete" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#10005;</button>
+                    </div>
+                  </div>
+                </div>
+              )
+              return (
+                <div>
+                  {/* breadcrumb */}
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.6rem' }}>
+                    <button onClick={() => setBrainFolder('')} style={crumb(!P)}>&#128193; All</button>
+                    {P && P.split('/').map((seg, i, arr) => {
+                      const path = arr.slice(0, i + 1).join('/')
+                      return <span key={path} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><span style={{ color: '#4a5568' }}>/</span><button onClick={() => setBrainFolder(path)} style={crumb(i === arr.length - 1)}>{seg}</button></span>
+                    })}
+                  </div>
+                  {/* new folder + new rule */}
+                  <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                    <input value={brainNewFolder} onChange={e => setBrainNewFolder(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createGlobalFolder() }} placeholder={P ? `New sub-folder in ${P.split('/').pop()}…` : '📁 New folder…'} style={fieldInputStyle} />
+                    <button onClick={createGlobalFolder} disabled={!brainNewFolder.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: brainNewFolder.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: brainNewFolder.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Folder</button>
+                  </div>
+                  {!addingRule && <button onClick={startAddRule} style={{ width: '100%', padding: '0.55rem', marginBottom: '0.7rem', borderRadius: '10px', border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.1)', color: '#c7d2fe', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>&#43; New rule{P ? ` in ${P.split('/').pop()}` : ''}</button>}
+                  {addingRule && (
+                    <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.7rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#c7d2fe', marginBottom: '0.35rem' }}>New global rule — write it specific &amp; self-contained (e.g. &ldquo;For an MVR, never use a three-stage venous cannula — use bicaval&rdquo;).</div>
+                      <textarea value={editRuleText} onChange={e => setEditRuleText(e.target.value)} rows={3} autoFocus placeholder="Type the rule COR should always follow…" style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.4rem' }} />
                       <input value={editRuleFolder} onChange={e => setEditRuleFolder(e.target.value)} placeholder="&#128193; Folder (blank = Unfiled)" style={{ ...fieldInputStyle, marginBottom: '0.4rem' }} />
                       <div style={{ display: 'flex', gap: '0.4rem' }}>
-                        <button onClick={saveRuleEdit} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#fff', fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer' }}>Save</button>
-                        <button onClick={() => setEditingRuleId(null)} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.74rem', cursor: 'pointer' }}>Cancel</button>
+                        <button onClick={saveNewRule} disabled={!editRuleText.trim()} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: 'none', background: editRuleText.trim() ? '#6366f1' : '#2d3748', color: '#fff', fontSize: '0.74rem', fontWeight: 600, cursor: editRuleText.trim() ? 'pointer' : 'not-allowed' }}>Save rule</button>
+                        <button onClick={() => { setAddingRule(false); setEditRuleText('') }} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.74rem', cursor: 'pointer' }}>Cancel</button>
                       </div>
                     </div>
-                  ) : (
-                    <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem' }}>
-                      <div style={{ fontSize: '0.8rem', color: '#e2e8f0', lineHeight: 1.5, whiteSpace: 'pre-wrap', marginBottom: '0.35rem' }}>{r.content}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>{new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                          <button onClick={() => startEditRule(r)} style={{ background: 'transparent', border: 'none', color: '#6366f1', fontSize: '0.72rem', cursor: 'pointer', padding: 0 }}>Edit</button>
-                          <button onClick={() => deleteGlobalRule(r.id)} title="Delete" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#10005;</button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-
-                  if (brainFolder) {
-                    const inFolder = globalRules.filter((r: any) => (r.folder || '') === brainFolder)
-                    if (inFolder.length === 0) return <div style={{ textAlign: 'center', marginTop: '1.5rem', color: '#4a5568', fontSize: '0.78rem' }}>This folder is empty. Edit a rule and set its folder to &ldquo;{brainFolder}&rdquo; to file it here.</div>
-                    return inFolder.map(ruleCard)
-                  }
-                  const folders = Array.from(new Set(globalRules.filter((r: any) => r.folder).map((r: any) => r.folder as string))).sort()
-                  const unfiled = globalRules.filter((r: any) => !r.folder)
-                  if (folders.length === 0 && unfiled.length === 0) {
+                  )}
+                  {globalRulesLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '1.5rem' }}>Loading…</div>}
+                  {children.map((childPath: string) => {
+                    const name = childPath.split('/').pop()
+                    const count = active.filter((r: any) => r.folder === childPath || (r.folder || '').startsWith(childPath + '/')).length
                     return (
-                      <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-                        <div style={{ fontSize: '1.8rem', marginBottom: '0.5rem', opacity: 0.4 }}>&#129504;</div>
-                        <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>Nothing taught globally yet.</div>
-                        <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Teach COR from the Reports screen or the &#128218; button in chat.</div>
+                      <div key={childPath} onClick={() => setBrainFolder(childPath)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', background: 'linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.7rem 0.85rem', marginBottom: '0.55rem', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.18)' }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.08)' }}>
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                          <defs><linearGradient id={`bfg${childPath.replace(/[^a-z0-9]/gi, '')}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#fbbf24" /><stop offset="100%" stopColor="#f59e0b" /></linearGradient></defs>
+                          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill={`url(#bfg${childPath.replace(/[^a-z0-9]/gi, '')})`} />
+                        </svg>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                          <div style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '1px' }}>{count} rule{count !== 1 ? 's' : ''}</div>
+                        </div>
+                        <button onClick={ev => { ev.stopPropagation(); deleteGlobalFolder(childPath) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
+                        <span style={{ color: '#475569', fontSize: '1.1rem', flexShrink: 0 }}>&#8250;</span>
                       </div>
                     )
-                  }
-                  return (
-                    <>
-                      {folders.map((f: string) => {
-                        const count = globalRules.filter((r: any) => r.folder === f).length
-                        return (
-                          <div key={f} className="history-item" onClick={() => setBrainFolder(f)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                              <span style={{ fontSize: '1rem' }}>&#128193;</span>
-                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f}</span>
-                              <span style={{ fontSize: '0.65rem', color: '#4a5568', flexShrink: 0 }}>{count} rule{count !== 1 ? 's' : ''}</span>
-                            </div>
-                            <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>&#8250;</span>
-                          </div>
-                        )
-                      })}
-                      {unfiled.length > 0 && (
-                        <div style={{ marginTop: folders.length > 0 ? '0.85rem' : 0 }}>
-                          <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Unfiled</div>
-                          {unfiled.map(ruleCard)}
-                        </div>
-                      )}
-                    </>
-                  )
-                })()}
-              </div>
-            )}
+                  })}
+                  {rulesHere.map(ruleCard)}
+                  {!globalRulesLoading && !addingRule && children.length === 0 && rulesHere.length === 0 && (
+                    <div style={{ textAlign: 'center', marginTop: '1.5rem', color: '#4a5568', fontSize: '0.78rem' }}>{P ? 'This folder is empty.' : 'Nothing taught globally yet — tap ＋ New rule, or use the Reports screen.'}</div>
+                  )}
+                </div>
+              )
+            })()}
 
             {activePanel === 'Admin' && (
               <div>
