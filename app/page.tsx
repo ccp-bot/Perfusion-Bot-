@@ -102,6 +102,7 @@ export default function Home() {
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [groupName, setGroupName] = useState('')
   const [notifications, setNotifications] = useState<any[]>([])
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; confirmLabel?: string; onConfirm: () => void } | null>(null)
   // Teach / report / reports-review
   const [teachModal, setTeachModal] = useState(false)
   const [teachText, setTeachText] = useState('')
@@ -754,15 +755,21 @@ export default function Home() {
     }
   }
 
+  // Styled in-app confirmation (replaces the browser's native confirm popup).
+  function askConfirm(message: string, onConfirm: () => void, confirmLabel?: string) {
+    setConfirmDialog({ message, confirmLabel, onConfirm })
+  }
+
   // Quickly clear all unpinned conversations (pinned ones are kept).
-  async function clearUnpinnedConversations() {
+  function clearUnpinnedConversations() {
     const toDelete = conversations.filter(c => !c.pinned)
     if (toDelete.length === 0) return
-    if (!window.confirm(`Clear ${toDelete.length} unpinned conversation${toDelete.length > 1 ? 's' : ''}? Pinned ones stay.`)) return
-    setConversations(prev => prev.filter(c => c.pinned))
-    for (const c of toDelete) {
-      try { await fetch('/api/history', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id }) }) } catch {}
-    }
+    askConfirm(`Clear ${toDelete.length} unpinned conversation${toDelete.length > 1 ? 's' : ''}? Pinned ones stay.`, async () => {
+      setConversations(prev => prev.filter(c => c.pinned))
+      for (const c of toDelete) {
+        try { await fetch('/api/history', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id }) }) } catch {}
+      }
+    }, 'Clear')
   }
 
   function loadConversation(conv: any) {
@@ -891,10 +898,12 @@ export default function Home() {
       setEditingRuleId(null)
     } catch { alert('Could not save the change.') }
   }
-  async function deleteGlobalRule(id: number) {
-    if (!user || !window.confirm('Delete this taught rule from COR? This cannot be undone.')) return
-    setGlobalRules(prev => prev.filter(r => r.id !== id))
-    try { await fetch('/api/teach', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, email: user.email }) }) } catch {}
+  function deleteGlobalRule(id: number) {
+    if (!user) return
+    askConfirm('Delete this taught rule from COR? This cannot be undone.', async () => {
+      setGlobalRules(prev => prev.filter(r => r.id !== id))
+      try { await fetch('/api/teach', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, email: user.email }) }) } catch {}
+    }, 'Delete')
   }
 
   // ── Workplace profiles (filled once, reused for ABCP export) — synced to the user's account ──
@@ -922,11 +931,13 @@ export default function Home() {
       setWpForm(null)
     } catch { alert('Could not save workplace — try again') }
   }
-  async function deleteWorkplace(id: any) {
-    if (!user?.id || !window.confirm('Delete this workplace?')) return
-    setWorkplaces(prev => prev.filter(w => w.id !== id))
-    if (selectedWp === id) setSelectedWp('')
-    try { await fetch('/api/workplaces', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, userId: user.id }) }) } catch {}
+  function deleteWorkplace(id: any) {
+    if (!user?.id) return
+    askConfirm('Delete this workplace?', async () => {
+      setWorkplaces(prev => prev.filter(w => w.id !== id))
+      if (selectedWp === id) setSelectedWp('')
+      try { await fetch('/api/workplaces', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, userId: user.id }) }) } catch {}
+    }, 'Delete')
   }
   function exportPersonalExcel() {
     const fields = activePanel === 'Logbook' ? ['Surgery Date', ...logbookFields.filter(f => f.toLowerCase() !== 'mrn')] : activePanel === 'Case Notes' ? caseNotesFields : []
@@ -1055,20 +1066,21 @@ export default function Home() {
     setTimeout(() => { try { w.print() } catch { /* user can print manually */ } }, 350)
   }
 
-  async function deletePanelEntry(id: number) {
-    if (typeof window !== 'undefined' && !window.confirm('Delete this entry? This cannot be undone.')) return
-    try {
-      const res = await fetch('/api/logbook', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, userId: user?.id, userRole })
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) { alert(data.error || 'Could not delete entry.'); return }
-      setPanelEntries(prev => prev.filter(e => e.id !== id))
-    } catch {
-      alert('Could not delete entry. Please try again.')
-    }
+  function deletePanelEntry(id: number) {
+    askConfirm('Delete this entry? This cannot be undone.', async () => {
+      try {
+        const res = await fetch('/api/logbook', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, userId: user?.id, userRole })
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) { alert(data.error || 'Could not delete entry.'); return }
+        setPanelEntries(prev => prev.filter(e => e.id !== id))
+      } catch {
+        alert('Could not delete entry. Please try again.')
+      }
+    }, 'Delete')
   }
 
   async function uploadFiles(files: File[]) {
@@ -1108,18 +1120,20 @@ export default function Home() {
   }
 
   // Delete an entire protocol/policy file (all chunks + archived versions).
-  async function deleteProtocolFile(sourceFile: string) {
-    if (!activePanel || !window.confirm(`Delete "${sourceFile}" and all its versions? This cannot be undone.`)) return
-    try {
-      const res = await fetch('/api/logbook', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceFile, category: activePanel, groupId: userGroupId || '', userId: user?.id, userRole })
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
-      fetchPanel(activePanel)
-    } catch { alert('Could not delete.') }
+  function deleteProtocolFile(sourceFile: string) {
+    if (!activePanel) return
+    askConfirm(`Delete "${sourceFile}" and all its versions? This cannot be undone.`, async () => {
+      try {
+        const res = await fetch('/api/logbook', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceFile, category: activePanel, groupId: userGroupId || '', userId: user?.id, userRole })
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
+        fetchPanel(activePanel)
+      } catch { alert('Could not delete.') }
+    }, 'Delete')
   }
 
   // Create a (persistent) folder/sub-folder in the current panel at the current path.
@@ -1140,23 +1154,25 @@ export default function Home() {
   }
 
   // Delete a whole folder and everything nested inside it.
-  async function deleteProtocolFolder(folder: string) {
+  function deleteProtocolFolder(folder: string) {
+    if (!activePanel) return
     const label = folder.split('/').pop()
-    if (!activePanel || !window.confirm(`Delete the folder "${label}" and everything in it (including sub-folders)? This cannot be undone.`)) return
-    try {
-      const res = await fetch('/api/logbook', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder, category: activePanel, groupId: userGroupId || '', userId: user?.id, userRole })
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
-      // If we were inside the deleted folder (or a child of it), step back to its parent.
-      if (currentFolder === folder || currentFolder.startsWith(folder + '/')) {
-        setCurrentFolder(folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : '')
-      }
-      fetchPanel(activePanel)
-    } catch { alert('Could not delete.') }
+    askConfirm(`Delete the folder "${label}" and everything in it (including sub-folders)? This cannot be undone.`, async () => {
+      try {
+        const res = await fetch('/api/logbook', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder, category: activePanel, groupId: userGroupId || '', userId: user?.id, userRole })
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) { alert(data.error || 'Could not delete.'); return }
+        // If we were inside the deleted folder (or a child of it), step back to its parent.
+        if (currentFolder === folder || currentFolder.startsWith(folder + '/')) {
+          setCurrentFolder(folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : '')
+        }
+        fetchPanel(activePanel)
+      } catch { alert('Could not delete.') }
+    }, 'Delete')
   }
 
   // Create a (sub)folder under the folder you're currently viewing, and open it.
@@ -1266,13 +1282,15 @@ export default function Home() {
     } catch { alert('Could not save note.') }
     setSavingNote(false)
   }
-  async function deleteNote(id: number) {
-    if (!user || !window.confirm('Delete this note? This cannot be undone.')) return
+  function deleteNote(id: number) {
+    if (!user) return
+    askConfirm('Delete this note? This cannot be undone.', async () => {
     try {
       await fetch('/api/notes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, userId: user.id }) })
       setOpenNoteId(null)
       fetchNotes()
     } catch { alert('Could not delete note.') }
+    }, 'Delete')
   }
   // Quick one-tap delete from the notes list (no confirm dialog) — optimistic.
   async function deleteNoteQuick(id: number) {
@@ -3289,6 +3307,22 @@ export default function Home() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div onClick={() => setConfirmDialog(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.4rem', width: '100%', maxWidth: '380px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+              <span style={{ fontSize: '1.1rem' }}>&#9888;</span>
+              <span style={{ fontSize: '0.95rem', color: '#e2e8f0', fontWeight: 600 }}>Are you sure?</span>
+            </div>
+            <div style={{ fontSize: '0.84rem', color: '#94a3b8', lineHeight: 1.55, marginBottom: '1.1rem' }}>{confirmDialog.message}</div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={() => setConfirmDialog(null)} style={{ flex: 1, padding: '0.6rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e2e8f0', fontSize: '0.84rem', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); fn() }} style={{ flex: 1, padding: '0.6rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer' }}>{confirmDialog.confirmLabel || 'Confirm'}</button>
+            </div>
           </div>
         </div>
       )}
