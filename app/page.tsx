@@ -103,6 +103,8 @@ export default function Home() {
   const [reportAnswer, setReportAnswer] = useState('')
   const [reportSending, setReportSending] = useState(false)
   const [reportStatus, setReportStatus] = useState('')
+  const [reportSuggestions, setReportSuggestions] = useState<string[]>([])
+  const [reportSuggLoading, setReportSuggLoading] = useState(false)
   const [reports, setReports] = useState<any[]>([])
   const [reportsLoading, setReportsLoading] = useState(false)
   const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({})
@@ -783,6 +785,16 @@ export default function Home() {
     for (let i = answerIndex - 1; i >= 0; i--) { if (messages[i].role === 'user') { question = messages[i].content; break } }
     setReportModal({ question, answer })
     setReportWrong(''); setReportAnswer(''); setReportStatus('')
+    // Ask COR to self-check this answer so the user can tap-to-fill what's wrong.
+    setReportSuggestions([]); setReportSuggLoading(true)
+    fetch('/api/critique', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, answer }) })
+      .then(r => r.json())
+      .then(d => setReportSuggestions(d.suggestions || []))
+      .catch(() => setReportSuggestions([]))
+      .finally(() => setReportSuggLoading(false))
+  }
+  function useReportSuggestion(s: string) {
+    setReportWrong(prev => prev.trim() ? `${prev.trim()}\n${s}` : s)
   }
   async function submitReport() {
     if (!reportModal || (!reportWrong.trim() && !reportAnswer.trim())) return
@@ -2896,6 +2908,14 @@ export default function Home() {
           <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.25rem', width: '100%', maxWidth: '440px' }}>
             <div style={{ fontSize: '1rem', color: '#e2e8f0', fontWeight: 600, marginBottom: '0.3rem' }}>&#9888; Report a wrong answer</div>
             <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.75rem' }}>This goes to the COR team to review and fix. Thank you!</div>
+            {(reportSuggLoading || reportSuggestions.length > 0) && (
+              <div style={{ marginBottom: '0.7rem' }}>
+                <div style={{ fontSize: '0.68rem', color: '#6366f1', marginBottom: '0.35rem' }}>{reportSuggLoading ? 'COR is double-checking its answer…' : '✨ COR flagged these — tap any to use:'}</div>
+                {!reportSuggLoading && reportSuggestions.map((s, idx) => (
+                  <button key={idx} onClick={() => useReportSuggestion(s)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.45rem 0.6rem', marginBottom: '0.3rem', borderRadius: '8px', border: '1px solid rgba(99,102,241,0.35)', background: 'rgba(99,102,241,0.08)', color: '#c7d2fe', fontSize: '0.76rem', cursor: 'pointer', lineHeight: 1.4 }}>{s}</button>
+                ))}
+              </div>
+            )}
             <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.2rem' }}>What was wrong?</div>
             <textarea value={reportWrong} onChange={e => setReportWrong(e.target.value)} placeholder="e.g. It listed a three-stage cannula for an MVR — that's never used." rows={2} style={{ width: '100%', padding: '0.6rem 0.8rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.5rem' }} />
             <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.2rem' }}>The correct answer (optional)</div>
