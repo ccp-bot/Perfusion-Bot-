@@ -3254,7 +3254,7 @@ export default function Home() {
               </button>
             </div>
             <button onClick={openTeachModal} title="Teach COR (save this as a rule)" style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>
-              <img src="/grad-hat.png" alt="Teach COR" style={{ width: '22px', height: '22px', objectFit: 'contain', display: 'block' }} />
+              <img src="/grad-hat.png" alt="Teach COR" style={{ width: '30px', height: '30px', objectFit: 'contain', display: 'block' }} />
             </button>
             <button onClick={sendMessage} disabled={loading} style={{ width: '38px', height: '38px', borderRadius: '50%', background: loading ? 'rgba(255,255,255,0.06)' : '#e63946', color: 'white', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem' }}>➤</button>
           </div>
