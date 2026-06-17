@@ -108,6 +108,14 @@ export default function Home() {
   const [reports, setReports] = useState<any[]>([])
   const [reportsLoading, setReportsLoading] = useState(false)
   const [reportEdits, setReportEdits] = useState<{ [id: number]: string }>({})
+  // COR Brain — global taught knowledge management
+  const [globalRules, setGlobalRules] = useState<any[]>([])
+  const [globalRulesLoading, setGlobalRulesLoading] = useState(false)
+  const [brainFolder, setBrainFolder] = useState('')
+  const [brainNewFolder, setBrainNewFolder] = useState('')
+  const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
+  const [editRuleText, setEditRuleText] = useState('')
+  const [editRuleFolder, setEditRuleFolder] = useState('')
   const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({})
   const [uploading, setUploading] = useState(false)
   const [manualEntry, setManualEntry] = useState('')
@@ -841,6 +849,39 @@ export default function Home() {
     try { await fetch('/api/reports', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, status: 'dismissed', email: user.email }) }) } catch {}
   }
 
+  // ── COR Brain: manage global taught knowledge ──
+  async function fetchGlobalRules() {
+    if (user?.email !== SUPER_OWNER_EMAIL) return
+    setGlobalRulesLoading(true)
+    try {
+      const res = await fetch(`/api/teach?email=${encodeURIComponent(user.email)}`)
+      const data = await res.json()
+      setGlobalRules(data.rules || [])
+    } catch { setGlobalRules([]) }
+    setGlobalRulesLoading(false)
+  }
+  function startEditRule(r: any) {
+    setEditingRuleId(r.id)
+    setEditRuleText(r.content || '')
+    setEditRuleFolder(r.folder || '')
+  }
+  async function saveRuleEdit() {
+    if (editingRuleId == null || !user) return
+    try {
+      await fetch('/api/teach', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingRuleId, email: user.email, content: editRuleText.trim(), folder: editRuleFolder.trim() })
+      })
+      setGlobalRules(prev => prev.map(r => r.id === editingRuleId ? { ...r, content: editRuleText.trim(), folder: editRuleFolder.trim() || null } : r))
+      setEditingRuleId(null)
+    } catch { alert('Could not save the change.') }
+  }
+  async function deleteGlobalRule(id: number) {
+    if (!user || !window.confirm('Delete this taught rule from COR? This cannot be undone.')) return
+    setGlobalRules(prev => prev.filter(r => r.id !== id))
+    try { await fetch('/api/teach', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, email: user.email }) }) } catch {}
+  }
+
   function openPanel(key: string) {
     if (activePanel === key) {
       setActivePanel(null)
@@ -849,7 +890,7 @@ export default function Home() {
     setActivePanel(key)
     setOpenNoteId(null)
     setCurrentFolder('')
-    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
+    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); fetchGlobalRules() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
@@ -1850,6 +1891,17 @@ export default function Home() {
                   {reports.length > 0 && <span style={{ marginLeft: 'auto', minWidth: '16px', height: '16px', borderRadius: '8px', background: '#e63946', color: 'white', fontSize: '0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{reports.length}</span>}
                 </button>
               )}
+              {user?.email === SUPER_OWNER_EMAIL && (
+                <button
+                  onClick={() => { openPanel('Brain'); setSidebarOpen(false) }}
+                  className={`sidebar-btn${activePanel === 'Brain' ? ' active' : ''}`}
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
+                >
+                  <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#129504;</span>
+                  <span style={{ fontSize: '0.82rem', color: activePanel === 'Brain' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Brain' ? '600' : '400' }}>COR Brain</span>
+                  {activePanel === 'Brain' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -1876,9 +1928,9 @@ export default function Home() {
         <div className="slide-panel" style={{ width: '300px', background: '#0d1117', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', flexShrink: 0, animation: 'panelSlide 0.2s ease' }}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel}</div>
+              <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel === 'Brain' ? 'COR Brain' : activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -2021,6 +2073,91 @@ export default function Home() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {activePanel === 'Brain' && (
+              <div>
+                {/* Folder navigation — breadcrumb + create folder */}
+                <div style={{ marginBottom: '0.85rem' }}>
+                  {brainFolder ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                      <button onClick={() => setBrainFolder('')} style={{ background: 'transparent', border: 'none', color: '#e63946', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#8592; All folders</button>
+                      <span style={{ color: '#4a5568', fontSize: '0.8rem' }}>/</span>
+                      <span style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>&#128193; {brainFolder}</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input value={brainNewFolder} onChange={e => setBrainNewFolder(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && brainNewFolder.trim()) { setBrainFolder(brainNewFolder.trim()); setBrainNewFolder('') } }} placeholder="&#128193; New folder…" style={fieldInputStyle} />
+                      <button onClick={() => { if (brainNewFolder.trim()) { setBrainFolder(brainNewFolder.trim()); setBrainNewFolder('') } }} disabled={!brainNewFolder.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: brainNewFolder.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: brainNewFolder.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
+                    </div>
+                  )}
+                </div>
+
+                {globalRulesLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '2rem' }}>Loading…</div>}
+                {!globalRulesLoading && (() => {
+                  const ruleCard = (r: any) => editingRuleId === r.id ? (
+                    <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem' }}>
+                      <textarea value={editRuleText} onChange={e => setEditRuleText(e.target.value)} rows={3} style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.4rem' }} />
+                      <input value={editRuleFolder} onChange={e => setEditRuleFolder(e.target.value)} placeholder="&#128193; Folder (blank = Unfiled)" style={{ ...fieldInputStyle, marginBottom: '0.4rem' }} />
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button onClick={saveRuleEdit} style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#fff', fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                        <button onClick={() => setEditingRuleId(null)} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.74rem', cursor: 'pointer' }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={r.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#e2e8f0', lineHeight: 1.5, whiteSpace: 'pre-wrap', marginBottom: '0.35rem' }}>{r.content}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>{new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                          <button onClick={() => startEditRule(r)} style={{ background: 'transparent', border: 'none', color: '#6366f1', fontSize: '0.72rem', cursor: 'pointer', padding: 0 }}>Edit</button>
+                          <button onClick={() => deleteGlobalRule(r.id)} title="Delete" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#10005;</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+
+                  if (brainFolder) {
+                    const inFolder = globalRules.filter((r: any) => (r.folder || '') === brainFolder)
+                    if (inFolder.length === 0) return <div style={{ textAlign: 'center', marginTop: '1.5rem', color: '#4a5568', fontSize: '0.78rem' }}>This folder is empty. Edit a rule and set its folder to &ldquo;{brainFolder}&rdquo; to file it here.</div>
+                    return inFolder.map(ruleCard)
+                  }
+                  const folders = Array.from(new Set(globalRules.filter((r: any) => r.folder).map((r: any) => r.folder as string))).sort()
+                  const unfiled = globalRules.filter((r: any) => !r.folder)
+                  if (folders.length === 0 && unfiled.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                        <div style={{ fontSize: '1.8rem', marginBottom: '0.5rem', opacity: 0.4 }}>&#129504;</div>
+                        <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>Nothing taught globally yet.</div>
+                        <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Teach COR from the Reports screen or the &#128218; button in chat.</div>
+                      </div>
+                    )
+                  }
+                  return (
+                    <>
+                      {folders.map((f: string) => {
+                        const count = globalRules.filter((r: any) => r.folder === f).length
+                        return (
+                          <div key={f} className="history-item" onClick={() => setBrainFolder(f)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                              <span style={{ fontSize: '1rem' }}>&#128193;</span>
+                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f}</span>
+                              <span style={{ fontSize: '0.65rem', color: '#4a5568', flexShrink: 0 }}>{count} rule{count !== 1 ? 's' : ''}</span>
+                            </div>
+                            <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>&#8250;</span>
+                          </div>
+                        )
+                      })}
+                      {unfiled.length > 0 && (
+                        <div style={{ marginTop: folders.length > 0 ? '0.85rem' : 0 }}>
+                          <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Unfiled</div>
+                          {unfiled.map(ruleCard)}
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             )}
 

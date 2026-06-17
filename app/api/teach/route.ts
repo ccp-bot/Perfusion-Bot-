@@ -79,3 +79,44 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ error: 'Unknown scope' }, { status: 400 })
 }
+
+// GET /api/teach?email=... — owner lists everything taught to COR globally
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const email = searchParams.get('email')
+  if (email?.toLowerCase() !== SUPER_OWNER_EMAIL) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  const { data, error } = await supabase
+    .from('documents')
+    .select('id, content, folder, source_file, created_at')
+    .eq('category', 'Protocol')
+    .eq('institution_id', 'GLOBAL')
+    .order('created_at', { ascending: false })
+  if (error) return NextResponse.json({ rules: [] })
+  return NextResponse.json({ rules: data || [] })
+}
+
+// PATCH /api/teach { id, email, content?, folder? } — owner edits a global rule
+export async function PATCH(req: NextRequest) {
+  const { id, email, content, folder } = await req.json()
+  if (email?.toLowerCase() !== SUPER_OWNER_EMAIL) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+  const update: Record<string, any> = {}
+  if (folder !== undefined) update.folder = folder ? String(folder).trim() || null : null
+  if (content !== undefined) {
+    update.content = String(content)
+    update.embedding = await embed(String(content))
+  }
+  const { error } = await supabase.from('documents').update(update).eq('id', id).eq('institution_id', 'GLOBAL')
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}
+
+// DELETE /api/teach { id, email } — owner removes a global rule
+export async function DELETE(req: NextRequest) {
+  const { id, email } = await req.json()
+  if (email?.toLowerCase() !== SUPER_OWNER_EMAIL) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+  const { error } = await supabase.from('documents').delete().eq('id', id).eq('institution_id', 'GLOBAL')
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}
