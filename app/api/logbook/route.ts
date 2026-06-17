@@ -62,9 +62,16 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ success: true })
 }
 
-// PATCH /api/logbook — append a timestamped note to an entry
+// PATCH /api/logbook — append a timestamped note, OR move an entry to a folder.
 export async function PATCH(req: NextRequest) {
-  const { id, note, userId } = await req.json()
+  const { id, note, userId, setFolder } = await req.json()
+
+  // Move-to-folder: setFolder is a string ('' = Unfiled). Owner/admin or the case owner can move.
+  if (setFolder !== undefined && id) {
+    const { error } = await supabase.from('documents').update({ folder: setFolder || null }).eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
 
   if (!id || !note) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 

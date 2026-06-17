@@ -161,6 +161,8 @@ export default function Home() {
   const [caseForm, setCaseForm] = useState<{[k: string]: string}>({})
   const [caseDate, setCaseDate] = useState('')
   const [caseFolder, setCaseFolder] = useState('')
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
+  const [draggingCaseId, setDraggingCaseId] = useState<number | null>(null)
   const [caseNote, setCaseNote] = useState('')
   const [notesList, setNotesList] = useState<any[]>([])
   const [notesLoading, setNotesLoading] = useState(false)
@@ -1136,6 +1138,13 @@ export default function Home() {
         fetchPanel(activePanel)
       } catch { alert('Could not delete.') }
     }, 'Delete')
+  }
+
+  // Move a logbook case into a folder ('' = Unfiled). Optimistic.
+  async function moveCaseToFolder(id: number, folder: string) {
+    if (!user) return
+    setPanelEntries(prev => prev.map(e => e.id === id ? { ...e, folder: folder || null } : e))
+    try { await fetch('/api/logbook', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, userId: user.id, setFolder: folder }) }) } catch { fetchPanel('Logbook') }
   }
 
   // Create a (persistent) folder/sub-folder in the current panel at the current path.
@@ -2913,7 +2922,7 @@ export default function Home() {
                     <>
                       <div style={{ marginBottom: '0.7rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.3rem', marginBottom: canManage ? '0.5rem' : 0 }}>
-                          <button onClick={() => setCurrentFolder('')} style={crumbStyle(!P)}>&#128193; All</button>
+                          <button onClick={() => setCurrentFolder('')} onDragOver={ev => ev.preventDefault()} onDrop={ev => { ev.preventDefault(); if (draggingCaseId != null) moveCaseToFolder(draggingCaseId, ''); setDraggingCaseId(null); setDragOverFolder(null) }} style={crumbStyle(!P)}>&#128193; All</button>
                           {P && P.split('/').map((seg, i, arr) => {
                             const path = arr.slice(0, i + 1).join('/')
                             return <span key={path} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><span style={{ color: '#4a5568' }}>/</span><button onClick={() => setCurrentFolder(path)} style={crumbStyle(i === arr.length - 1)}>{seg}</button></span>
@@ -2929,22 +2938,34 @@ export default function Home() {
                       {children.map((childPath: string) => {
                         const name = childPath.split('/').pop()
                         const count = panelEntries.filter((e: any) => e.source_file !== '__folder__' && (e.folder === childPath || (e.folder || '').startsWith(childPath + '/'))).length
+                        const isDropHover = dragOverFolder === childPath
                         return (
-                          <div key={childPath} className="history-item" onClick={() => setCurrentFolder(childPath)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem 0.8rem', marginBottom: '0.5rem', cursor: 'pointer' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                              <span style={{ fontSize: '1rem' }}>&#128193;</span>
-                              <span style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                              <span style={{ fontSize: '0.65rem', color: '#4a5568', flexShrink: 0 }}>{count} case{count !== 1 ? 's' : ''}</span>
+                          <div
+                            key={childPath}
+                            onClick={() => setCurrentFolder(childPath)}
+                            onDragOver={ev => { ev.preventDefault(); if (dragOverFolder !== childPath) setDragOverFolder(childPath) }}
+                            onDragLeave={() => setDragOverFolder(prev => prev === childPath ? null : prev)}
+                            onDrop={ev => { ev.preventDefault(); setDragOverFolder(null); if (draggingCaseId != null) moveCaseToFolder(draggingCaseId, childPath); setDraggingCaseId(null) }}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', background: isDropHover ? 'linear-gradient(135deg, rgba(230,57,70,0.22), rgba(230,57,70,0.08))' : 'linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015))', border: `1px solid ${isDropHover ? '#e63946' : 'rgba(255,255,255,0.08)'}`, borderRadius: '14px', padding: '0.7rem 0.85rem', marginBottom: '0.55rem', cursor: 'pointer', transition: 'transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease', boxShadow: isDropHover ? '0 0 0 3px rgba(230,57,70,0.15)' : '0 1px 2px rgba(0,0,0,0.25)' }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.18)' }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'none'; if (!isDropHover) (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.08)' }}
+                          >
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                              <defs><linearGradient id={`fg${childPath.replace(/[^a-z0-9]/gi, '')}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#fbbf24" /><stop offset="100%" stopColor="#f59e0b" /></linearGradient></defs>
+                              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill={`url(#fg${childPath.replace(/[^a-z0-9]/gi, '')})`} />
+                              <path d="M3 9h18v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" fill="#fff" opacity="0.12" />
+                            </svg>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                              <div style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '1px' }}>{count} case{count !== 1 ? 's' : ''}</div>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
-                              {canManage && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(childPath) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer' }}>&#10005;</button>}
-                              <span style={{ color: '#4a5568', fontSize: '0.9rem' }}>&#8250;</span>
-                            </div>
+                            {canManage && <button onClick={ev => { ev.stopPropagation(); deleteProtocolFolder(childPath) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>}
+                            <span style={{ color: '#475569', fontSize: '1.1rem', flexShrink: 0 }}>&#8250;</span>
                           </div>
                         )
                       })}
-                      {children.length > 0 && panelEntries.some((e: any) => e.source_file !== '__folder__' && (e.folder || '') === P) && (
-                        <div style={{ height: '0.5rem' }} />
+                      {canManage && children.length > 0 && panelEntries.some((e: any) => e.source_file !== '__folder__' && (e.folder || '') === P) && (
+                        <div style={{ fontSize: '0.62rem', color: '#475569', margin: '0.5rem 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>&#9776; Drag a case onto a folder to file it</div>
                       )}
                     </>
                   )
@@ -2957,9 +2978,13 @@ export default function Home() {
                   const dateMatch = entry.content?.match(/\*?\*?Surgery Date:?\*?\*?\s*(.+?)(?:\n|$)/i)
                   const surgeryDate = dateMatch ? dateMatch[1].trim() : null
 
+                  const canDrag = !userGroupId || userRole === 'owner' || userRole === 'admin'
                   return (
                     <div
                       key={entry.id}
+                      draggable={canDrag}
+                      onDragStart={ev => { setDraggingCaseId(entry.id); ev.dataTransfer.effectAllowed = 'move' }}
+                      onDragEnd={() => { setDraggingCaseId(null); setDragOverFolder(null) }}
                       onClick={() => {
                         if (isCollapsible) {
                           setExpandedEntries(prev => {
@@ -2970,7 +2995,7 @@ export default function Home() {
                           })
                         }
                       }}
-                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.6rem', cursor: isCollapsible ? 'pointer' : 'default', transition: 'all 0.15s ease' }}
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.6rem', cursor: isCollapsible ? 'pointer' : 'default', transition: 'all 0.15s ease', opacity: draggingCaseId === entry.id ? 0.4 : 1 }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isCollapsible && !isExpanded ? 0 : '0.4rem' }}>
                         <div>
