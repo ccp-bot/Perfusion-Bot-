@@ -712,6 +712,17 @@ export default function Home() {
     }
   }
 
+  // Quickly clear all unpinned conversations (pinned ones are kept).
+  async function clearUnpinnedConversations() {
+    const toDelete = conversations.filter(c => !c.pinned)
+    if (toDelete.length === 0) return
+    if (!window.confirm(`Clear ${toDelete.length} unpinned conversation${toDelete.length > 1 ? 's' : ''}? Pinned ones stay.`)) return
+    setConversations(prev => prev.filter(c => c.pinned))
+    for (const c of toDelete) {
+      try { await fetch('/api/history', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id }) }) } catch {}
+    }
+  }
+
   function loadConversation(conv: any) {
     setMessages(conv.messages || [])
     setActivePanel(null)
@@ -1777,27 +1788,41 @@ export default function Home() {
                     <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.4rem', opacity: 0.7 }}>Conversations auto-save after each response.</div>
                   </div>
                 )}
-                {conversations.map((conv) => (
-                  <div key={conv.id} className="history-item" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.85rem', marginBottom: '0.6rem', cursor: 'pointer', transition: 'all 0.15s ease' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
-                      <div onClick={() => loadConversation(conv)} style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.8rem', color: '#e2e8f0', lineHeight: '1.4', marginBottom: '0.25rem', fontWeight: '500' }}>{conv.title}</div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
-                          {new Date(conv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {!conv.pinned && conv.expires_at && <span style={{ marginLeft: '0.4rem', color: '#6b4a4a' }}>· expires {new Date(conv.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
-                          {conv.pinned && <span style={{ marginLeft: '0.4rem', color: '#e63946' }}>· pinned</span>}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.25rem', marginLeft: '0.5rem', flexShrink: 0 }}>
-                        <button onClick={() => pinConversation(conv.id, conv.pinned)} title={conv.pinned ? 'Unpin' : 'Pin'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.8rem', opacity: conv.pinned ? 1 : 0.4, padding: '2px' }}>📌</button>
-                        <button onClick={() => deleteConversation(conv.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, padding: '2px' }}>🗑️</button>
-                      </div>
-                    </div>
-                    <div onClick={() => loadConversation(conv)} style={{ fontSize: '0.75rem', color: '#4a5568', lineHeight: '1.4' }}>
-                      {conv.messages?.find((m: any) => m.role === 'assistant')?.content?.slice(0, 80)}...
-                    </div>
+                {conversations.length > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+                    <button onClick={clearUnpinnedConversations} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.68rem', cursor: 'pointer', textDecoration: 'underline' }}>Clear unpinned</button>
                   </div>
-                ))}
+                )}
+                {conversations.length > 0 && (() => {
+                  const now = new Date()
+                  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+                  const startYesterday = startToday - 86400000
+                  const pinned: any[] = [], today: any[] = [], yesterday: any[] = [], earlier: any[] = []
+                  for (const c of conversations) {
+                    if (c.pinned) { pinned.push(c); continue }
+                    const t = new Date(c.created_at).getTime()
+                    if (t >= startToday) today.push(c)
+                    else if (t >= startYesterday) yesterday.push(c)
+                    else earlier.push(c)
+                  }
+                  const sections: [string, any[]][] = []
+                  if (pinned.length) sections.push(['📌 Pinned', pinned])
+                  if (today.length) sections.push(['Today', today])
+                  if (yesterday.length) sections.push(['Yesterday', yesterday])
+                  if (earlier.length) sections.push(['Earlier', earlier])
+                  return sections.map(([label, items]) => (
+                    <div key={label} style={{ marginBottom: '0.65rem' }}>
+                      <div style={{ fontSize: '0.64rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem', paddingLeft: '0.1rem' }}>{label}</div>
+                      {items.map((conv: any) => (
+                        <div key={conv.id} className="history-item" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.5rem 0.6rem', marginBottom: '0.3rem', cursor: 'pointer' }}>
+                          <div onClick={() => loadConversation(conv)} style={{ flex: 1, minWidth: 0, fontSize: '0.78rem', color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conv.title}</div>
+                          <button onClick={() => pinConversation(conv.id, conv.pinned)} title={conv.pinned ? 'Unpin' : 'Pin'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.72rem', opacity: conv.pinned ? 1 : 0.35, padding: 0, flexShrink: 0 }}>📌</button>
+                          <button onClick={() => deleteConversation(conv.id)} title="Delete" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', flexShrink: 0, padding: 0, lineHeight: 1 }}>&#10005;</button>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                })()}
               </>
             )}
 
