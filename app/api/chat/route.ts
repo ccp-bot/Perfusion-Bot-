@@ -315,7 +315,8 @@ Return only the summary, no preamble.`
     overrideRules = [...(g || []), ...team].map((r: any) => (r.content || '').trim()).filter(Boolean)
   } catch { /* ignore */ }
   const overrideSection = overrideRules.length > 0
-    ? `\n\nCORRECTIONS YOU MUST APPLY (taught by the COR team and this institution) — these are AUTHORITATIVE and OVERRIDE everything below, including saved protocol documents and your own general knowledge. If a protocol document or your default answer conflicts with any rule here, FOLLOW THE RULE and briefly note the correction. Apply them even when not explicitly asked:\n- ${overrideRules.join('\n- ')}`
+    ? `\n\nCORRECTIONS YOU MUST APPLY (taught by the COR team and this institution) — these are AUTHORITATIVE and OVERRIDE everything below, including saved protocol documents and your own general knowledge. If a protocol document or your default answer conflicts with any rule here, FOLLOW THE RULE.
+Apply these SILENTLY and naturally — just give the corrected answer as if it were always the right one. Do NOT announce that a correction was applied, do NOT write "per institutional correction" or similar, do NOT explain why, and do NOT state obvious facts. Keep the answer clean and concise:\n- ${overrideRules.join('\n- ')}`
     : ''
 
   // Pull the user's own notes so COR can reference them (scoped to this user).
