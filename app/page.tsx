@@ -15,6 +15,8 @@ const SOURCE_LINKS: { [k: string]: string } = {
   'sts': 'https://www.sts.org',
   'scahq': 'https://www.scahq.org',
   'sca': 'https://www.scahq.org',
+  'general perfusion practice': 'https://www.amsect.org/p/cm/ld/fid=1730',
+  'general practice': 'https://www.amsect.org/p/cm/ld/fid=1730',
 }
 function sourceUrl(name: string): string | null {
   const n = name.toLowerCase()
@@ -3292,11 +3294,13 @@ export default function Home() {
                             {open && (
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.4rem' }}>
                                 {sources.map((s, si) => {
+                                  const isInstitution = /institution|institutional|your (saved )?protocol/i.test(s)
                                   const url = sourceUrl(s)
                                   const base = { fontSize: '0.68rem', padding: '0.18rem 0.5rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', textDecoration: 'none' }
-                                  return url
-                                    ? <a key={si} href={url} target="_blank" rel="noreferrer" style={{ ...base, color: '#93c5fd', borderColor: 'rgba(99,102,241,0.35)' }}>{s} &#8599;</a>
-                                    : <span key={si} style={{ ...base, color: '#94a3b8' }}>{s}</span>
+                                  const linkStyle = { ...base, color: '#93c5fd', borderColor: 'rgba(99,102,241,0.35)', cursor: 'pointer' }
+                                  if (isInstitution) return <button key={si} onClick={() => openPanel('Protocol')} style={linkStyle}>{s} &#8594;</button>
+                                  if (url) return <a key={si} href={url} target="_blank" rel="noreferrer" style={linkStyle}>{s} &#8599;</a>
+                                  return <span key={si} style={{ ...base, color: '#94a3b8' }}>{s}</span>
                                 })}
                               </div>
                             )}
