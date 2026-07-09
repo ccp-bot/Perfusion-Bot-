@@ -190,6 +190,7 @@ export default function Home() {
   const [caseDate, setCaseDate] = useState('')
   const [caseFolder, setCaseFolder] = useState('')
   const [caseFolderOpen, setCaseFolderOpen] = useState(false)
+  const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set())
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
   const [draggingCaseId, setDraggingCaseId] = useState<number | null>(null)
   const [caseNote, setCaseNote] = useState('')
@@ -3214,10 +3215,10 @@ export default function Home() {
 
         {/* NEW CHAT — start a fresh conversation (only when a chat is in progress) */}
         {messages.length > 0 && (
-          <button onClick={startNewChat} title="Start a new chat" style={{ position: 'absolute', top: 'calc(0.6rem + env(safe-area-inset-top))', right: '0.9rem', zIndex: 50, padding: '0.4rem 0.8rem', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer', color: '#cbd5e1', fontSize: '0.78rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>+ New chat</button>
+          <button onClick={startNewChat} title="Start a new chat" style={{ position: 'absolute', top: 'calc(0.6rem + env(safe-area-inset-top))', right: '0.9rem', zIndex: 50, padding: '0.4rem 0.8rem', borderRadius: '10px', background: '#161b24', border: '1px solid rgba(255,255,255,0.14)', boxShadow: '0 2px 10px rgba(0,0,0,0.4)', cursor: 'pointer', color: '#cbd5e1', fontSize: '0.78rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>+ New chat</button>
         )}
 
-        <div className="chat-area" style={{ flex: 1, overflowY: 'auto', padding: '2rem 2rem 1rem' }}>
+        <div className="chat-area" style={{ flex: 1, overflowY: 'auto', padding: '3.4rem 2rem 1rem' }}>
           {messages.length === 0 && (
             <div className="idle-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', height: '100%', minHeight: '400px' }}>
               <div style={{ textAlign: 'center', paddingTop: '3rem' }}>
@@ -3241,18 +3242,27 @@ export default function Home() {
                   return (
                     <>
                       {text}
-                      {sources.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.35rem', marginTop: '0.7rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                          <span style={{ fontSize: '0.64rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.1rem' }}>Sources</span>
-                          {sources.map((s, si) => {
-                            const url = sourceUrl(s)
-                            const base = { fontSize: '0.7rem', padding: '0.2rem 0.55rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', whiteSpace: 'nowrap' as const, textDecoration: 'none' }
-                            return url
-                              ? <a key={si} href={url} target="_blank" rel="noreferrer" style={{ ...base, color: '#93c5fd', borderColor: 'rgba(99,102,241,0.35)' }}>{s} &#8599;</a>
-                              : <span key={si} style={{ ...base, color: '#94a3b8' }}>{s}</span>
-                          })}
-                        </div>
-                      )}
+                      {sources.length > 0 && (() => {
+                        const open = expandedSources.has(i)
+                        return (
+                          <div style={{ marginTop: '0.6rem' }}>
+                            <button onClick={() => setExpandedSources(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.66rem', cursor: 'pointer', padding: 0 }}>
+                              <span>&#128218;</span><span>{sources.length} source{sources.length !== 1 ? 's' : ''}</span><span style={{ fontSize: '0.55rem' }}>{open ? '▲' : '▼'}</span>
+                            </button>
+                            {open && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.4rem' }}>
+                                {sources.map((s, si) => {
+                                  const url = sourceUrl(s)
+                                  const base = { fontSize: '0.68rem', padding: '0.18rem 0.5rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', textDecoration: 'none' }
+                                  return url
+                                    ? <a key={si} href={url} target="_blank" rel="noreferrer" style={{ ...base, color: '#93c5fd', borderColor: 'rgba(99,102,241,0.35)' }}>{s} &#8599;</a>
+                                    : <span key={si} style={{ ...base, color: '#94a3b8' }}>{s}</span>
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </>
                   )
                 })() : m.content}
