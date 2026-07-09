@@ -34,6 +34,46 @@ function parseSources(content: string): { text: string; sources: string[] } {
   return { text: (before + (rest ? '\n' + rest : '')).trim(), sources }
 }
 
+// Inline **bold** → styled <strong>.
+function renderInline(s: string, keyBase: string) {
+  return s.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
+    p.startsWith('**') && p.endsWith('**')
+      ? <strong key={keyBase + i} style={{ color: '#f8fafc', fontWeight: 600 }}>{p.slice(2, -2)}</strong>
+      : <span key={keyBase + i}>{p}</span>
+  )
+}
+// Render a COR answer with light structure: **bold**, bullets, numbered items, and spacing.
+function renderRich(text: string) {
+  const lines = (text || '').split('\n')
+  const out: any[] = []
+  lines.forEach((line, i) => {
+    const t = line.trim()
+    if (t === '') { out.push(<div key={'sp' + i} style={{ height: '0.45rem' }} />); return }
+    const bullet = t.match(/^[-•]\s+(.*)$/)
+    if (bullet) {
+      out.push(
+        <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.28rem', lineHeight: 1.55 }}>
+          <span style={{ color: '#e63946', flexShrink: 0, marginTop: '0.05rem' }}>•</span>
+          <span>{renderInline(bullet[1], i + '-')}</span>
+        </div>
+      )
+      return
+    }
+    const numbered = t.match(/^(\d+)\.\s+(.*)$/)
+    if (numbered) {
+      out.push(
+        <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.28rem', lineHeight: 1.55 }}>
+          <span style={{ color: '#e63946', flexShrink: 0, fontWeight: 600, fontSize: '0.82rem' }}>{numbered[1]}.</span>
+          <span>{renderInline(numbered[2], i + '-')}</span>
+        </div>
+      )
+      return
+    }
+    out.push(<div key={i} style={{ marginBottom: '0.35rem', lineHeight: 1.6 }}>{renderInline(t, i + '-')}</div>)
+  })
+  return out
+}
+
 // Format any date string as MM/DD/YYYY (e.g. 06/15/2026). Handles yyyy-mm-dd without timezone drift.
 function fmtMDY(s: string): string {
   if (!s) return ''
@@ -3241,7 +3281,7 @@ export default function Home() {
                   const { text, sources } = parseSources(m.content)
                   return (
                     <>
-                      {text}
+                      <div style={{ whiteSpace: 'normal' }}>{renderRich(text)}</div>
                       {sources.length > 0 && (() => {
                         const open = expandedSources.has(i)
                         return (
