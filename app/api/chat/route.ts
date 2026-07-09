@@ -266,10 +266,10 @@ Return only the summary, no preamble.`
     if (matches.length > 0) {
       // match_documents only returns id/content/similarity — look up each match's group/institution to scope it.
       const ids = matches.map((m: any) => m.id)
-      const { data: meta } = await supabase.from('documents').select('id, group_id, institution_id, archived').in('id', ids)
+      const { data: meta } = await supabase.from('documents').select('id, group_id, institution_id, archived, source_file').in('id', ids)
       const metaById: Record<string, any> = {}
       for (const m of (meta || [])) metaById[m.id] = m
-      semanticDocs = matches.filter((m: any) => inGroup(metaById[m.id])).map((m: any) => ({ id: m.id, content: m.content })).slice(0, 5)
+      semanticDocs = matches.filter((m: any) => inGroup(metaById[m.id])).map((m: any) => ({ id: m.id, content: m.content, source_file: metaById[m.id]?.source_file })).slice(0, 5)
     }
 
     // 2) Keyword pass — a named protocol (e.g. a surgeon like "Catrip") can rank low semantically
@@ -280,12 +280,12 @@ Return only the summary, no preamble.`
     if (terms.length > 0) {
       const orExpr = terms.map((t: string) => `content.ilike.%${t}%`).join(',')
       const { data: kw } = await supabase.from('documents')
-        .select('id, content, group_id, institution_id, archived')
+        .select('id, content, group_id, institution_id, archived, source_file')
         .in('category', ['Protocol', 'Policy'])
         .or(orExpr)
         .limit(20)
       keywordDocs = (kw || []).filter(inGroup)
-        .map((d: any) => ({ id: d.id, content: d.content, score: terms.filter((t: string) => (d.content || '').toLowerCase().includes(t)).length }))
+        .map((d: any) => ({ id: d.id, content: d.content, source_file: d.source_file, score: terms.filter((t: string) => (d.content || '').toLowerCase().includes(t)).length }))
         .sort((a: any, b: any) => b.score - a.score)
         .slice(0, 3)
     }
@@ -298,7 +298,12 @@ Return only the summary, no preamble.`
     }
     const finalDocs = merged.slice(0, 6)
     if (finalDocs.length > 0) {
-      institutionalContext = finalDocs.map((d: any) => d.content).join('\n\n')
+      // Label each chunk with the document it came from so COR attributes to the correct source
+      // and does NOT mislabel a general reference (e.g. another hospital's manual) as this user's own protocol.
+      institutionalContext = finalDocs.map((d: any) => {
+        const name = d.source_file && d.source_file !== 'Manual Entry' && d.source_file !== '__folder__' ? d.source_file : 'Saved note/entry'
+        return `[From document: ${name}]\n${d.content}`
+      }).join('\n\n')
     }
   } catch { /* institutional search failure shouldn't block chat */ }
 
@@ -345,7 +350,11 @@ Apply these SILENTLY and naturally — just give the corrected answer as if it w
   }))
 
   const institutionalSection = institutionalContext
-    ? `\n\nINSTITUTIONAL KNOWLEDGE — these are THIS institution's own saved protocols, policies, and case notes. They are the AUTHORITATIVE source for how this institution does things. When any of it is relevant to the question, base your answer on it FIRST and state plainly that it comes from the institution's saved protocols. Only after that should you add general best-practice guidance to supplement. If two saved rules appear to conflict, prefer the one specific to this institution over a general one.
+    ? `\n\nKNOWLEDGE BASE — documents saved in this account's knowledge base. Each chunk is prefixed with "[From document: NAME]" telling you which document it came from. When relevant, base your answer on it and add general best-practice guidance to supplement.
+CRITICAL — ATTRIBUTION: You MUST attribute information to the SPECIFIC document it came from, by its name (e.g. "Per the [document name] in your knowledge base…").
+- Do NOT call a document "your institution's protocol" or "your saved protocol" unless the document's name clearly belongs to THIS user's institution. Many saved documents are general reference material or manuals from OTHER hospitals — never present those as this user's own institutional protocol.
+- If a document is clearly from another institution or is generic reference material, say so plainly (e.g. "A reference document in your knowledge base, the [name], states…"). Do not imply it is this user's protocol.
+- If you are unsure whether a document is this institution's own, describe it neutrally as "a document in your knowledge base" and name it — do not guess ownership.
 ${institutionalContext}`
     : ''
 
@@ -395,7 +404,7 @@ Your formatting style — clean and easy to scan:
   List the guidelines, societies, studies, or institutional sources behind your answer — e.g. "SOURCES: AmSECT Standards & Guidelines | ELSO Guidelines | Your institution's protocol". If it is purely general knowledge, write "SOURCES: General perfusion practice". This line is stripped by the app and shown as clickable source chips, so it must be present on every answer.
 
 When answering — ALWAYS in this order:
-1. CHECK INSTITUTIONAL KNOWLEDGE AND THE USER'S NOTES FIRST. If anything above is relevant to the question, lead with it and label it clearly (e.g. "Per your institution's saved protocol:" or "From Dr. Catrip's saved preferences:"). This is the most important rule — the user wants their own institution's protocols to drive the answer.
+1. CHECK THE KNOWLEDGE BASE AND THE USER'S NOTES FIRST. If anything above is relevant, lead with it and attribute it to the SPECIFIC document by name (e.g. "Per the [document name] in your knowledge base:" or "From Dr. Catrip's saved preferences:"). Follow the ATTRIBUTION rules above — do NOT call a document "your institution's protocol" unless it clearly is one; some saved documents are reference material from other hospitals.
 2. THEN supplement with general/outside knowledge only if it genuinely adds value, and clearly mark it as such (e.g. "To supplement (general practice):").
 3. If there is NO relevant institutional knowledge above for this question, say so plainly (e.g. "I don't have an institutional protocol saved for this — here's general guidance:") and then answer from your expertise.
 - Be honest about sources: NEVER say information came from institutional records if it did not, and NEVER claim you lack a protocol when relevant institutional knowledge IS provided above. If a protocol is shown above, you HAVE it — use it.
