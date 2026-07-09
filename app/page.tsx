@@ -870,7 +870,9 @@ export default function Home() {
       const res = await fetch(`/api/document?name=${encodeURIComponent(name)}&groupId=${userGroupId || ''}&userId=${user?.id || ''}`)
       const data = await res.json()
       if (!res.ok || data.error) { setViewingDoc({ name, content: '', loading: false, error: data.error || 'Could not open this document.' }); return }
-      setViewingDoc({ name, content: data.content || '(empty document)', loading: false })
+      // Collapse the excessive blank lines that text extraction adds between every line.
+      const clean = (data.content || '').replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim()
+      setViewingDoc({ name, content: clean || '(empty document)', loading: false })
     } catch { setViewingDoc({ name, content: '', loading: false, error: 'Could not open this document.' }) }
   }
 
