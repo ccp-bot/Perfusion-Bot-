@@ -7,6 +7,33 @@ import CorThinking from './CorThinking'
 const CATEGORIES = ['Protocol', 'Case Notes', 'Equipment', 'Policy', 'Logbook', 'Checklists', 'Charting']
 const SUPER_OWNER_EMAIL = 'cliftonmarschel@gmail.com'
 
+// Known clinical sources → their official site, so citation chips are clickable.
+const SOURCE_LINKS: { [k: string]: string } = {
+  'amsect': 'https://www.amsect.org',
+  'elso': 'https://www.elso.org',
+  'society of thoracic surgeons': 'https://www.sts.org',
+  'sts': 'https://www.sts.org',
+  'scahq': 'https://www.scahq.org',
+  'sca': 'https://www.scahq.org',
+}
+function sourceUrl(name: string): string | null {
+  const n = name.toLowerCase()
+  for (const key in SOURCE_LINKS) if (n.includes(key)) return SOURCE_LINKS[key]
+  return null
+}
+// Pull a trailing "SOURCES: a | b | c" line out of a COR answer → clean text + chips.
+function parseSources(content: string): { text: string; sources: string[] } {
+  if (!content) return { text: content, sources: [] }
+  const idx = content.search(/(^|\n)\s*SOURCES:/i)
+  if (idx === -1) return { text: content, sources: [] }
+  const before = content.slice(0, idx).trimEnd()
+  const after = content.slice(idx).replace(/^\s*\n?/, '')
+  const lines = after.split('\n')
+  const sources = lines[0].replace(/^\s*SOURCES:\s*/i, '').split('|').map(s => s.trim()).filter(Boolean)
+  const rest = lines.slice(1).join('\n').trim()
+  return { text: (before + (rest ? '\n' + rest : '')).trim(), sources }
+}
+
 // Format any date string as MM/DD/YYYY (e.g. 06/15/2026). Handles yyyy-mm-dd without timezone drift.
 function fmtMDY(s: string): string {
   if (!s) return ''
@@ -3209,7 +3236,26 @@ export default function Home() {
               {m.role === 'assistant' && <img src="/cor-avatar.png" alt="COR" style={{ width: '44px', height: '44px', objectFit: 'contain', marginRight: '8px', flexShrink: 0, marginTop: '2px' }} />}
               <div className="msg-max-width" style={{ maxWidth: '68%', padding: '0.7rem 1rem', borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: m.role === 'user' ? '#e63946' : 'rgba(255,255,255,0.05)', border: m.role === 'user' ? 'none' : '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0', fontSize: '0.88rem', lineHeight: '1.65', whiteSpace: 'pre-wrap' }}>
                 {m.image && <img src={m.image} alt="attachment" style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: '0.5rem', display: 'block' }} />}
-                {m.content}
+                {m.role === 'assistant' ? (() => {
+                  const { text, sources } = parseSources(m.content)
+                  return (
+                    <>
+                      {text}
+                      {sources.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.35rem', marginTop: '0.7rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                          <span style={{ fontSize: '0.64rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.1rem' }}>Sources</span>
+                          {sources.map((s, si) => {
+                            const url = sourceUrl(s)
+                            const base = { fontSize: '0.7rem', padding: '0.2rem 0.55rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', whiteSpace: 'nowrap' as const, textDecoration: 'none' }
+                            return url
+                              ? <a key={si} href={url} target="_blank" rel="noreferrer" style={{ ...base, color: '#93c5fd', borderColor: 'rgba(99,102,241,0.35)' }}>{s} &#8599;</a>
+                              : <span key={si} style={{ ...base, color: '#94a3b8' }}>{s}</span>
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )
+                })() : m.content}
                 {m.role === 'assistant' && (
                   <div style={{ marginTop: '0.55rem' }}>
                     <button onClick={() => openReportModal(i)} title="Report a wrong answer to the COR team" style={{ background: 'transparent', border: 'none', fontSize: '0.7rem', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ color: '#f59e0b', fontSize: '0.82rem' }}>&#9888;</span><span style={{ color: '#94a3b8' }}>Something&rsquo;s wrong</span></button>
