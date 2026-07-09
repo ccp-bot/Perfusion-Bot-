@@ -240,9 +240,10 @@ export default function Home() {
     setShowNamePrompt(false)
   }
 
-  // Show the medical/legal disclaimer once per device until acknowledged.
+  // Show the medical/legal + data-sharing consent once per device until acknowledged.
+  // Bump this key whenever the consent text materially changes so everyone re-consents once.
   useEffect(() => {
-    if (typeof window !== 'undefined' && !localStorage.getItem('corDisclaimerAccepted')) {
+    if (typeof window !== 'undefined' && !localStorage.getItem('corConsent_v2')) {
       setShowDisclaimer(true)
     }
   }, [])
@@ -1964,7 +1965,7 @@ export default function Home() {
               <strong style={{ color: '#e63946' }}>Do not enter patient-identifying information</strong> (such as full patient names, MRN, or dates of birth). Keep all entries de-identified.
             </div>
             <button
-              onClick={() => { localStorage.setItem('corDisclaimerAccepted', '1'); setShowDisclaimer(false) }}
+              onClick={() => { localStorage.setItem('corConsent_v2', '1'); setShowDisclaimer(false) }}
               style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: 'none', background: '#e63946', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em' }}
             >
               I agree
