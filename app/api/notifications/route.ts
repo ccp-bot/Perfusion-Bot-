@@ -51,28 +51,37 @@ export async function POST(req: NextRequest) {
 
   if (!groupId || !category) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-  // Get all group members except the person who made the change
+  // Get all group members (rows may store only an email, with user_id null).
   const { data: members } = await supabase
     .from('group_members')
-    .select('user_id')
+    .select('user_id, email')
     .eq('group_id', groupId)
-    .not('user_id', 'is', null)
 
   if (!members || members.length === 0) return NextResponse.json({ success: true })
 
-  // Create a notification for each member (except the creator)
-  const notifications = members
-    .filter(m => m.user_id !== createdByUserId)
-    .map(m => ({
-      user_id: m.user_id,
-      group_id: groupId,
-      category,
-      message: message || `New ${category} entry added`,
-      created_by_email: createdByEmail || 'Unknown',
-      read: false,
-    }))
+  // Resolve each member's user_id — look up emails in profiles when the membership row has no user_id.
+  const emailsToResolve = members.filter(m => !m.user_id && m.email).map(m => (m.email || '').toLowerCase())
+  const emailToId: Record<string, string> = {}
+  if (emailsToResolve.length > 0) {
+    const { data: profs } = await supabase.from('profiles').select('user_id, email').in('email', emailsToResolve)
+    for (const p of (profs || [])) if (p.email && p.user_id) emailToId[p.email.toLowerCase()] = p.user_id
+  }
 
-  if (notifications.length === 0) return NextResponse.json({ success: true })
+  const targetIds = new Set<string>()
+  for (const m of members) {
+    const uid = m.user_id || emailToId[(m.email || '').toLowerCase()]
+    if (uid && uid !== createdByUserId) targetIds.add(uid)
+  }
+  if (targetIds.size === 0) return NextResponse.json({ success: true })
+
+  const notifications = Array.from(targetIds).map(uid => ({
+    user_id: uid,
+    group_id: groupId,
+    category,
+    message: message || `New ${category} entry added`,
+    created_by_email: createdByEmail || 'Unknown',
+    read: false,
+  }))
 
   const { error } = await supabase.from('notifications').insert(notifications)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
