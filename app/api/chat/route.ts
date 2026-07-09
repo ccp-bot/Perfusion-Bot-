@@ -241,6 +241,7 @@ Return only the summary, no preamble.`
   const priorUserMsgs = (messages || []).filter((m: any) => m.role === 'user').slice(-2).map((m: any) => m.content)
   const retrievalQuery = [...priorUserMsgs, message].filter(Boolean).join('\n').slice(0, 2000)
   let institutionalContext = ''
+  let usedDocs: string[] = [] // exact document names COR retrieved from, for click-to-open
   try {
     const embeddingResponse = await openai.embeddings.create({
       model: 'text-embedding-3-small',
@@ -304,6 +305,7 @@ Return only the summary, no preamble.`
         const name = d.source_file && d.source_file !== 'Manual Entry' && d.source_file !== '__folder__' ? d.source_file : 'Saved note/entry'
         return `[From document: ${name}]\n${d.content}`
       }).join('\n\n')
+      usedDocs = Array.from(new Set(finalDocs.map((d: any) => d.source_file).filter((n: any) => n && n !== 'Manual Entry' && n !== '__folder__')))
     }
   } catch { /* institutional search failure shouldn't block chat */ }
 
@@ -488,5 +490,5 @@ Only use these tags when the user is clearly reporting a real change, NOT when t
     answer = answer.replace(/\[(?:PROTOCOL|POLICY)_UPDATE:\s*.+?\]/, '').trim()
   }
 
-  return NextResponse.json({ answer })
+  return NextResponse.json({ answer, usedDocs })
 }

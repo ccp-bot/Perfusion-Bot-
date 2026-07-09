@@ -233,6 +233,7 @@ export default function Home() {
   const [caseFolder, setCaseFolder] = useState('')
   const [caseFolderOpen, setCaseFolderOpen] = useState(false)
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set())
+  const [viewingDoc, setViewingDoc] = useState<{ name: string; content: string; loading: boolean; error?: string } | null>(null)
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
   const [draggingCaseId, setDraggingCaseId] = useState<number | null>(null)
   const [caseNote, setCaseNote] = useState('')
@@ -862,6 +863,17 @@ export default function Home() {
   }
 
   // ── Teach COR (save a rule at personal / company / global scope) ──
+  // Open the exact source document COR cited and show its full text.
+  async function openDocument(name: string) {
+    setViewingDoc({ name, content: '', loading: true })
+    try {
+      const res = await fetch(`/api/document?name=${encodeURIComponent(name)}&groupId=${userGroupId || ''}&userId=${user?.id || ''}`)
+      const data = await res.json()
+      if (!res.ok || data.error) { setViewingDoc({ name, content: '', loading: false, error: data.error || 'Could not open this document.' }); return }
+      setViewingDoc({ name, content: data.content || '(empty document)', loading: false })
+    } catch { setViewingDoc({ name, content: '', loading: false, error: 'Could not open this document.' }) }
+  }
+
   function openTeachModal() {
     setTeachText(input.trim())
     setTeachStatus('')
@@ -1793,7 +1805,7 @@ export default function Home() {
         finalMessages = [...updatedMessages, assistantMsg]
         setMessages(finalMessages)
       } else {
-        const assistantMsg = { role: 'assistant', content: data.answer }
+        const assistantMsg = { role: 'assistant', content: data.answer, docs: data.usedDocs || [] }
         finalMessages = [...updatedMessages, assistantMsg]
         setMessages(finalMessages)
       }
@@ -3284,23 +3296,29 @@ export default function Home() {
                   return (
                     <>
                       <div style={{ whiteSpace: 'normal' }}>{renderRich(text)}</div>
-                      {sources.length > 0 && (() => {
+                      {(() => {
+                        const docs: string[] = (m as any).docs || []
+                        // COR's cited references, minus the ones that are actually the retrieved files (shown as file chips)
+                        const refs = sources.filter(s => !docs.some(dn => { const b = dn.toLowerCase().replace(/\.[a-z0-9]+$/i, ''); const sl = s.toLowerCase(); return sl.includes(b) || b.includes(sl) }))
+                        const total = docs.length + refs.length
+                        if (total === 0) return null
                         const open = expandedSources.has(i)
+                        const base = { fontSize: '0.68rem', padding: '0.18rem 0.5rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', textDecoration: 'none', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '260px', display: 'inline-block' }
+                        const linkStyle = { ...base, color: '#93c5fd', borderColor: 'rgba(99,102,241,0.35)', cursor: 'pointer' }
                         return (
                           <div style={{ marginTop: '0.6rem' }}>
                             <button onClick={() => setExpandedSources(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.66rem', cursor: 'pointer', padding: 0 }}>
-                              <span>&#128218;</span><span>{sources.length} source{sources.length !== 1 ? 's' : ''}</span><span style={{ fontSize: '0.55rem' }}>{open ? '▲' : '▼'}</span>
+                              <span>&#128218;</span><span>{total} source{total !== 1 ? 's' : ''}</span><span style={{ fontSize: '0.55rem' }}>{open ? '▲' : '▼'}</span>
                             </button>
                             {open && (
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.4rem' }}>
-                                {sources.map((s, si) => {
-                                  const isInstitution = /institution|institutional|your (saved )?protocol/i.test(s)
+                                {docs.map((dn, di) => (
+                                  <button key={'doc' + di} onClick={() => openDocument(dn)} title={`Open ${dn}`} style={{ ...base, color: '#86efac', borderColor: 'rgba(34,197,94,0.35)', cursor: 'pointer' }}>&#128196; {dn.replace(/\.[a-z0-9]+$/i, '')}</button>
+                                ))}
+                                {refs.map((s, si) => {
                                   const url = sourceUrl(s)
-                                  const base = { fontSize: '0.68rem', padding: '0.18rem 0.5rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', textDecoration: 'none' }
-                                  const linkStyle = { ...base, color: '#93c5fd', borderColor: 'rgba(99,102,241,0.35)', cursor: 'pointer' }
-                                  if (isInstitution) return <button key={si} onClick={() => openPanel('Protocol')} style={linkStyle}>{s} &#8594;</button>
-                                  if (url) return <a key={si} href={url} target="_blank" rel="noreferrer" style={linkStyle}>{s} &#8599;</a>
-                                  return <span key={si} style={{ ...base, color: '#94a3b8' }}>{s}</span>
+                                  if (url) return <a key={'ref' + si} href={url} target="_blank" rel="noreferrer" style={linkStyle}>{s} &#8599;</a>
+                                  return <span key={'ref' + si} style={{ ...base, color: '#94a3b8' }}>{s}</span>
                                 })}
                               </div>
                             )}
@@ -3529,6 +3547,23 @@ export default function Home() {
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button onClick={() => setConfirmDialog(null)} style={{ flex: 1, padding: '0.6rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#e2e8f0', fontSize: '0.84rem', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
               <button onClick={() => { const fn = confirmDialog.onConfirm; setConfirmDialog(null); fn() }} style={{ flex: 1, padding: '0.6rem', borderRadius: '10px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer' }}>{confirmDialog.confirmLabel || 'Confirm'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingDoc && (
+        <div onClick={() => setViewingDoc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', width: '100%', maxWidth: '640px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                <span style={{ fontSize: '1.1rem' }}>&#128196;</span>
+                <span style={{ fontSize: '0.9rem', color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{viewingDoc.name}</span>
+              </div>
+              <button onClick={() => setViewingDoc(null)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
+            </div>
+            <div style={{ padding: '1.1rem 1.25rem', overflowY: 'auto', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
+              {viewingDoc.loading ? 'Loading document…' : viewingDoc.error ? <span style={{ color: '#e63946' }}>{viewingDoc.error}</span> : viewingDoc.content}
             </div>
           </div>
         </div>
