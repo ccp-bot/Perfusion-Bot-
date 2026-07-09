@@ -1957,7 +1957,9 @@ export default function Home() {
             <div style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: '1.65', marginBottom: '1.25rem' }}>
               COR is an <strong style={{ color: '#e2e8f0' }}>informational and educational tool</strong> for trained cardiovascular perfusionists. It does <strong style={{ color: '#e2e8f0' }}>not</strong> provide medical advice, diagnosis, or treatment, and is <strong style={{ color: '#e2e8f0' }}>not a substitute</strong> for your professional clinical judgment, your institution&apos;s protocols, or applicable standards of care.
               <br /><br />
-              AI responses may be inaccurate or incomplete. Always verify critical information independently, and never rely on COR for emergency or patient-specific decisions. By continuing, you confirm you are a qualified professional using this tool at your own discretion.
+              AI responses may be inaccurate or incomplete and should be independently verified against primary sources. Always verify critical information independently, and never rely on COR for emergency or patient-specific decisions. By continuing, you confirm you are a qualified professional using this tool at your own discretion.
+              <br /><br />
+              <strong style={{ color: '#e2e8f0' }}>Data &amp; third-party AI.</strong> To generate responses, the questions and text you enter are sent to third-party AI providers — <strong style={{ color: '#e2e8f0' }}>Anthropic (Claude)</strong> and <strong style={{ color: '#e2e8f0' }}>OpenAI</strong> — who process them under their own privacy terms. By tapping &ldquo;I agree&rdquo; you consent to this processing. See our <a href="/privacy" target="_blank" style={{ color: '#e63946' }}>Privacy Policy</a>.
               <br /><br />
               <strong style={{ color: '#e63946' }}>Do not enter patient-identifying information</strong> (such as full patient names, MRN, or dates of birth). Keep all entries de-identified.
             </div>
@@ -1965,7 +1967,7 @@ export default function Home() {
               onClick={() => { localStorage.setItem('corDisclaimerAccepted', '1'); setShowDisclaimer(false) }}
               style={{ width: '100%', padding: '0.8rem', borderRadius: '12px', border: 'none', background: '#e63946', color: '#ffffff', fontSize: '0.88rem', fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em' }}
             >
-              I understand and agree
+              I agree
             </button>
           </div>
         </div>
