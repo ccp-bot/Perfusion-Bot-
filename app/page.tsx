@@ -233,7 +233,7 @@ export default function Home() {
   const [caseFolder, setCaseFolder] = useState('')
   const [caseFolderOpen, setCaseFolderOpen] = useState(false)
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set())
-  const [viewingDoc, setViewingDoc] = useState<{ name: string; content: string; loading: boolean; error?: string } | null>(null)
+  const [viewingDoc, setViewingDoc] = useState<{ name: string; content: string; loading: boolean; error?: string; fileUrl?: string | null } | null>(null)
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
   const [draggingCaseId, setDraggingCaseId] = useState<number | null>(null)
   const [caseNote, setCaseNote] = useState('')
@@ -872,7 +872,7 @@ export default function Home() {
       if (!res.ok || data.error) { setViewingDoc({ name, content: '', loading: false, error: data.error || 'Could not open this document.' }); return }
       // Collapse the excessive blank lines that text extraction adds between every line.
       const clean = (data.content || '').replace(/[ \t]+\n/g, '\n').replace(/\n{2,}/g, '\n').trim()
-      setViewingDoc({ name, content: clean || '(empty document)', loading: false })
+      setViewingDoc({ name, content: clean || '(empty document)', fileUrl: data.fileUrl || null, loading: false })
     } catch { setViewingDoc({ name, content: '', loading: false, error: 'Could not open this document.' }) }
   }
 
@@ -3556,17 +3556,30 @@ export default function Home() {
 
       {viewingDoc && (
         <div onClick={() => setViewingDoc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', width: '100%', maxWidth: '640px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', width: '100%', maxWidth: viewingDoc.fileUrl ? '900px' : '640px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
                 <span style={{ fontSize: '1.1rem' }}>&#128196;</span>
                 <span style={{ fontSize: '0.9rem', color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{viewingDoc.name}</span>
               </div>
-              <button onClick={() => setViewingDoc(null)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+                {viewingDoc.fileUrl && <a href={viewingDoc.fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: '#93c5fd' }}>Download</a>}
+                <button onClick={() => setViewingDoc(null)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1rem', cursor: 'pointer' }}>&#10005;</button>
+              </div>
             </div>
-            <div style={{ padding: '1.1rem 1.25rem', overflowY: 'auto', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-              {viewingDoc.loading ? 'Loading document…' : viewingDoc.error ? <span style={{ color: '#e63946' }}>{viewingDoc.error}</span> : viewingDoc.content}
-            </div>
+            {(() => {
+              if (viewingDoc.loading) return <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>Loading document…</div>
+              if (viewingDoc.error) return <div style={{ padding: '1.5rem', color: '#e63946', fontSize: '0.85rem' }}>{viewingDoc.error}</div>
+              const ext = (viewingDoc.name.split('.').pop() || '').toLowerCase()
+              const url = viewingDoc.fileUrl
+              if (url) {
+                if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return <div style={{ padding: '1rem', overflowY: 'auto' }}><img src={url} alt={viewingDoc.name} style={{ maxWidth: '100%', borderRadius: '8px' }} /></div>
+                if (ext === 'pdf') return <iframe src={url} title={viewingDoc.name} style={{ width: '100%', height: '70vh', border: 'none', background: '#fff' }} />
+                if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) return <iframe src={`https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`} title={viewingDoc.name} style={{ width: '100%', height: '70vh', border: 'none', background: '#fff' }} />
+              }
+              // No stored original (older upload) — show the clean extracted text.
+              return <div style={{ padding: '1.1rem 1.25rem', overflowY: 'auto', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{viewingDoc.content}</div>
+            })()}
           </div>
         </div>
       )}

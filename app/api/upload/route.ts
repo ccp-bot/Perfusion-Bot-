@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
+import { randomUUID } from 'crypto'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
+// Service-role client for Storage writes (server-side only). Falls back to anon if not configured.
+const admin = process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  : supabase
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 // Split text into chunks of roughly maxChars, breaking on paragraph boundaries
@@ -53,10 +58,15 @@ export async function POST(req: NextRequest) {
 
   let textContent = ''
   let fileName = 'Manual Entry'
+  let fileBuffer: Buffer | null = null
+  let fileType = ''
+  let fileUrl: string | null = null
 
   if (file) {
     fileName = file.name
+    fileType = file.type || ''
     const buffer = Buffer.from(await file.arrayBuffer())
+    fileBuffer = buffer
     const ext = file.name.split('.').pop()?.toLowerCase()
 
     try {
@@ -108,6 +118,20 @@ export async function POST(req: NextRequest) {
     await arch
   }
 
+  // Save the ORIGINAL file to storage so it can be viewed later (real PDF/Word/image), not just text.
+  if (file && fileBuffer) {
+    try {
+      await admin.storage.createBucket('originals', { public: true }).then(() => {}).catch(() => {})
+      const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${groupId || userId || 'x'}/${randomUUID()}-${safe}`
+      const { error: upErr } = await admin.storage.from('originals').upload(path, fileBuffer, { contentType: fileType || 'application/octet-stream', upsert: true })
+      if (!upErr) {
+        const { data: pub } = admin.storage.from('originals').getPublicUrl(path)
+        fileUrl = pub?.publicUrl || null
+      }
+    } catch { /* storage is optional — the extracted text is still saved */ }
+  }
+
   // Chunk the text
   const chunks = chunkText(textContent)
   let savedCount = 0
@@ -136,6 +160,7 @@ export async function POST(req: NextRequest) {
       source_file: fileName,
       folder: folder || null,
       uploaded_by: userEmail || null,
+      file_path: fileUrl,
       created_at: new Date().toISOString(),
     })
 

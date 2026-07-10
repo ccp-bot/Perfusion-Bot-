@@ -15,11 +15,12 @@ export async function GET(req: NextRequest) {
   const userId = searchParams.get('userId')
   if (!name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
 
-  const { data, error } = await supabase
-    .from('documents')
-    .select('content, group_id, institution_id, user_id, category, folder, created_at, archived')
-    .eq('source_file', name)
-    .order('created_at', { ascending: true })
+  async function fetchRows(sel: string) {
+    return supabase.from('documents').select(sel).eq('source_file', name).order('created_at', { ascending: true })
+  }
+  // Try to include file_path; fall back if that column hasn't been added yet.
+  let { data, error }: any = await fetchRows('content, group_id, institution_id, user_id, category, folder, created_at, archived, file_path')
+  if (error) ({ data, error } = await fetchRows('content, group_id, institution_id, user_id, category, folder, created_at, archived'))
 
   if (error || !data || data.length === 0) {
     return NextResponse.json({ error: 'Document not found' }, { status: 404 })
@@ -37,5 +38,6 @@ export async function GET(req: NextRequest) {
   if (visible.length === 0) return NextResponse.json({ error: 'Not authorized to view this document' }, { status: 403 })
 
   const content = visible.map((d: any) => (d.content || '').trim()).filter(Boolean).join('\n\n')
-  return NextResponse.json({ name, content, category: visible[0].category, folder: visible[0].folder })
+  const fileUrl = visible.map((d: any) => d.file_path).find((u: any) => u) || null
+  return NextResponse.json({ name, content, fileUrl, category: visible[0].category, folder: visible[0].folder })
 }
