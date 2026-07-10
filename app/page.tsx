@@ -3294,6 +3294,7 @@ export default function Home() {
                         // Drop vague self-references to the knowledge base — those are already the green file chips.
                         const isGenericKB = (s: string) => /knowledge base|saved (reference|protocol|note|document|entry)|reference document|your (institution|notes|saved|protocol)|institution.?s (saved )?protocol|institutional (protocol|document|rule)/i.test(s)
                         const refs = sources.filter(s => !isGenericKB(s) && !docs.some(dn => { const b = dn.toLowerCase().replace(/\.[a-z0-9]+$/i, ''); const sl = s.toLowerCase(); return sl.includes(b) || b.includes(sl) }))
+                        const question = messages.slice(0, i).reverse().find((mm: any) => mm.role === 'user')?.content || ''
                         const total = docs.length + refs.length
                         if (total === 0) return null
                         const open = expandedSources.has(i)
@@ -3310,7 +3311,10 @@ export default function Home() {
                                   <button key={'doc' + di} onClick={() => openDocument(dn)} title={`Open ${dn}`} style={{ ...base, color: '#86efac', borderColor: 'rgba(34,197,94,0.35)', cursor: 'pointer' }}>&#128196; {dn.replace(/\.[a-z0-9]+$/i, '')}</button>
                                 ))}
                                 {refs.map((s, si) => {
-                                  const url = sourceUrl(s) || `https://www.google.com/search?q=${encodeURIComponent(s + ' cardiovascular perfusion')}`
+                                  // Search for the exact source (lands on the specific guideline) rather than a society homepage.
+                                  const generic = /^general/i.test(s.trim())
+                                  const query = generic && question ? `${question} perfusion guideline` : `${s}${/guideline|standard|elso|amsect|sts|sca/i.test(s) ? '' : ' perfusion'}`
+                                  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`
                                   return <a key={'ref' + si} href={url} target="_blank" rel="noreferrer" style={linkStyle}>{s} &#8599;</a>
                                 })}
                               </div>
