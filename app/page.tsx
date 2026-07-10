@@ -2924,17 +2924,7 @@ export default function Home() {
                           </div>
                         </div>
                       )
-                    ) : (
-                      <div style={{ display: 'flex', gap: '0.4rem' }}>
-                        <input
-                          value={manualEntry}
-                          onChange={e => setManualEntry(e.target.value)}
-                          placeholder="Type a manual entry..."
-                          style={{ flex: 1, padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.78rem', outline: 'none', boxSizing: 'border-box' }}
-                        />
-                        <button onClick={saveManualEntry} disabled={uploading || !manualEntry.trim()} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: 'none', background: !manualEntry.trim() ? '#2d3748' : '#e63946', color: 'white', fontSize: '0.78rem', cursor: !manualEntry.trim() ? 'not-allowed' : 'pointer', flexShrink: 0 }}>+</button>
-                      </div>
-                    )}
+                    ) : null}
                     {uploadStatus && <div style={{ fontSize: '0.7rem', color: uploadStatus.includes('fail') || uploadStatus.includes('error') || uploadStatus.includes('Only') || uploadStatus.includes('Fill') ? '#e63946' : '#22c55e', marginTop: '0.4rem' }}>{uploadStatus}</div>}
                   </div>
                 )}

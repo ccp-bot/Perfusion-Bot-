@@ -71,11 +71,12 @@ export async function POST(req: NextRequest) {
 
     try {
       if (ext === 'pdf') {
-        // @ts-ignore - pdf-parse types are inconsistent
-        const pdfParse = (await import('pdf-parse')) as any
-        const parseFn = pdfParse.default || pdfParse
-        const pdfData = await parseFn(buffer)
-        textContent = pdfData.text
+        // pdf-parse v2 API: new PDFParse({ data }).getText()
+        const { PDFParse } = (await import('pdf-parse')) as any
+        const parser = new PDFParse({ data: new Uint8Array(buffer) })
+        const result = await parser.getText()
+        textContent = result.text || ''
+        try { await parser.destroy() } catch { /* ignore */ }
       } else if (ext === 'docx' || ext === 'doc') {
         const mammoth = await import('mammoth')
         const result = await mammoth.extractRawText({ buffer })
