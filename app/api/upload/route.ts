@@ -71,12 +71,11 @@ export async function POST(req: NextRequest) {
 
     try {
       if (ext === 'pdf') {
-        // pdf-parse v2 API: new PDFParse({ data }).getText()
-        const { PDFParse } = (await import('pdf-parse')) as any
-        const parser = new PDFParse({ data: new Uint8Array(buffer) })
-        const result = await parser.getText()
-        textContent = result.text || ''
-        try { await parser.destroy() } catch { /* ignore */ }
+        // unpdf — serverless-friendly PDF text extraction (pdf-parse/pdf.js crash on Vercel).
+        const { extractText, getDocumentProxy } = await import('unpdf')
+        const pdf = await getDocumentProxy(new Uint8Array(buffer))
+        const { text } = await extractText(pdf, { mergePages: true })
+        textContent = Array.isArray(text) ? text.join('\n') : (text || '')
       } else if (ext === 'docx' || ext === 'doc') {
         const mammoth = await import('mammoth')
         const result = await mammoth.extractRawText({ buffer })
