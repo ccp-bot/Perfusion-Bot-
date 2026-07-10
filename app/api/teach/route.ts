@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     if (!folder) return NextResponse.json({ error: 'Missing folder' }, { status: 400 })
     const { error } = await supabase.from('documents').insert({
       content: '', category: 'Protocol', group_id: null, institution_id: 'GLOBAL',
-      user_id: userId || null, folder, source_file: '__folder__', archived: false, created_at: new Date().toISOString(),
+      user_id: null, folder, source_file: '__folder__', archived: false, created_at: new Date().toISOString(),
     })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     const embedding = await embed(content)
     const { error } = await supabase.from('documents').insert({
       content, embedding, category: 'Protocol', group_id: null, institution_id: 'GLOBAL',
-      user_id: userId || null, folder: folder ? String(folder) : null, source_file: (title || 'Global rule').toString().slice(0, 200),
+      user_id: null, folder: folder ? String(folder) : null, source_file: (title || 'Global rule').toString().slice(0, 200),
       archived: false, uploaded_by: userEmail || null, created_at: new Date().toISOString(),
     })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
