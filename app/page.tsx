@@ -959,6 +959,21 @@ export default function Home() {
       setReports(prev => prev.filter(x => x.id !== r.id))
     } catch { alert('Could not apply this report.') }
   }
+  // Apply a report's fix to the reporter's own institution (company scope), not globally.
+  async function teachInstitutionFromReport(r: any) {
+    const text = (reportEdits[r.id] ?? (r.suggested_answer || r.whats_wrong) ?? '').trim()
+    if (!text || !user || !r.group_id) return
+    try {
+      const res = await fetch('/api/teach', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'company', text, groupId: r.group_id, userId: user.id, userEmail: user.email, userRole })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not apply to that institution'); return }
+      await fetch('/api/reports', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, status: 'resolved', email: user.email }) })
+      setReports(prev => prev.filter(x => x.id !== r.id))
+    } catch { alert('Could not apply this report.') }
+  }
   async function dismissReport(r: any) {
     if (!user) return
     setReports(prev => prev.filter(x => x.id !== r.id))
@@ -2361,10 +2376,19 @@ export default function Home() {
                       rows={3}
                       style={{ width: '100%', padding: '0.5rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(99,102,241,0.35)', background: 'rgba(99,102,241,0.06)', color: '#e2e8f0', fontSize: '0.76rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.45, marginBottom: '0.5rem' }}
                     />
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <button onClick={() => teachGloballyFromReport(r)} disabled={!(reportEdits[r.id] ?? (r.suggested_answer || r.whats_wrong) ?? '').trim()} title="Save this lesson as global knowledge for all companies" style={{ flex: 1, padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#6366f1', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127758; Teach COR globally</button>
-                      <button onClick={() => dismissReport(r)} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>Dismiss</button>
-                    </div>
+                    {(() => {
+                      const hasText = !!(reportEdits[r.id] ?? (r.suggested_answer || r.whats_wrong) ?? '').trim()
+                      const instName = allGroups.find((g: any) => String(g.group_id) === String(r.group_id))?.group?.name
+                      return (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                          {r.group_id && (
+                            <button onClick={() => teachInstitutionFromReport(r)} disabled={!hasText} title="Apply this fix to the reporter's institution only" style={{ flex: '1 1 45%', padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127973; Teach {instName ? instName.split(' ')[0] : 'their institution'}</button>
+                          )}
+                          <button onClick={() => teachGloballyFromReport(r)} disabled={!hasText} title="Save this lesson as global knowledge for all companies" style={{ flex: '1 1 45%', padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#6366f1', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127758; Teach globally</button>
+                          <button onClick={() => dismissReport(r)} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>Dismiss</button>
+                        </div>
+                      )
+                    })()}
                   </div>
                 ))}
               </div>
