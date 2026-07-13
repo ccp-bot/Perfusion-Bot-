@@ -26,13 +26,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Document not found' }, { status: 404 })
   }
 
-  // Only include chunks the user is allowed to see (their group, global, legacy, or their own).
+  // Strict isolation: only platform-global docs, the user's own group, or their own personal docs.
   const visible = data.filter((d: any) =>
     !d.archived && (
       d.institution_id === 'GLOBAL' ||
-      d.institution_id === 'hospital_a' ||
       (groupId && String(d.group_id) === String(groupId)) ||
-      (userId && String(d.user_id) === String(userId))
+      (userId && d.user_id && String(d.user_id) === String(userId))
     )
   )
   if (visible.length === 0) return NextResponse.json({ error: 'Not authorized to view this document' }, { status: 403 })

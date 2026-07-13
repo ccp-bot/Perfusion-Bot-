@@ -250,10 +250,13 @@ Return only the summary, no preamble.`
     const embedding = embeddingResponse.data[0].embedding
 
     // Visible if: platform-wide GLOBAL knowledge (everyone), this user's company, or legacy 'hospital_a'.
+    // Strict isolation: a user may only see platform-wide GLOBAL rules, their OWN group's docs,
+    // or their OWN personal docs. Never another institution's or user's content.
     const inGroup = (info: any) =>
       info && !info.archived && (
         info.institution_id === 'GLOBAL' ||
-        !groupId || String(info.group_id) === String(groupId) || info.institution_id === 'hospital_a'
+        (!!groupId && String(info.group_id) === String(groupId)) ||
+        (!!userId && !!info.user_id && String(info.user_id) === String(userId))
       )
 
     // 1) Semantic search across all docs.
@@ -267,7 +270,7 @@ Return only the summary, no preamble.`
     if (matches.length > 0) {
       // match_documents only returns id/content/similarity — look up each match's group/institution to scope it.
       const ids = matches.map((m: any) => m.id)
-      const { data: meta } = await supabase.from('documents').select('id, group_id, institution_id, archived, source_file').in('id', ids)
+      const { data: meta } = await supabase.from('documents').select('id, group_id, institution_id, archived, source_file, user_id').in('id', ids)
       const metaById: Record<string, any> = {}
       for (const m of (meta || [])) metaById[m.id] = m
       semanticDocs = matches.filter((m: any) => inGroup(metaById[m.id])).map((m: any) => ({ id: m.id, content: m.content, source_file: metaById[m.id]?.source_file })).slice(0, 5)
@@ -281,7 +284,7 @@ Return only the summary, no preamble.`
     if (terms.length > 0) {
       const orExpr = terms.map((t: string) => `content.ilike.%${t}%`).join(',')
       const { data: kw } = await supabase.from('documents')
-        .select('id, content, group_id, institution_id, archived, source_file')
+        .select('id, content, group_id, institution_id, archived, source_file, user_id')
         .in('category', ['Protocol', 'Policy'])
         .or(orExpr)
         .limit(20)
