@@ -329,6 +329,19 @@ Return only the summary, no preamble.`
 Apply these SILENTLY and naturally — just give the corrected answer as if it were always the right one. Do NOT announce that a correction was applied, do NOT write "per institutional correction" or similar, do NOT explain why, and do NOT state obvious facts. Keep the answer clean and concise:\n- ${overrideRules.join('\n- ')}`
     : ''
 
+  // Answer-format templates (owner-defined) — structure the answer when the question matches a topic.
+  let answerTemplates: { topic: string; format: string }[] = []
+  try {
+    let tq = supabase.from('documents').select('source_file, content').eq('category', 'ResponseTemplate').limit(20)
+    if (groupId) tq = tq.eq('group_id', groupId)
+    else if (userId) tq = tq.eq('user_id', userId)
+    const { data: t } = await (groupId || userId ? tq : Promise.resolve({ data: [] } as any))
+    answerTemplates = (t || []).map((d: any) => ({ topic: d.source_file || '', format: d.content || '' })).filter((x: any) => x.topic && x.format)
+  } catch { /* templates are optional */ }
+  const templatesSection = answerTemplates.length > 0
+    ? `\n\nANSWER FORMAT TEMPLATES — if the user's question clearly matches one of these topics, you MUST structure your answer using that template's exact format and headings, filling each section from the knowledge base and your expertise. Omit a section only if it truly does not apply. If the question matches no template, answer normally. Never mention that a template was used.\n${answerTemplates.map(t => `• TOPIC: ${t.topic}\n  FORMAT:\n${t.format}`).join('\n\n')}`
+    : ''
+
   // Pull the user's own notes so COR can reference them (scoped to this user).
   let userNotesContext = ''
   if (userId) {
@@ -439,7 +452,7 @@ When a user tells you about a change to a protocol, procedure, equipment prefere
    [PROTOCOL_UPDATE: your concise summary of the change here] — if it's a protocol/procedure/equipment change
    [POLICY_UPDATE: your concise summary of the change here] — if it's an institutional policy change
 
-Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).${overrideSection}${institutionalSection}${notesSection}`,
+Only use these tags when the user is clearly reporting a real change, NOT when they are asking questions about protocols or policies. The summary inside the tag should be factual and concise (1-2 sentences).${templatesSection}${overrideSection}${institutionalSection}${notesSection}`,
     messages: [
       ...conversationHistory,
       { role: 'user', content: message }

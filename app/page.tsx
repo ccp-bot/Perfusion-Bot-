@@ -190,6 +190,9 @@ export default function Home() {
   // COR Brain — global taught knowledge management
   const [globalRules, setGlobalRules] = useState<any[]>([])
   const [globalRulesLoading, setGlobalRulesLoading] = useState(false)
+  const [answerTemplates, setAnswerTemplates] = useState<any[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [templateForm, setTemplateForm] = useState<{ id?: number; topic: string; format: string } | null>(null)
   const [brainFolder, setBrainFolder] = useState('')
   const [brainNewFolder, setBrainNewFolder] = useState('')
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
@@ -1033,6 +1036,40 @@ export default function Home() {
     }, 'Delete')
   }
 
+  // ── Answer-format templates (owner/admin define the structure for common questions) ──
+  async function fetchAnswerTemplates() {
+    if (!user) return
+    setTemplatesLoading(true)
+    try {
+      const res = await fetch(`/api/answer-templates?groupId=${userGroupId || ''}&userId=${user.id}`)
+      const data = await res.json()
+      setAnswerTemplates(data.templates || [])
+    } catch { setAnswerTemplates([]) }
+    setTemplatesLoading(false)
+  }
+  async function saveTemplate() {
+    if (!templateForm?.topic.trim() || !templateForm?.format.trim() || !user) return
+    try {
+      const body: any = { topic: templateForm.topic.trim(), format: templateForm.format.trim() }
+      let res
+      if (templateForm.id) {
+        res = await fetch('/api/answer-templates', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: templateForm.id, ...body }) })
+      } else {
+        res = await fetch('/api/answer-templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, groupId: userGroupId || '', userId: user.id, userEmail: user.email, userRole }) })
+      }
+      const data = await res.json()
+      if (!res.ok || data.error) { alert(data.error || 'Could not save template'); return }
+      setTemplateForm(null)
+      fetchAnswerTemplates()
+    } catch { alert('Could not save template') }
+  }
+  function deleteTemplate(id: number) {
+    askConfirm('Delete this template?', async () => {
+      setAnswerTemplates(prev => prev.filter(t => t.id !== id))
+      try { await fetch('/api/answer-templates', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }) } catch {}
+    }, 'Delete')
+  }
+
   // ── Workplace profiles (filled once, reused for ABCP export) — synced to the user's account ──
   const EMPTY_WP = { id: '', label: '', hospitalName: '', hospitalStreet: '', hospitalCity: '', hospitalState: '', hospitalZip: '', authorityName: '', authorityTitle: '', authorityPhone: '', authorityEmail: '' }
   async function fetchWorkplaces() {
@@ -1108,7 +1145,7 @@ export default function Home() {
     setActivePanel(key)
     setOpenNoteId(null)
     setCurrentFolder('')
-    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); setAddingRule(false); fetchGlobalRules() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
+    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); setAddingRule(false); fetchGlobalRules() } else if (key === 'Templates') { setTemplateForm(null); fetchAnswerTemplates() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
@@ -2121,6 +2158,15 @@ export default function Home() {
                 <span style={{ fontSize: '0.82rem', color: activePanel === 'Admin' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Admin' ? '600' : '400' }}>Admin</span>
                 {activePanel === 'Admin' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
               </button>
+              <button
+                onClick={() => { openPanel('Templates'); setSidebarOpen(false) }}
+                className={`sidebar-btn${activePanel === 'Templates' ? ' active' : ''}`}
+                style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
+              >
+                <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#128203;</span>
+                <span style={{ fontSize: '0.82rem', color: activePanel === 'Templates' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Templates' ? '600' : '400' }}>Templates</span>
+                {activePanel === 'Templates' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
+              </button>
               {user?.email === SUPER_OWNER_EMAIL && (
                 <button
                   onClick={() => { openPanel('Users'); setSidebarOpen(false) }}
@@ -2182,7 +2228,7 @@ export default function Home() {
             <div>
               <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel === 'Brain' ? 'COR Brain' : activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.filter((e: any) => e.source_file !== '__folder__').length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'Templates' ? `${answerTemplates.length} templates` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.filter((e: any) => e.source_file !== '__folder__').length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -2413,6 +2459,41 @@ export default function Home() {
                 </div>
               )
             })()}
+
+            {activePanel === 'Templates' && (
+              <div>
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8', lineHeight: 1.5, marginBottom: '0.8rem' }}>Define the answer format for a topic. When someone asks about it, COR structures its reply this way — filling each section from your protocols and knowledge.</div>
+                {!templateForm && (
+                  <button onClick={() => setTemplateForm({ topic: '', format: '' })} style={{ width: '100%', padding: '0.55rem', marginBottom: '0.8rem', borderRadius: '10px', border: '1px solid rgba(230,57,70,0.4)', background: 'rgba(230,57,70,0.1)', color: '#fca5a5', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>&#43; New template</button>
+                )}
+                {templateForm && (
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(230,57,70,0.4)', borderRadius: '10px', padding: '0.8rem', marginBottom: '0.8rem' }}>
+                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.2rem' }}>Topic — what question(s) this applies to</div>
+                    <input value={templateForm.topic} onChange={e => setTemplateForm(f => f ? { ...f, topic: e.target.value } : f)} placeholder="e.g. Adult case setup" style={{ ...fieldInputStyle, marginBottom: '0.5rem' }} />
+                    <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.2rem' }}>Format — the structure/headings COR should use</div>
+                    <textarea value={templateForm.format} onChange={e => setTemplateForm(f => f ? { ...f, format: e.target.value } : f)} rows={9} placeholder={"ROOM SUPPLIES:\n- ...\n\nCPB SETUP:\n- ...\n\nPRIME:\n- ...\n\nCHECKLIST BEFORE GO:\n- ..."} style={{ ...fieldInputStyle, resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.5rem' }} />
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <button onClick={saveTemplate} disabled={!templateForm.topic.trim() || !templateForm.format.trim()} style={{ flex: 1, padding: '0.5rem', borderRadius: '8px', border: 'none', background: templateForm.topic.trim() && templateForm.format.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>{templateForm.id ? 'Save changes' : 'Save template'}</button>
+                      <button onClick={() => setTemplateForm(null)} style={{ padding: '0.5rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {templatesLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '1.5rem' }}>Loading…</div>}
+                {!templatesLoading && answerTemplates.map((t: any) => (
+                  <div key={t.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.7rem', marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 600, marginBottom: '0.3rem' }}>&#128203; {t.topic}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b', whiteSpace: 'pre-wrap', lineHeight: 1.4, maxHeight: '4.5rem', overflow: 'hidden', marginBottom: '0.4rem' }}>{t.format}</div>
+                    <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
+                      <button onClick={() => setTemplateForm({ id: t.id, topic: t.topic, format: t.format })} style={{ background: 'transparent', border: 'none', color: '#6366f1', fontSize: '0.72rem', cursor: 'pointer', padding: 0 }}>Edit</button>
+                      <button onClick={() => deleteTemplate(t.id)} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>&#10005;</button>
+                    </div>
+                  </div>
+                ))}
+                {!templatesLoading && answerTemplates.length === 0 && !templateForm && (
+                  <div style={{ textAlign: 'center', marginTop: '1.5rem', color: '#4a5568', fontSize: '0.78rem' }}>No templates yet. Tap &#43; New template to create your first one.</div>
+                )}
+              </div>
+            )}
 
             {activePanel === 'Admin' && (
               <div>
