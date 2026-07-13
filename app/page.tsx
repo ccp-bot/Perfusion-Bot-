@@ -1991,7 +1991,7 @@ export default function Home() {
           .sidebar-overlay { display: block !important; }
           .mobile-hamburger { display: flex !important; }
           .slide-panel { position: fixed !important; top: 0 !important; left: 0 !important; bottom: 0 !important; width: 100% !important; z-index: 90 !important; }
-          .chat-area { padding: 1rem 0.75rem 0.5rem !important; }
+          .chat-area { padding: calc(env(safe-area-inset-top, 0px) + 3.9rem) 0.9rem 0.5rem !important; }
           .input-bar { padding: 0.5rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom)) !important; }
           .input-wrapper { max-width: 100% !important; }
           .msg-max-width { max-width: 85% !important; font-size: 1rem !important; }
@@ -3257,7 +3257,7 @@ export default function Home() {
       {/* MAIN CHAT */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
         {/* MOBILE HAMBURGER */}
-        <button className="mobile-hamburger" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ display: 'none', position: 'absolute', top: 'calc(0.6rem + env(safe-area-inset-top))', left: '0.9rem', zIndex: 50, width: '42px', height: '42px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: '1.45rem' }}>☰</button>
+        <button className="mobile-hamburger" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ display: 'none', position: 'absolute', top: 'calc(0.6rem + env(safe-area-inset-top))', left: '0.9rem', zIndex: 50, width: '42px', height: '42px', borderRadius: '10px', background: '#161b24', border: '1px solid rgba(255,255,255,0.14)', boxShadow: '0 2px 10px rgba(0,0,0,0.4)', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: '1.45rem' }}>☰</button>
 
         {/* NEW CHAT — start a fresh conversation (only when a chat is in progress) */}
         {messages.length > 0 && (
