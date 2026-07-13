@@ -2382,7 +2382,7 @@ export default function Home() {
                       return (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                           {r.group_id && (
-                            <button onClick={() => teachInstitutionFromReport(r)} disabled={!hasText} title="Apply this fix to the reporter's institution only" style={{ flex: '1 1 45%', padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127973; Teach {instName ? instName.split(' ')[0] : 'their institution'}</button>
+                            <button onClick={() => teachInstitutionFromReport(r)} disabled={!hasText} title="Apply this fix to the reporter's institution only" style={{ flex: '1 1 45%', padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#e63946', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127973; Teach {instName ? instName.split(' ').slice(0, 2).join(' ') : 'their institution'}</button>
                           )}
                           <button onClick={() => teachGloballyFromReport(r)} disabled={!hasText} title="Save this lesson as global knowledge for all companies" style={{ flex: '1 1 45%', padding: '0.45rem', borderRadius: '8px', border: 'none', background: '#6366f1', color: '#fff', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>&#127758; Teach globally</button>
                           <button onClick={() => dismissReport(r)} style={{ padding: '0.45rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}>Dismiss</button>
