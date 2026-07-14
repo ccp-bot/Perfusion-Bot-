@@ -163,6 +163,7 @@ export default function Home() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userGroupId, setUserGroupId] = useState<string | null>(null)
   const [userGroupName, setUserGroupName] = useState<string | null>(null)
+  const [hospitalSwitcherOpen, setHospitalSwitcherOpen] = useState(false)
   const [allGroups, setAllGroups] = useState<any[]>([])
   const [groupMembers, setGroupMembers] = useState<any[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
@@ -2319,9 +2320,32 @@ export default function Home() {
         </div>
         <div style={{ padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
           {userGroupName && (
-            <div style={{ fontSize: '0.6rem', color: '#e63946', marginBottom: '0.3rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              {userGroupName}
-            </div>
+            allGroups.length > 1 ? (
+              <div style={{ position: 'relative', marginBottom: '0.3rem' }}>
+                <button onClick={() => setHospitalSwitcherOpen(o => !o)} title="Switch hospital" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.3rem', background: 'rgba(230,57,70,0.08)', border: '1px solid rgba(230,57,70,0.25)', borderRadius: '8px', padding: '0.4rem 0.55rem', cursor: 'pointer' }}>
+                  <span style={{ fontSize: '0.6rem', color: '#e63946', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userGroupName}</span>
+                  <span style={{ fontSize: '0.55rem', color: '#e63946', flexShrink: 0, transform: hospitalSwitcherOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>&#9662;</span>
+                </button>
+                {hospitalSwitcherOpen && (
+                  <>
+                    <div onClick={() => setHospitalSwitcherOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                    <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: '#0d1117', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '0.3rem', maxHeight: '260px', overflowY: 'auto', boxShadow: '0 -8px 30px rgba(0,0,0,0.55)' }}>
+                      <div style={{ fontSize: '0.56rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0.25rem 0.5rem 0.35rem' }}>Switch hospital</div>
+                      {allGroups.map((g) => (
+                        <button key={g.group_id} onClick={() => { switchGroup(g); setHospitalSwitcherOpen(false); setActivePanel(null) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.4rem', width: '100%', textAlign: 'left', padding: '0.5rem 0.6rem', borderRadius: '7px', border: 'none', background: g.group_id === userGroupId ? 'rgba(230,57,70,0.14)' : 'transparent', color: g.group_id === userGroupId ? '#fca5a5' : '#cbd5e1', fontSize: '0.75rem', cursor: 'pointer' }} onMouseEnter={e => { if (g.group_id !== userGroupId) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.05)' }} onMouseLeave={e => { if (g.group_id !== userGroupId) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.group?.name}</span>
+                          {g.group_id === userGroupId && <span style={{ fontSize: '0.7rem', color: '#e63946', flexShrink: 0 }}>&#10003;</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.6rem', color: '#e63946', marginBottom: '0.3rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {userGroupName}
+              </div>
+            )
           )}
           {userRole && (
             <div style={{ fontSize: '0.6rem', color: '#4a5568', marginBottom: '0.3rem', textTransform: 'capitalize' }}>
