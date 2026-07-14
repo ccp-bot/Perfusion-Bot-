@@ -1162,7 +1162,7 @@ export default function Home() {
     }, 'Delete')
   }
   function exportPersonalExcel() {
-    const fields = activePanel === 'Logbook' ? ['Surgery Date', ...logbookFields.filter(f => f.toLowerCase() !== 'mrn')] : activePanel === 'Case Notes' ? caseNotesFields : []
+    const fields = activePanel === 'Logbook' ? ['Surgery Date', ...logbookFields.filter(f => f.toLowerCase() !== 'surgery date')] : activePanel === 'Case Notes' ? caseNotesFields : []
     const params = new URLSearchParams({ userId: user?.id || '', category: activePanel || '', groupId: userGroupId || '', fields: fields.join('||') })
     window.open(`/api/export?${params.toString()}`, '_blank')
     setExportModal(null)
@@ -1577,7 +1577,9 @@ export default function Home() {
 
   // The field set the intake collects — the user's configured Logbook fields (with a sensible fallback).
   function caseIntakeFields(): string[] {
-    return logbookFields.length ? logbookFields.filter(f => f.toLowerCase() !== 'surgery date' && f.toLowerCase() !== 'mrn') : ['Patient Initials', 'Surgeon', 'Case Type', 'CPB Time', 'Clamp Time']
+    // The field list is the single source of truth — COR asks exactly the fields you've configured
+    // (Surgery Date is handled separately by the date picker on the review card).
+    return logbookFields.length ? logbookFields.filter(f => f.toLowerCase() !== 'surgery date') : ['Patient Initials', 'Surgeon', 'Case Type', 'CPB Time', 'Clamp Time']
   }
 
   // Conversational case intake. Re-reads the WHOLE conversation each turn so the user can brain-dump
@@ -3165,7 +3167,7 @@ export default function Home() {
                               <input type="date" value={caseDate} onChange={e => setCaseDate(e.target.value)} style={fieldInputStyle} />
                             </div>
                           )}
-                          {currentCaseFields().filter(f => f.toLowerCase() !== 'surgery date' && f.toLowerCase() !== 'mrn').map((f) => (
+                          {currentCaseFields().filter(f => f.toLowerCase() !== 'surgery date').map((f) => (
                             <div key={f} style={{ marginBottom: '0.4rem' }}>
                               <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>{f}</div>
                               <input value={caseForm[f] || ''} onChange={e => setCaseForm(p => ({ ...p, [f]: e.target.value }))} placeholder={f} style={fieldInputStyle} />
