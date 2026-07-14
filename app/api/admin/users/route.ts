@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const profile = (profiles || []).find(p => p.user_id === u.id || (p.email && p.email.toLowerCase() === emailLower))
     const userGroups = (members || [])
       .filter(m => m.user_id === u.id || (m.email && m.email.toLowerCase() === emailLower))
-      .map(m => ({ name: groupName(m.group_id), role: m.role }))
+      .map(m => ({ name: groupName(m.group_id), role: m.role, groupId: m.group_id }))
     return {
       id: u.id,
       email: u.email,

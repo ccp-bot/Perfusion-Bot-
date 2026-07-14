@@ -1239,6 +1239,22 @@ export default function Home() {
     } catch { alert('Network error.') }
   }
 
+  // Owner-only: remove a user from a hospital (moves them back to the Free tier).
+  async function removeUserFromGroup(email: string, groupId: string, groupName: string) {
+    if (!user || !groupId || !email) return
+    if (!confirm(`Remove ${email} from ${groupName}? They'll go back to the Free tier.`)) return
+    try {
+      const res = await fetch('/api/groups', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, groupId, targetEmail: email, userEmail: user.email })
+      })
+      const data = await res.json()
+      if (data.success) fetchAllUsers()
+      else alert(data.error || 'Could not remove user from hospital.')
+    } catch { alert('Network error.') }
+  }
+
   // Owner-only: permanently delete another user's account and data.
   async function deleteUserAccount() {
     if (!deleteUserTarget) return
@@ -2415,7 +2431,12 @@ export default function Home() {
                     <div style={{ marginTop: '0.4rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
                       {u.groups && u.groups.length > 0 ? (
                         u.groups.map((g: any, gi: number) => (
-                          <span key={gi} style={{ fontSize: '0.62rem', color: '#22c55e', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '6px', padding: '1px 6px', textTransform: 'capitalize' }}>{g.name} · {g.role}</span>
+                          <span key={gi} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.62rem', color: '#22c55e', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '6px', padding: '1px 6px', textTransform: 'capitalize' }}>
+                            {g.name} · {g.role}
+                            {g.groupId && g.role !== 'owner' && (
+                              <button onClick={() => removeUserFromGroup(u.email, String(g.groupId), g.name)} title={`Remove from ${g.name} (move to Free tier)`} style={{ background: 'transparent', border: 'none', color: '#22c55e', fontSize: '0.7rem', cursor: 'pointer', padding: 0, lineHeight: 1, opacity: 0.7 }}>&#10005;</button>
+                            )}
+                          </span>
                         ))
                       ) : (
                         <span style={{ fontSize: '0.62rem', color: '#94a3b8', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '1px 6px' }}>Free (Tier 1)</span>
