@@ -3699,16 +3699,24 @@ export default function Home() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                placeholder={listening ? 'Recording... click mic to stop' : caseLogExtraMode ? 'Item name + qty (e.g. "Cell Saver tubing 2") or "done"' : caseLogReview ? 'Add more details, or use the card above to save…' : caseLogging ? (caseLogMissing[0] ? `Tell me the ${caseLogMissing[0].toLowerCase()} (or several at once)…` : 'Tell COR about your case…') : COR_PLACEHOLDERS[placeholderIndex]}
+                placeholder=""
                 rows={1}
                 style={{ width: '100%', padding: '0.75rem 3rem 0.75rem 1.1rem', borderRadius: '18px', border: `1px solid ${listening ? 'rgba(230,57,70,0.5)' : 'rgba(255,255,255,0.1)'}`, background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s ease', resize: 'none', overflow: 'hidden', minHeight: '42px', maxHeight: '120px', fontFamily: 'inherit', lineHeight: '1.4' }}
                 ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px' } }}
               />
+              {/* Custom placeholder: vertically centered, always one line with an ellipsis — reliable on iOS
+                  where a native textarea placeholder would wrap to a second line and look off-center. */}
+              {!input && !listening && (
+                <div style={{ position: 'absolute', left: '1.1rem', right: '2.8rem', top: '50%', transform: 'translateY(-50%)', color: '#4a5568', fontSize: '0.88rem', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none' }}>
+                  {caseLogExtraMode ? 'Item name + qty (e.g. "Cell Saver tubing 2") or "done"' : caseLogReview ? 'Add more details, or use the card above to save…' : caseLogging ? (caseLogMissing[0] ? `Tell me the ${caseLogMissing[0].toLowerCase()} (or several at once)…` : 'Tell COR about your case…') : COR_PLACEHOLDERS[placeholderIndex]}
+                </div>
+              )}
               {listening && (
-                <div style={{ position: 'absolute', left: '1.1rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '3px', alignItems: 'center' }}>
+                <div style={{ position: 'absolute', left: '1.1rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: '3px', alignItems: 'center', pointerEvents: 'none' }}>
                   {[0, 1, 2, 3, 4].map(i => (
                     <div key={i} style={{ width: '3px', borderRadius: '2px', background: '#e63946', animation: `barPulse 0.8s ease-in-out ${i * 0.15}s infinite alternate` }} />
                   ))}
+                  <span style={{ marginLeft: '0.5rem', color: '#4a5568', fontSize: '0.88rem' }}>Recording… tap mic to stop</span>
                 </div>
               )}
               <button className="desktop-only-mic" onClick={startListening} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', width: '30px', height: '30px', borderRadius: '50%', background: listening ? '#e63946' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease', animation: listening ? 'micGlow 1.5s ease-in-out infinite' : 'none' }}>
