@@ -229,6 +229,11 @@ export default function Home() {
   const [caseLogData, setCaseLogData] = useState<{[key: string]: string}>({})
   const [caseLogMissing, setCaseLogMissing] = useState<string[]>([])
   const [caseLogCurrentField, setCaseLogCurrentField] = useState(0)
+  // Conversational case-intake: review card before saving.
+  const [caseLogReview, setCaseLogReview] = useState(false)
+  const [caseLogDate, setCaseLogDate] = useState('')
+  const [caseLogNote, setCaseLogNote] = useState('')
+  const [savingCaseIntake, setSavingCaseIntake] = useState(false)
   const [logbookFields, setLogbookFields] = useState<string[]>([])
   const [caseNotesFields, setCaseNotesFields] = useState<string[]>([])
   const [caseForm, setCaseForm] = useState<{[k: string]: string}>({})
@@ -1570,116 +1575,129 @@ export default function Home() {
     setUploading(false)
   }
 
-  async function startCaseLog() {
-    if (!user) return
-    setCaseLogging(true)
-    setCaseLogData({})
-    setCaseLogCurrentField(0)
-    setMessages(prev => [...prev, { role: 'user', content: 'log' }])
-    setLoading(true)
+  // The field set the intake collects — the user's configured Logbook fields (with a sensible fallback).
+  function caseIntakeFields(): string[] {
+    return logbookFields.length ? logbookFields.filter(f => f.toLowerCase() !== 'surgery date') : ['Patient Initials', 'Surgeon', 'Case Type', 'CPB Time', 'Clamp Time']
+  }
 
+  // Conversational case intake. Re-reads the WHOLE conversation each turn so the user can brain-dump
+  // ("58yo CABG, 92 min pump, 61 clamp, JD") or answer one at a time. Fills what it can, asks for the
+  // rest, then shows an editable review card before anything is saved.
+  async function progressCaseIntake(convo: { role: string, content: string }[], known: { [k: string]: string }) {
+    const fields = caseIntakeFields()
+    setLoading(true)
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: 'log',
-          messages,
-          userId: user.id,
+          messages: convo,
+          userId: user?.id,
           groupId: userGroupId,
-          userEmail: user.email,
+          userEmail: user?.email,
           caseLogMode: 'analyze',
-          logbookFields,
-          caseNotesFields,
+          logbookFields: fields,
+          caseNotesFields: [],
         })
       })
       const data = await res.json()
-      if (data.caseLogAnalysis) {
-        const found = data.found || {}
-        const missing = data.missing || [...logbookFields, ...caseNotesFields]
-        setCaseLogData(found)
-        setCaseLogMissing(missing)
-        setCaseLogCurrentField(0)
+      const found = (data && data.found) || {}
+      const merged: { [k: string]: string } = { ...known }
+      for (const f of fields) {
+        const v = found[f]
+        if (v != null && String(v).trim() && String(v).trim().toLowerCase() !== 'n/a') merged[f] = String(v).trim()
+      }
+      setCaseLogData(merged)
+      const missing = fields.filter(f => !(merged[f] && merged[f].trim()))
+      setCaseLogMissing(missing)
 
-        if (missing.length === 0) {
-          // All fields found in conversation — finalize
-          await finalizeCaseLog(found)
-        } else {
-          // Ask first missing question
-          const foundSummary = Object.keys(found).length > 0
-            ? `I found the following from our conversation:\n${Object.entries(found).map(([k, v]) => `- **${k}:** ${v}`).join('\n')}\n\nI still need a few more details.\n\n`
-            : ''
-          setMessages(prev => [...prev, { role: 'assistant', content: `${foundSummary}**${missing[0]}?**` }])
-        }
+      if (missing.length === 0) {
+        setCaseLogDate(prev => prev || fmtMDY(new Date().toISOString()))
+        setCaseLogReview(true)
+        setMessages(prev => [...prev, { role: 'assistant', content: `Perfect — I've got the details. Review your case below, edit anything that's off, then tap **Save to Logbook**.` }])
+      } else {
+        const gotSoFar = fields.filter(f => merged[f])
+        const summary = gotSoFar.length > 0
+          ? `Got it so far:\n${gotSoFar.map(f => `- **${f}:** ${merged[f]}`).join('\n')}\n\n`
+          : ''
+        const lead = summary ? '' : `Let's log your case. `
+        const ask = missing.length > 1
+          ? `${lead}What's the **${missing[0]}**? (You can also just tell me the rest all at once.)`
+          : `${lead}Last detail — what's the **${missing[0]}**?`
+        setMessages(prev => [...prev, { role: 'assistant', content: `${summary}${ask}` }])
       }
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Error starting case log.' }])
-      setCaseLogging(false)
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry — I hit a snag reading that. Could you tell me the case details again?' }])
     }
     setLoading(false)
   }
 
-  async function handleCaseLogAnswer() {
-    if (!input.trim()) return
-    const answer = input.trim()
-    const field = caseLogMissing[caseLogCurrentField]
-    setInput('')
-
-    const updatedData = { ...caseLogData, [field]: answer }
-    setCaseLogData(updatedData)
-    setMessages(prev => [...prev, { role: 'user', content: answer }])
-
-    const nextIdx = caseLogCurrentField + 1
-    if (nextIdx >= caseLogMissing.length) {
-      // All questions answered — finalize
-      setLoading(true)
-      await finalizeCaseLog(updatedData)
-      setLoading(false)
-    } else {
-      setCaseLogCurrentField(nextIdx)
-      setMessages(prev => [...prev, { role: 'assistant', content: `**${caseLogMissing[nextIdx]}?**` }])
-    }
+  function resetCaseIntake() {
+    setCaseLogging(false)
+    setCaseLogReview(false)
+    setCaseLogData({})
+    setCaseLogNote('')
+    setCaseLogDate('')
+    setCaseLogMissing([])
+    setCaseLogCurrentField(0)
   }
 
-  async function finalizeCaseLog(data: {[key: string]: string}) {
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: '',
-          messages: [],
-          userId: user?.id,
-          groupId: userGroupId,
-          userEmail: user?.email,
-          caseLogMode: 'finalize',
-          caseLogData: data,
-          logbookFields,
-          caseNotesFields,
-        })
-      })
-      const result = await res.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: result.answer || 'Case logged.' }])
+  function cancelCaseIntake() {
+    resetCaseIntake()
+    setMessages(prev => [...prev, { role: 'assistant', content: 'No problem — I’ve cancelled that case log.' }])
+  }
 
-      // Auto-deduct equipment based on case type
-      const caseType = data['Case Type'] || data['case type'] || ''
+  // Save the reviewed case — same format & endpoint as the manual logbook form, so it lands in the
+  // Logbook panel and exports to ABCP identically.
+  async function finalizeCaseIntake() {
+    if (!user) return
+    const fields = caseIntakeFields()
+    const lines: string[] = []
+    if (caseLogDate.trim()) lines.push(`Surgery Date: ${caseLogDate.trim()}`)
+    for (const f of fields) {
+      const v = (caseLogData[f] || '').trim()
+      if (v) lines.push(`${f}: ${v}`)
+    }
+    if (caseLogNote.trim()) lines.push(`Case Notes: ${caseLogNote.trim()}`)
+    if (lines.length === 0) return
+
+    setSavingCaseIntake(true)
+    const formData = new FormData()
+    formData.append('content', lines.join('\n'))
+    formData.append('category', 'Logbook')
+    formData.append('userId', user.id)
+    formData.append('userEmail', user.email)
+    formData.append('groupId', userGroupId || '')
+    formData.append('userRole', userRole || '')
+    formData.append('folder', '')
+
+    let ok = false
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await res.json().catch(() => ({}))
+      ok = res.ok && !data.error
+      if (!ok) setMessages(prev => [...prev, { role: 'assistant', content: `I couldn't save the case: ${data.error || 'please try again.'}` }])
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'I couldn’t save the case (network error). Please try again.' }])
+    }
+
+    if (ok) {
+      const caseType = caseLogData['Case Type'] || caseLogData['case type'] || ''
       const matchedType = caseTypes.find(ct => ct.toLowerCase() === caseType.toLowerCase())
+      setMessages(prev => [...prev, { role: 'assistant', content: `Saved to your **Logbook** ✓\n\n${lines.map(l => `- ${l}`).join('\n')}` }])
+      if (activePanel === 'Logbook') fetchPanel('Logbook')
+      resetCaseIntake()
+
+      // Auto-deduct standard equipment for this case type, then offer to add extras.
       if (matchedType && caseEquipMap[matchedType]?.length > 0) {
         await deductEquipmentForCase(matchedType)
         const deductedItems = caseEquipMap[matchedType].map(i => `${i.itemName} x${i.quantity}`).join(', ')
         setMessages(prev => [...prev, { role: 'assistant', content: `Equipment auto-deducted from inventory: ${deductedItems}\n\nDid you use any extra items not in the standard set? Type the item name and quantity, or type "done" to finish.` }])
         setCaseLogExtraMode(true)
-        setCaseLogging(false)
-        setCaseLogCurrentField(0)
-        setCaseLogMissing([])
-        return
       }
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Error saving case log.' }])
     }
-    setCaseLogging(false)
-    setCaseLogCurrentField(0)
-    setCaseLogMissing([])
+    setSavingCaseIntake(false)
   }
 
   function saveTemplateFields(type: string, fields: string[]) {
@@ -1765,16 +1783,36 @@ export default function Home() {
       return
     }
 
-    // If in case logging mode, handle as answer to current question
+    // If mid case-intake, feed each message back through extraction (supports brain-dumps & one-at-a-time).
     if (caseLogging) {
-      await handleCaseLogAnswer()
+      const userMsg = input.trim()
+      if (!userMsg) return
+      setInput('')
+      const convo = [...messages, { role: 'user', content: userMsg }]
+      setMessages(prev => [...prev, { role: 'user', content: userMsg }])
+      await progressCaseIntake(convo, caseLogData)
       return
     }
 
-    // Detect "log" command
-    if (input.trim().toLowerCase() === 'log') {
+    // Detect a case-log request in natural language ("I have a case", "log a case", "new case", "log").
+    const trimmed = input.trim()
+    const t = trimmed.toLowerCase()
+    const isCaseTrigger =
+      /^(log|log a case|log case|new case|start (a )?case|record (a )?case|enter (a )?case)$/i.test(t) ||
+      /\bi (just )?(have|had|did|ran|finished|completed|got) (a|another) case\b(?!\s+of\b)/.test(t) ||
+      /\b(log|record|enter|save|add) (a |this |my |another )?case\b(?!\s+of\b)/.test(t) ||
+      /\bhelp me (log|record|enter|add) (a |this |my )?case\b(?!\s+of\b)/.test(t)
+    if (isCaseTrigger) {
       setInput('')
-      await startCaseLog()
+      const convo = [...messages, { role: 'user', content: trimmed }]
+      setMessages(prev => [...prev, { role: 'user', content: trimmed }])
+      setCaseLogReview(false)
+      setCaseLogData({})
+      setCaseLogNote('')
+      setCaseLogDate('')
+      setCaseLogMissing([])
+      setCaseLogging(true)
+      await progressCaseIntake(convo, {})
       return
     }
 
@@ -3598,6 +3636,45 @@ export default function Home() {
           </div>
         )}
 
+        {/* Case-intake review card — edit before saving to the Logbook */}
+        {caseLogReview && (
+          <div style={{ padding: '0 1.5rem 0.5rem', background: '#080b12', flexShrink: 0 }}>
+            <div style={{ maxWidth: '780px', margin: '0 auto', background: 'linear-gradient(135deg, rgba(230,57,70,0.10), rgba(255,255,255,0.02))', border: '1px solid rgba(230,57,70,0.35)', borderRadius: '16px', padding: '1rem 1.1rem', maxHeight: '52vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>📋 Review your case</div>
+                <button onClick={cancelCaseIntake} title="Cancel" style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1rem', cursor: 'pointer' }}>✕</button>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '0.8rem' }}>Check the details, fix anything, then save. This lands in your Logbook.</div>
+
+              <label style={{ display: 'block', fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>Surgery Date</label>
+              <input value={caseLogDate} onChange={e => setCaseLogDate(e.target.value)} placeholder="MM/DD/YYYY" style={{ ...fieldInputStyle, marginBottom: '0.6rem' }} />
+
+              {caseIntakeFields().map((f) => (
+                <div key={f} style={{ marginBottom: '0.6rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>{f}</label>
+                  {f.toLowerCase() === 'case type' ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.2rem' }}>
+                      {caseTypes.map(ct => {
+                        const active = (caseLogData[f] || '').toLowerCase() === ct.toLowerCase()
+                        return <button key={ct} onClick={() => setCaseLogData(prev => ({ ...prev, [f]: ct }))} style={{ padding: '0.3rem 0.7rem', borderRadius: '16px', border: `1px solid ${active ? '#e63946' : 'rgba(255,255,255,0.14)'}`, background: active ? '#e63946' : 'transparent', color: active ? '#fff' : '#94a3b8', fontSize: '0.74rem', cursor: 'pointer' }}>{ct}</button>
+                      })}
+                    </div>
+                  ) : null}
+                  <input value={caseLogData[f] || ''} onChange={e => setCaseLogData(prev => ({ ...prev, [f]: e.target.value }))} placeholder={`Enter ${f.toLowerCase()}…`} style={fieldInputStyle} />
+                </div>
+              ))}
+
+              <label style={{ display: 'block', fontSize: '0.68rem', color: '#94a3b8', marginBottom: '2px' }}>Case Notes (optional)</label>
+              <textarea value={caseLogNote} onChange={e => setCaseLogNote(e.target.value)} placeholder="Anything else worth noting…" rows={2} style={{ ...fieldInputStyle, resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.8rem' }} />
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={finalizeCaseIntake} disabled={savingCaseIntake} style={{ flex: 1, padding: '0.6rem', borderRadius: '10px', border: 'none', background: savingCaseIntake ? '#2d3748' : '#e63946', color: '#fff', fontSize: '0.82rem', fontWeight: 600, cursor: savingCaseIntake ? 'not-allowed' : 'pointer' }}>{savingCaseIntake ? 'Saving…' : '✓ Save to Logbook'}</button>
+                <button onClick={cancelCaseIntake} style={{ padding: '0.6rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.82rem', cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="input-bar" style={{ padding: '0.75rem 1.5rem 1.25rem', background: '#080b12', flexShrink: 0 }}>
           {attachedImage && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', padding: '0.4rem 0.75rem', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', width: 'fit-content' }}>
@@ -3615,7 +3692,7 @@ export default function Home() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                placeholder={listening ? 'Recording... click mic to stop' : caseLogExtraMode ? 'Item name + qty (e.g. "Cell Saver tubing 2") or "done"' : caseLogging ? `Answer: ${caseLogMissing[caseLogCurrentField] || ''}...` : COR_PLACEHOLDERS[placeholderIndex]}
+                placeholder={listening ? 'Recording... click mic to stop' : caseLogExtraMode ? 'Item name + qty (e.g. "Cell Saver tubing 2") or "done"' : caseLogReview ? 'Add more details, or use the card above to save…' : caseLogging ? (caseLogMissing[0] ? `Tell me the ${caseLogMissing[0].toLowerCase()} (or several at once)…` : 'Tell COR about your case…') : COR_PLACEHOLDERS[placeholderIndex]}
                 rows={1}
                 style={{ width: '100%', padding: '0.75rem 3rem 0.75rem 1.1rem', borderRadius: '18px', border: `1px solid ${listening ? 'rgba(230,57,70,0.5)' : 'rgba(255,255,255,0.1)'}`, background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s ease', resize: 'none', overflow: 'hidden', minHeight: '42px', maxHeight: '120px', fontFamily: 'inherit', lineHeight: '1.4' }}
                 ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px' } }}
