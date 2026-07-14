@@ -5,6 +5,10 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
+// Service-role client for Storage writes (server-side only). Falls back to anon if not configured.
+const admin = process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  : supabase
 
 // GET /api/checklists?groupId=xxx — list all checklist files for a group
 export async function GET(req: NextRequest) {
@@ -38,15 +42,17 @@ export async function POST(req: NextRequest) {
   }
 
   const fileName = file.name
-  const filePath = `checklists/${groupId}/${Date.now()}_${fileName}`
+  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const filePath = `${groupId}/${Date.now()}_${safe}`
   const buffer = Buffer.from(await file.arrayBuffer())
 
-  // Upload to Supabase Storage
-  const { error: uploadError } = await supabase.storage
+  // Ensure the bucket exists (first upload on a fresh project would otherwise 404), then upload.
+  await admin.storage.createBucket('checklists', { public: false }).then(() => {}).catch(() => {})
+  const { error: uploadError } = await admin.storage
     .from('checklists')
     .upload(filePath, buffer, {
-      contentType: file.type,
-      upsert: false,
+      contentType: file.type || 'application/octet-stream',
+      upsert: true,
     })
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
@@ -84,7 +90,7 @@ export async function DELETE(req: NextRequest) {
     .single()
 
   if (file) {
-    await supabase.storage.from('checklists').remove([file.file_path])
+    await admin.storage.from('checklists').remove([file.file_path])
   }
 
   const { error } = await supabase.from('checklist_files').delete().eq('id', id)

@@ -5,6 +5,10 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
+// Service-role client so signed URLs work even on a private bucket. Falls back to anon.
+const admin = process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  : supabase
 
 // GET /api/checklists/download?id=xxx — get a signed download URL
 export async function GET(req: NextRequest) {
@@ -21,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   if (!file) return NextResponse.json({ error: 'File not found' }, { status: 404 })
 
-  const { data: signedUrl, error } = await supabase.storage
+  const { data: signedUrl, error } = await admin.storage
     .from('checklists')
     .createSignedUrl(file.file_path, 300) // 5 minute expiry
 

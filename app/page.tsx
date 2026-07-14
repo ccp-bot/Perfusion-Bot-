@@ -657,7 +657,10 @@ export default function Home() {
       const res = await fetch('/api/checklists', { method: 'POST', body: formData })
       const data = await res.json()
       if (data.success) fetchChecklists()
-    } catch {}
+      else alert(data.error || 'Could not upload checklist. Please try again.')
+    } catch {
+      alert('Could not upload checklist. Please check your connection and try again.')
+    }
     setChecklistUploading(false)
   }
 
