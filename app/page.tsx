@@ -1577,7 +1577,7 @@ export default function Home() {
 
   // The field set the intake collects — the user's configured Logbook fields (with a sensible fallback).
   function caseIntakeFields(): string[] {
-    return logbookFields.length ? logbookFields.filter(f => f.toLowerCase() !== 'surgery date') : ['Patient Initials', 'Surgeon', 'Case Type', 'CPB Time', 'Clamp Time']
+    return logbookFields.length ? logbookFields.filter(f => f.toLowerCase() !== 'surgery date' && f.toLowerCase() !== 'mrn') : ['Patient Initials', 'Surgeon', 'Case Type', 'CPB Time', 'Clamp Time']
   }
 
   // Conversational case intake. Re-reads the WHOLE conversation each turn so the user can brain-dump
@@ -1670,7 +1670,9 @@ export default function Home() {
     formData.append('userEmail', user.email)
     formData.append('groupId', userGroupId || '')
     formData.append('userRole', userRole || '')
-    formData.append('folder', '')
+    // File it into the folder the Logbook panel is currently showing (so it appears where you're looking).
+    const targetFolder = activePanel === 'Logbook' ? (currentFolder || '') : ''
+    formData.append('folder', targetFolder)
 
     let ok = false
     try {
@@ -1685,7 +1687,8 @@ export default function Home() {
     if (ok) {
       const caseType = caseLogData['Case Type'] || caseLogData['case type'] || ''
       const matchedType = caseTypes.find(ct => ct.toLowerCase() === caseType.toLowerCase())
-      setMessages(prev => [...prev, { role: 'assistant', content: `Saved to your **Logbook** ✓\n\n${lines.map(l => `- ${l}`).join('\n')}` }])
+      const where = targetFolder ? ` (in **${targetFolder.split('/').pop()}**)` : ''
+      setMessages(prev => [...prev, { role: 'assistant', content: `Saved to your **Logbook**${where} ✓\n\n${lines.map(l => `- ${l}`).join('\n')}` }])
       if (activePanel === 'Logbook') fetchPanel('Logbook')
       resetCaseIntake()
 
