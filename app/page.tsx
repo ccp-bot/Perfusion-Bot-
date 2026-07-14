@@ -653,6 +653,7 @@ export default function Home() {
     formData.append('userId', user.id)
     formData.append('userEmail', user.email)
     formData.append('userRole', userRole || '')
+    formData.append('folder', currentFolder || '')
     try {
       const res = await fetch('/api/checklists', { method: 'POST', body: formData })
       const data = await res.json()
@@ -662,6 +663,40 @@ export default function Home() {
       alert('Could not upload checklist. Please check your connection and try again.')
     }
     setChecklistUploading(false)
+  }
+
+  async function createChecklistFolder() {
+    if (!userGroupId || !user) return
+    const name = newFolderName.trim().replace(/\//g, '-') // slashes are path separators
+    if (!name) return
+    const path = currentFolder ? `${currentFolder}/${name}` : name
+    try {
+      const res = await fetch('/api/checklists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'createFolder', folder: path, groupId: userGroupId, userId: user.id, userEmail: user.email, userRole })
+      })
+      const data = await res.json()
+      if (data.success) { setNewFolderName(''); fetchChecklists() }
+      else alert(data.error || 'Could not create folder.')
+    } catch { alert('Could not create folder.') }
+  }
+
+  async function deleteChecklistFolder(path: string) {
+    if (!userGroupId) return
+    if (!confirm(`Delete the folder "${path.split('/').pop()}" and everything inside it?`)) return
+    try {
+      await fetch('/api/checklists', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deleteFolder', folder: path, groupId: userGroupId, userRole })
+      })
+      if (currentFolder === path || currentFolder.startsWith(path + '/')) {
+        const parent = path.split('/').slice(0, -1).join('/')
+        setCurrentFolder(parent)
+      }
+      fetchChecklists()
+    } catch {}
   }
 
   async function deleteChecklist(id: number) {
@@ -2792,10 +2827,45 @@ export default function Home() {
               </>
             )}
 
-            {activePanel === 'Checklists' && !panelLoading && (
+            {activePanel === 'Checklists' && !panelLoading && (() => {
+              const isAdmin = userRole === 'owner' || userRole === 'admin'
+              const P = currentFolder
+              const prefix = P ? P + '/' : ''
+              // Real files only (drop the empty-folder marker rows).
+              const realFiles = checklistFiles.filter((f: any) => f.file_name !== '__folder__')
+              // Every known folder path (from files + empty-folder markers).
+              const allFolders = Array.from(new Set(checklistFiles.map((f: any) => f.folder as string).filter(Boolean)))
+              // Direct sub-folders of the folder we're viewing.
+              const childSet = new Set<string>()
+              for (const f of allFolders) {
+                if (!P) { const top = f.split('/')[0]; if (top) childSet.add(top) }
+                else if (f !== P && f.startsWith(prefix)) { const seg = f.slice(prefix.length).split('/')[0]; if (seg) childSet.add(P + '/' + seg) }
+              }
+              const children = Array.from(childSet).sort()
+              // Files that live directly at this level.
+              const directFiles = realFiles.filter((f: any) => (f.folder || '') === P)
+              const crumbStyle = (active: boolean) => ({ background: 'transparent', border: 'none', color: active ? '#e2e8f0' : '#e63946', fontSize: '0.82rem', fontWeight: active ? 600 : 400, cursor: 'pointer', padding: 0 })
+              return (
               <>
-                {/* Upload — Owner/Admin only */}
-                {(userRole === 'owner' || userRole === 'admin') && (
+                {/* Breadcrumb + create-folder — Owner/Admin only */}
+                <div style={{ marginBottom: '0.7rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.3rem', marginBottom: isAdmin ? '0.5rem' : 0 }}>
+                    <button onClick={() => setCurrentFolder('')} style={crumbStyle(!P)}>&#128193; All</button>
+                    {P && P.split('/').map((seg, i, arr) => {
+                      const path = arr.slice(0, i + 1).join('/')
+                      return <span key={path} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><span style={{ color: '#4a5568' }}>/</span><button onClick={() => setCurrentFolder(path)} style={crumbStyle(i === arr.length - 1)}>{seg}</button></span>
+                    })}
+                  </div>
+                  {isAdmin && (
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createChecklistFolder() }} placeholder={P ? `New sub-folder in ${P.split('/').pop()}…` : '📁 New folder (e.g. Pre-Bypass, ECMO)…'} style={fieldInputStyle} />
+                      <button onClick={createChecklistFolder} disabled={!newFolderName.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: newFolderName.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: newFolderName.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Upload — Owner/Admin only. Files land in the folder you're currently viewing. */}
+                {isAdmin && (
                   <div style={{ marginBottom: '1rem' }}>
                     <input
                       type="file"
@@ -2821,42 +2891,78 @@ export default function Home() {
                       }}
                       style={{ display: 'block', padding: '0.75rem', borderRadius: '10px', border: `1px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? '#e63946' : 'rgba(255,255,255,0.06)'}`, background: dragOver ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.02)', textAlign: 'center', cursor: 'pointer', fontSize: '0.78rem', color: '#94a3b8', transition: 'all 0.15s ease' }}
                     >
-                      {checklistUploading ? 'Uploading...' : 'Upload or drag files (PDF, Word, Excel, Images)'}
+                      {checklistUploading ? 'Uploading...' : (P ? `Upload into “${P.split('/').pop()}”` : 'Upload or drag files (PDF, Word, Excel, Images)')}
                     </label>
                   </div>
                 )}
 
-                {checklistFiles.length === 0 && (
+                {children.length === 0 && directFiles.length === 0 && (
                   <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                     <div style={{ fontSize: '1.8rem', marginBottom: '0.75rem', opacity: 0.4 }}>&#128203;</div>
-                    <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>No checklists uploaded yet.</div>
+                    <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>{P ? 'This folder is empty.' : 'No checklists yet.'}</div>
+                    {isAdmin && <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>{P ? 'Upload a file above, or create a folder inside this one.' : 'Name a folder above, or upload files directly.'}</div>}
                   </div>
                 )}
-                {checklistFiles.map((file) => {
-                  const ext = file.file_name?.split('.').pop()?.toLowerCase() || ''
-                  const icon = ext === 'pdf' ? '&#128196;' : ext === 'xlsx' || ext === 'xls' || ext === 'csv' ? '&#128202;' : ext === 'png' || ext === 'jpg' || ext === 'jpeg' ? '&#128247;' : '&#128196;'
+
+                {/* Sub-folders */}
+                {children.map((childPath: string) => {
+                  const name = childPath.split('/').pop()
+                  const count = realFiles.filter((f: any) => (f.folder || '') === childPath || (f.folder || '').startsWith(childPath + '/')).length
                   return (
-                    <div key={file.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.75rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <span style={{ fontSize: '1.2rem' }} dangerouslySetInnerHTML={{ __html: icon }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '0.8rem', color: '#e2e8f0', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.file_name}</div>
-                        <div style={{ fontSize: '0.65rem', color: '#4a5568', marginTop: '2px' }}>
-                          {new Date(file.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {file.uploaded_by && <span> by {file.uploaded_by}</span>}
-                        </div>
+                    <div key={childPath} onClick={() => setCurrentFolder(childPath)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', background: 'linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.7rem 0.85rem', marginBottom: '0.55rem', cursor: 'pointer', transition: 'transform 0.12s ease, border-color 0.15s ease', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.18)' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = 'none'; (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.08)' }}>
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                        <defs><linearGradient id={`clfg${childPath.replace(/[^a-z0-9]/gi, '')}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#fbbf24" /><stop offset="100%" stopColor="#f59e0b" /></linearGradient></defs>
+                        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill={`url(#clfg${childPath.replace(/[^a-z0-9]/gi, '')})`} />
+                        <path d="M3 9h18v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" fill="#fff" opacity="0.12" />
+                      </svg>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                        <div style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '1px' }}>{count} item{count !== 1 ? 's' : ''}</div>
                       </div>
-                      <button
-                        onClick={() => window.open(`/api/checklists/download?id=${file.id}`, '_blank')}
-                        style={{ padding: '0.3rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.7rem', cursor: 'pointer', flexShrink: 0 }}
-                      >Open</button>
-                      {(userRole === 'owner' || userRole === 'admin') && (
-                        <button onClick={() => deleteChecklist(file.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6, flexShrink: 0 }}>&#10005;</button>
-                      )}
+                      {isAdmin && <button onClick={ev => { ev.stopPropagation(); deleteChecklistFolder(childPath) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>}
+                      <span style={{ color: '#475569', fontSize: '1.1rem', flexShrink: 0 }}>&#8250;</span>
                     </div>
                   )
                 })}
+
+                {/* Files at this level */}
+                {directFiles.length > 0 && (
+                  <div style={{ marginTop: children.length > 0 ? '0.85rem' : 0 }}>
+                    {children.length > 0 && <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Files here</div>}
+                    {directFiles.map((file: any) => {
+                      const ext = file.file_name?.split('.').pop()?.toLowerCase() || ''
+                      const icon = ext === 'pdf' ? '&#128196;' : ext === 'xlsx' || ext === 'xls' || ext === 'csv' ? '&#128202;' : ext === 'png' || ext === 'jpg' || ext === 'jpeg' ? '&#128247;' : ext === 'doc' || ext === 'docx' ? '&#128209;' : '&#128196;'
+                      const who = file.uploaded_by ? file.uploaded_by.split('@')[0] : ''
+                      return (
+                        <div key={file.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.75rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
+                          <span style={{ fontSize: '1.2rem', flexShrink: 0, lineHeight: 1.2 }} dangerouslySetInnerHTML={{ __html: icon }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 500, lineHeight: 1.35, wordBreak: 'break-word' }}>{file.file_name}</div>
+                            <div style={{ fontSize: '0.65rem', color: '#4a5568', marginTop: '3px' }}>
+                              {new Date(file.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {who && <span> · {who}</span>}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'flex-end', flexShrink: 0 }}>
+                            <button
+                              onClick={() => window.open(`/api/checklists/download?id=${file.id}`, '_blank')}
+                              style={{ padding: '0.3rem 0.7rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.7rem', cursor: 'pointer' }}
+                            >Open</button>
+                            {isAdmin && (
+                              <button onClick={() => deleteChecklist(file.id)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.6 }}>&#10005; Delete</button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </>
-            )}
+              )
+            })()}
 
             {activePanel === 'Notes' && (
               <div>
