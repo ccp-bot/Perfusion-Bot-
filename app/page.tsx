@@ -2831,10 +2831,13 @@ export default function Home() {
               const isAdmin = userRole === 'owner' || userRole === 'admin'
               const P = currentFolder
               const prefix = P ? P + '/' : ''
+              // Folders are encoded as a path prefix in file_name ("Pre-Bypass/Cart.pdf").
+              const folderOf = (nm: string) => nm && nm.includes('/') ? nm.slice(0, nm.lastIndexOf('/')) : ''
+              const displayNameOf = (nm: string) => nm && nm.includes('/') ? nm.slice(nm.lastIndexOf('/') + 1) : (nm || '')
               // Real files only (drop the empty-folder marker rows).
-              const realFiles = checklistFiles.filter((f: any) => f.file_name !== '__folder__')
+              const realFiles = checklistFiles.filter((f: any) => displayNameOf(f.file_name) !== '__folder__')
               // Every known folder path (from files + empty-folder markers).
-              const allFolders = Array.from(new Set(checklistFiles.map((f: any) => f.folder as string).filter(Boolean)))
+              const allFolders = Array.from(new Set(checklistFiles.map((f: any) => folderOf(f.file_name)).filter(Boolean))) as string[]
               // Direct sub-folders of the folder we're viewing.
               const childSet = new Set<string>()
               for (const f of allFolders) {
@@ -2843,7 +2846,7 @@ export default function Home() {
               }
               const children = Array.from(childSet).sort()
               // Files that live directly at this level.
-              const directFiles = realFiles.filter((f: any) => (f.folder || '') === P)
+              const directFiles = realFiles.filter((f: any) => folderOf(f.file_name) === P)
               const crumbStyle = (active: boolean) => ({ background: 'transparent', border: 'none', color: active ? '#e2e8f0' : '#e63946', fontSize: '0.82rem', fontWeight: active ? 600 : 400, cursor: 'pointer', padding: 0 })
               return (
               <>
@@ -2907,7 +2910,7 @@ export default function Home() {
                 {/* Sub-folders */}
                 {children.map((childPath: string) => {
                   const name = childPath.split('/').pop()
-                  const count = realFiles.filter((f: any) => (f.folder || '') === childPath || (f.folder || '').startsWith(childPath + '/')).length
+                  const count = realFiles.filter((f: any) => { const fo = folderOf(f.file_name); return fo === childPath || fo.startsWith(childPath + '/') }).length
                   return (
                     <div key={childPath} onClick={() => setCurrentFolder(childPath)}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', background: 'linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.7rem 0.85rem', marginBottom: '0.55rem', cursor: 'pointer', transition: 'transform 0.12s ease, border-color 0.15s ease', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
@@ -2933,14 +2936,15 @@ export default function Home() {
                   <div style={{ marginTop: children.length > 0 ? '0.85rem' : 0 }}>
                     {children.length > 0 && <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Files here</div>}
                     {directFiles.map((file: any) => {
-                      const ext = file.file_name?.split('.').pop()?.toLowerCase() || ''
+                      const dispName = displayNameOf(file.file_name)
+                      const ext = dispName.split('.').pop()?.toLowerCase() || ''
                       const icon = ext === 'pdf' ? '&#128196;' : ext === 'xlsx' || ext === 'xls' || ext === 'csv' ? '&#128202;' : ext === 'png' || ext === 'jpg' || ext === 'jpeg' ? '&#128247;' : ext === 'doc' || ext === 'docx' ? '&#128209;' : '&#128196;'
                       const who = file.uploaded_by ? file.uploaded_by.split('@')[0] : ''
                       return (
                         <div key={file.id} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.75rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
                           <span style={{ fontSize: '1.2rem', flexShrink: 0, lineHeight: 1.2 }} dangerouslySetInnerHTML={{ __html: icon }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 500, lineHeight: 1.35, wordBreak: 'break-word' }}>{file.file_name}</div>
+                            <div style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 500, lineHeight: 1.35, wordBreak: 'break-word' }}>{dispName}</div>
                             <div style={{ fontSize: '0.65rem', color: '#4a5568', marginTop: '3px' }}>
                               {new Date(file.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                               {who && <span> · {who}</span>}

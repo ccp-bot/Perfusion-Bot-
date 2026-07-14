@@ -10,24 +10,22 @@ const admin = process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : supabase
 
-// Empty folders are stored as a marker row (no real file) so they persist before anything is filed in them.
+// Folders are encoded as a path prefix inside file_name ("Pre-Bypass/Cart Checklist.pdf") so no
+// schema change is needed. An empty folder is a marker row: file_name = "Path/__folder__", file_path = "".
 const FOLDER_MARKER = '__folder__'
 
-// GET /api/checklists?groupId=xxx — list all checklist files (and folder markers) for a group
+// GET /api/checklists?groupId=xxx — list all checklist files (folder is encoded in file_name)
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const groupId = searchParams.get('groupId')
 
   if (!groupId) return NextResponse.json({ files: [] })
 
-  // Try to include the folder column; fall back if it hasn't been added to the table yet.
-  const cols = 'id, file_name, file_path, uploaded_by, created_at, folder'
-  let { data, error }: any = await supabase
-    .from('checklist_files').select(cols).eq('group_id', groupId).order('created_at', { ascending: false })
-  if (error) {
-    ({ data, error } = await supabase
-      .from('checklist_files').select('id, file_name, file_path, uploaded_by, created_at').eq('group_id', groupId).order('created_at', { ascending: false }))
-  }
+  const { data, error } = await supabase
+    .from('checklist_files')
+    .select('id, file_name, file_path, uploaded_by, created_at')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ files: [] })
   return NextResponse.json({ files: data || [] })
@@ -46,8 +44,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Only owners and admins can create folders' }, { status: 403 })
     }
     const { error } = await supabase.from('checklist_files').insert({
-      group_id: groupId, file_name: FOLDER_MARKER, file_path: '',
-      folder: folder.trim(), uploaded_by: userEmail || null, user_id: userId || null,
+      group_id: groupId, file_name: `${folder.trim()}/${FOLDER_MARKER}`, file_path: '',
+      uploaded_by: userEmail || null, user_id: userId || null,
     })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
@@ -59,15 +57,17 @@ export async function POST(req: NextRequest) {
   const userId = formData.get('userId') as string
   const userEmail = formData.get('userEmail') as string
   const userRole = formData.get('userRole') as string
-  const folder = (formData.get('folder') as string) || ''
+  const folder = ((formData.get('folder') as string) || '').trim()
 
   if (!file || !groupId) return NextResponse.json({ error: 'Missing file or groupId' }, { status: 400 })
   if (userRole !== 'owner' && userRole !== 'admin') {
     return NextResponse.json({ error: 'Only owners and admins can upload checklists' }, { status: 403 })
   }
 
-  const fileName = file.name
-  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const rawName = file.name
+  // Store the logical folder as a prefix in file_name; the frontend strips it for display.
+  const storedName = folder ? `${folder}/${rawName}` : rawName
+  const safe = rawName.replace(/[^a-zA-Z0-9._-]/g, '_')
   const filePath = `${groupId}/${Date.now()}_${safe}`
   const buffer = Buffer.from(await file.arrayBuffer())
 
@@ -82,20 +82,14 @@ export async function POST(req: NextRequest) {
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
 
-  // Save metadata to DB (include folder; retry without it if the column doesn't exist yet).
-  const row: Record<string, any> = {
-    group_id: groupId, file_name: fileName, file_path: filePath,
-    uploaded_by: userEmail, user_id: userId, folder: folder.trim() || null,
-  }
-  let { error: dbError }: any = await supabase.from('checklist_files').insert(row)
-  if (dbError && /folder/i.test(dbError.message || '')) {
-    delete row.folder
-    ;({ error: dbError } = await supabase.from('checklist_files').insert(row))
-  }
+  const { error: dbError } = await supabase.from('checklist_files').insert({
+    group_id: groupId, file_name: storedName, file_path: filePath,
+    uploaded_by: userEmail, user_id: userId,
+  })
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 })
 
-  return NextResponse.json({ success: true, fileName })
+  return NextResponse.json({ success: true, fileName: rawName })
 }
 
 // DELETE /api/checklists — delete one file ({ id }) or a whole folder ({ action:'deleteFolder', folder, groupId })
@@ -109,12 +103,12 @@ export async function DELETE(req: NextRequest) {
 
   if (action === 'deleteFolder') {
     if (!folder || !groupId) return NextResponse.json({ error: 'Missing folder or groupId' }, { status: 400 })
-    // Everything in this folder or any sub-folder.
+    // Every row whose file_name is inside this folder or a sub-folder (prefix "folder/").
     const { data: rows } = await supabase
       .from('checklist_files')
-      .select('id, file_path, folder')
+      .select('id, file_name, file_path')
       .eq('group_id', groupId)
-    const targets = (rows || []).filter((r: any) => r.folder === folder || (r.folder || '').startsWith(folder + '/'))
+    const targets = (rows || []).filter((r: any) => (r.file_name || '').startsWith(folder + '/'))
     const paths = targets.map((r: any) => r.file_path).filter(Boolean)
     if (paths.length) await admin.storage.from('checklists').remove(paths)
     if (targets.length) {
