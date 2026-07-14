@@ -2106,6 +2106,8 @@ export default function Home() {
         @keyframes micGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(230,57,70,0.5); } 50% { box-shadow: 0 0 0 6px rgba(230,57,70,0); } }
         @keyframes barPulse { from { height: 4px; } to { height: 16px; } }
         textarea::placeholder { color: #4a5568; }
+        /* Keep the rotating chat placeholder on one line (ellipsis if too long) so it never wraps and looks off-center. Real typed text still wraps/grows. */
+        .chat-input::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .sidebar-btn:hover { background: rgba(255,255,255,0.06) !important; }
         .sidebar-btn.active { background: rgba(230,57,70,0.12) !important; border-color: rgba(230,57,70,0.4) !important; }
