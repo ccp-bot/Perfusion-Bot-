@@ -188,6 +188,13 @@ export default function Home() {
   const [reports, setReports] = useState<any[]>([])
   const [reportsLoading, setReportsLoading] = useState(false)
   const [reportEdits, setReportEdits] = useState<{ [id: number]: string }>({})
+  // Mind-map / flowchart (beta, owner-only) — COR turns an answer into a Mermaid diagram
+  const [diagramOpen, setDiagramOpen] = useState(false)
+  const [diagramLoading, setDiagramLoading] = useState(false)
+  const [diagramCode, setDiagramCode] = useState<string | null>(null)
+  const [diagramSvg, setDiagramSvg] = useState<string>('')
+  const [diagramError, setDiagramError] = useState<string | null>(null)
+  const diagramRef = useRef<HTMLDivElement>(null)
   // COR Brain — global taught knowledge management
   const [globalRules, setGlobalRules] = useState<any[]>([])
   const [globalRulesLoading, setGlobalRulesLoading] = useState(false)
@@ -945,6 +952,65 @@ export default function Home() {
       }
     } catch { setTeachStatus('Could not save — try again') }
     setTeachSaving(false)
+  }
+
+  // ── Mind map / flowchart (beta) — COR turns an answer into a visual Mermaid diagram ──
+  async function mapThis(answerIndex: number) {
+    const answer = messages[answerIndex]?.content || ''
+    let question = ''
+    for (let i = answerIndex - 1; i >= 0; i--) { if (messages[i].role === 'user') { question = messages[i].content; break } }
+    setDiagramOpen(true); setDiagramLoading(true); setDiagramCode(null); setDiagramSvg(''); setDiagramError(null)
+    try {
+      const res = await fetch('/api/diagram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, answer }) })
+      const data = await res.json()
+      if (data.code) setDiagramCode(data.code)
+      else setDiagramError(data.error || 'Could not build a map for this.')
+    } catch { setDiagramError('Network error building the map.') }
+    setDiagramLoading(false)
+  }
+
+  // Render the Mermaid code to SVG whenever it changes (client-only; dynamic import keeps it out of the main bundle).
+  useEffect(() => {
+    if (!diagramOpen || !diagramCode) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const mermaid = (await import('mermaid')).default
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose', flowchart: { curve: 'basis', htmlLabels: true } })
+        const id = 'cor-map-' + Math.floor(Date.now())
+        const { svg } = await mermaid.render(id, diagramCode)
+        if (!cancelled) { setDiagramSvg(svg); setDiagramError(null) }
+      } catch {
+        if (!cancelled) { setDiagramSvg(''); setDiagramError('This map came out malformed. Tap “Map this” again to retry.') }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [diagramCode, diagramOpen])
+
+  function closeDiagram() { setDiagramOpen(false); setDiagramCode(null); setDiagramSvg(''); setDiagramError(null) }
+
+  // Export the rendered diagram as a PNG (2x for crisp slides), on the app's dark background.
+  function downloadDiagramPng() {
+    const svgEl = diagramRef.current?.querySelector('svg') as SVGSVGElement | null
+    if (!svgEl) return
+    const rect = svgEl.getBoundingClientRect()
+    const w = Math.max(rect.width, 400), h = Math.max(rect.height, 300)
+    const xml = new XMLSerializer().serializeToString(svgEl)
+    const src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)))
+    const img = new Image()
+    img.onload = () => {
+      const scale = 2
+      const canvas = document.createElement('canvas')
+      canvas.width = w * scale; canvas.height = h * scale
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.scale(scale, scale)
+      ctx.drawImage(img, 0, 0, w, h)
+      const a = document.createElement('a')
+      a.download = 'COR-map.png'; a.href = canvas.toDataURL('image/png'); a.click()
+    }
+    img.src = src
   }
 
   // ── Report a wrong COR answer (goes to the platform owner) ──
@@ -3634,8 +3700,11 @@ export default function Home() {
                   )
                 })() : m.content}
                 {m.role === 'assistant' && (
-                  <div style={{ marginTop: '0.55rem' }}>
+                  <div style={{ marginTop: '0.55rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <button onClick={() => openReportModal(i)} title="Report a wrong answer to the COR team" style={{ background: 'transparent', border: 'none', fontSize: '0.7rem', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ color: '#f59e0b', fontSize: '0.82rem' }}>&#9888;</span><span style={{ color: '#94a3b8' }}>Something&rsquo;s wrong</span></button>
+                    {user?.email === SUPER_OWNER_EMAIL && (
+                      <button onClick={() => mapThis(i)} title="Turn this answer into a mind map / flowchart (beta)" style={{ background: 'transparent', border: 'none', fontSize: '0.7rem', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}><span style={{ fontSize: '0.82rem' }}>&#129504;</span><span style={{ color: '#94a3b8' }}>Map this <span style={{ color: '#6366f1', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>beta</span></span></button>
+                    )}
                   </div>
                 )}
               </div>
@@ -3794,6 +3863,36 @@ export default function Home() {
               )}
             </div>
             <button onClick={() => setTeachModal(false)} style={{ width: '100%', marginTop: '0.7rem', padding: '0.5rem', borderRadius: '10px', border: 'none', background: 'transparent', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {diagramOpen && (
+        <div onClick={closeDiagram} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backdropFilter: 'blur(4px)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', width: '96%', maxWidth: '900px', height: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'modalIn 0.2s ease' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1.1rem', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '1rem' }}>&#129504;</span>
+                <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>COR Map</span>
+                <span style={{ color: '#6366f1', fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '5px', padding: '1px 5px' }}>Beta</span>
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                {diagramSvg && <button onClick={downloadDiagramPng} style={{ padding: '0.4rem 0.7rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', color: '#cbd5e1', fontSize: '0.72rem', cursor: 'pointer' }}>&#11015; PNG</button>}
+                <button onClick={closeDiagram} style={{ padding: '0.4rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>&#10005;</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', padding: '1rem', display: 'flex', alignItems: diagramSvg ? 'flex-start' : 'center', justifyContent: 'center' }}>
+              {diagramLoading && <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Building your map…</div>}
+              {!diagramLoading && diagramError && (
+                <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', maxWidth: '400px' }}>
+                  <div style={{ fontSize: '1.6rem', marginBottom: '0.5rem', opacity: 0.5 }}>&#129301;</div>
+                  {diagramError}
+                </div>
+              )}
+              {!diagramLoading && !diagramError && diagramSvg && (
+                <div ref={diagramRef} style={{ width: '100%', minWidth: 'min-content' }} dangerouslySetInnerHTML={{ __html: diagramSvg }} />
+              )}
+            </div>
           </div>
         </div>
       )}
