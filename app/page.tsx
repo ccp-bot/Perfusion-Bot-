@@ -92,21 +92,34 @@ function getMonday(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), diff)
 }
 
-const SIDEBAR_ITEMS = [
-  { key: 'History', emoji: null, image: '/History.Icon.png', label: 'History' },
-  { key: 'Logbook', emoji: null, image: '/Logbook.icon.png', label: 'Logbook' },
-  { key: 'Notes', emoji: null, image: '/CaseNotes.Icon.png', label: 'Notes' },
-  { key: 'Protocol', emoji: null, image: '/Protocol.Icon.png', label: 'Protocol' },
-  { key: 'Policy', emoji: null, image: '/Policy.Icon.png', label: 'Policy' },
-  { key: 'Equipment', emoji: null, image: '/Equipment.Icon.png', label: 'Equipment' },
-  { key: 'Checklists', emoji: null, image: '/Checkmark.Icon.png', label: 'Checklists' },
-  { key: 'Charting', emoji: null, image: '/Chart.Icon.png', label: 'Charting' },
-  { key: 'Schedule', emoji: null, image: '/Schedule.Icon.png', label: 'Schedule' },
-]
-
-// Tier 1 (no hospital group): only these knowledge-base icons are available.
-// Tier 2 (linked to a hospital group) and the super owner see everything.
-const TIER1_ITEMS = ['History', 'Logbook', 'Notes']
+// Grouped, collapsible sidebar navigation. access: tier1 (everyone) | full (hospital users) |
+// owneradmin (owner/admin) | super (platform owner). redirect items leave to another page.
+const NAV_GROUPS = [
+  { id: 'knowledge', label: 'Knowledge', icon: '\u{1F4DA}', items: [
+    { key: 'Protocol', label: 'Protocols', img: '/Protocol.Icon.png', access: 'full', badge: 'unread' },
+    { key: 'Policy', label: 'Policy', img: '/Policy.Icon.png', access: 'full', badge: 'unread' },
+    { key: 'Checklists', label: 'Checklists', img: '/Checkmark.Icon.png', access: 'full', badge: 'unread' },
+    { key: 'GlobalLib', label: 'Global Library', emoji: '\u{1F310}', access: 'super' },
+  ] },
+  { id: 'mywork', label: 'My Work', icon: '\u{1F5C2}️', items: [
+    { key: 'Logbook', label: 'Logbook', img: '/Logbook.icon.png', access: 'tier1' },
+    { key: 'Notes', label: 'Notes', img: '/CaseNotes.Icon.png', access: 'tier1' },
+    { key: 'History', label: 'History', img: '/History.Icon.png', access: 'tier1' },
+  ] },
+  { id: 'operations', label: 'Operations', icon: '\u{1FA7A}', items: [
+    { key: 'Equipment', label: 'Equipment', img: '/Equipment.Icon.png', access: 'full', badge: 'equipment' },
+    { key: 'Charting', label: 'Charting', img: '/Chart.Icon.png', access: 'full', redirect: '/chart' },
+    { key: 'Schedule', label: 'Schedule', img: '/Schedule.Icon.png', access: 'full', redirect: '/schedule' },
+  ] },
+  { id: 'setup', label: 'Setup', icon: '\u{1F6E0}️', items: [
+    { key: 'Admin', label: 'Admin', emoji: '⚙️', access: 'owneradmin' },
+    { key: 'Templates', label: 'Templates', emoji: '\u{1F4CB}', access: 'owneradmin' },
+    { key: 'Users', label: 'Users', emoji: '\u{1F465}', access: 'super' },
+    { key: 'Reports', label: 'Reports', emoji: '⚠️', access: 'super', badge: 'reports' },
+    { key: 'Brain', label: 'COR Brain', emoji: '\u{1F9E0}', access: 'super' },
+  ] },
+] as const
+const GROUP_OF: Record<string, string> = (() => { const m: Record<string, string> = {}; for (const g of NAV_GROUPS) for (const it of g.items) m[it.key] = g.id; return m })()
 
 // Rotating, perfusion-themed prompts shown in the empty chat input box.
 const COR_PLACEHOLDERS = [
@@ -164,6 +177,7 @@ export default function Home() {
   const [userGroupId, setUserGroupId] = useState<string | null>(null)
   const [userGroupName, setUserGroupName] = useState<string | null>(null)
   const [hospitalSwitcherOpen, setHospitalSwitcherOpen] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['knowledge', 'mywork']))
   const [allGroups, setAllGroups] = useState<any[]>([])
   const [groupMembers, setGroupMembers] = useState<any[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
@@ -1317,10 +1331,36 @@ export default function Home() {
     setActivePanel(key)
     setOpenNoteId(null)
     setCurrentFolder('')
+    // Keep the sidebar group of the opened panel expanded, so you can see where you are.
+    if (GROUP_OF[key]) setExpandedGroups(prev => new Set(prev).add(GROUP_OF[key]))
     if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'ControlCenter') { openControlCenter() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); setAddingRule(false); fetchGlobalRules() } else if (key === 'GlobalLib') { fetchGlobalLibrary() } else if (key === 'Templates') { setTemplateForm(null); fetchAnswerTemplates() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
+  }
+
+  // ── Grouped sidebar helpers ──
+  function navVisible(access: string) {
+    const isSuper = user?.email === SUPER_OWNER_EMAIL
+    const isOwnerAdmin = userRole === 'owner' || userRole === 'admin' || isSuper
+    if (access === 'tier1') return true
+    if (access === 'full') return hasFullAccess
+    if (access === 'owneradmin') return isOwnerAdmin
+    if (access === 'super') return isSuper
+    return false
+  }
+  function navBadge(item: any): { n: number, color: string } | null {
+    if (item.badge === 'unread' && unreadCounts[item.key] > 0) return { n: unreadCounts[item.key], color: '#e63946' }
+    if (item.badge === 'equipment') { const n = inventoryItems.filter((inv: any) => inv.quantity <= 2).length; return n > 0 ? { n, color: '#f59e0b' } : null }
+    if (item.badge === 'reports' && reports.length > 0) return { n: reports.length, color: '#e63946' }
+    return null
+  }
+  function onNavItem(item: any) {
+    if (item.redirect) { window.location.href = item.redirect; return }
+    openPanel(item.key); setSidebarOpen(false)
+  }
+  function toggleGroup(id: string) {
+    setExpandedGroups(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   }
 
   // Owner-only: load every signed-up user with their tier + signup date.
@@ -2348,108 +2388,57 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <div style={{ padding: '0.75rem 0.5rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginBottom: '0.5rem' }}>Knowledge Base</div>
-          {SIDEBAR_ITEMS.filter(item => hasFullAccess || TIER1_ITEMS.includes(item.key)).map(item => (
-            <button
-              key={item.key}
-              onClick={() => { if (item.key === 'Schedule') { window.location.href = '/schedule'; return } if (item.key === 'Charting') { window.location.href = '/chart'; return } openPanel(item.key); setSidebarOpen(false) }}
-              className={`sidebar-btn${activePanel === item.key ? ' active' : ''}`}
-              style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
-            >
-              <span style={{ fontSize: '1rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>
-                {item.image
-                  ? <img src={item.image} alt={item.label} style={{ width: '50px', height: '50px', objectFit: 'contain', verticalAlign: 'middle' }} />
-                  : item.emoji}
-              </span>
-              <span style={{ fontSize: '0.82rem', color: activePanel === item.key ? '#e63946' : '#94a3b8', fontWeight: activePanel === item.key ? '600' : '400', position: 'relative' }}>
-                {item.label}
-                {unreadCounts[item.key] > 0 && (
-                  <span style={{ position: 'absolute', top: '-6px', right: '-16px', minWidth: '16px', height: '16px', borderRadius: '8px', background: '#e63946', color: 'white', fontSize: '0.6rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{unreadCounts[item.key]}</span>
-                )}
-                {item.key === 'Equipment' && inventoryItems.filter((inv: any) => inv.quantity <= 2).length > 0 && (
-                  <span style={{ position: 'absolute', top: '-6px', right: '-16px', minWidth: '16px', height: '16px', borderRadius: '8px', background: '#f59e0b', color: 'white', fontSize: '0.6rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{inventoryItems.filter((inv: any) => inv.quantity <= 2).length}</span>
-                )}
-              </span>
-              {activePanel === item.key && !unreadCounts[item.key] && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
+        <div style={{ padding: '0.6rem 0.5rem', flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {/* Chat — clears any open panel */}
+          <button onClick={() => { setActivePanel(null); setSidebarOpen(false) }} className={`sidebar-btn${activePanel === null ? ' active' : ''}`}
+            style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '2px', textAlign: 'left' }}>
+            <span style={{ fontSize: '1.1rem', width: '30px', textAlign: 'center', flexShrink: 0 }}>&#128172;</span>
+            <span style={{ fontSize: '0.84rem', color: activePanel === null ? '#e63946' : '#e2e8f0', fontWeight: activePanel === null ? 600 : 500 }}>Chat</span>
+          </button>
+
+          {/* Control Center — owner/admin hub */}
+          {(userRole === 'owner' || userRole === 'admin' || user?.email === SUPER_OWNER_EMAIL) && (
+            <button onClick={() => { openPanel('ControlCenter'); setSidebarOpen(false) }} className={`sidebar-btn${activePanel === 'ControlCenter' ? ' active' : ''}`}
+              style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '2px', textAlign: 'left' }}>
+              <span style={{ fontSize: '1.1rem', width: '30px', textAlign: 'center', flexShrink: 0 }}>&#128202;</span>
+              <span style={{ fontSize: '0.84rem', color: activePanel === 'ControlCenter' ? '#e63946' : '#e2e8f0', fontWeight: activePanel === 'ControlCenter' ? 600 : 500 }}>Control Center</span>
+              {activePanel === 'ControlCenter' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
             </button>
-          ))}
-          {(userRole === 'owner' || userRole === 'admin' || (!userRole && user?.email === SUPER_OWNER_EMAIL)) && (
-            <>
-              <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>Management</div>
-              <button
-                onClick={() => { openPanel('ControlCenter'); setSidebarOpen(false) }}
-                className={`sidebar-btn${activePanel === 'ControlCenter' ? ' active' : ''}`}
-                style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: activePanel === 'ControlCenter' ? 'rgba(230,57,70,0.06)' : 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
-              >
-                <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#128202;</span>
-                <span style={{ fontSize: '0.82rem', color: activePanel === 'ControlCenter' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'ControlCenter' ? '600' : '400' }}>Control Center</span>
-                {activePanel === 'ControlCenter' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
-              </button>
-              <button
-                onClick={() => { openPanel('Admin'); setSidebarOpen(false) }}
-                className={`sidebar-btn${activePanel === 'Admin' ? ' active' : ''}`}
-                style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
-              >
-                <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#9881;</span>
-                <span style={{ fontSize: '0.82rem', color: activePanel === 'Admin' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Admin' ? '600' : '400' }}>Admin</span>
-                {activePanel === 'Admin' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
-              </button>
-              <button
-                onClick={() => { openPanel('Templates'); setSidebarOpen(false) }}
-                className={`sidebar-btn${activePanel === 'Templates' ? ' active' : ''}`}
-                style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
-              >
-                <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#128203;</span>
-                <span style={{ fontSize: '0.82rem', color: activePanel === 'Templates' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Templates' ? '600' : '400' }}>Templates</span>
-                {activePanel === 'Templates' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
-              </button>
-              {user?.email === SUPER_OWNER_EMAIL && (
-                <button
-                  onClick={() => { openPanel('Users'); setSidebarOpen(false) }}
-                  className={`sidebar-btn${activePanel === 'Users' ? ' active' : ''}`}
-                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
-                >
-                  <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#128101;</span>
-                  <span style={{ fontSize: '0.82rem', color: activePanel === 'Users' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Users' ? '600' : '400' }}>Users</span>
-                  {activePanel === 'Users' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
-                </button>
-              )}
-              {user?.email === SUPER_OWNER_EMAIL && (
-                <button
-                  onClick={() => { openPanel('Reports'); setSidebarOpen(false) }}
-                  className={`sidebar-btn${activePanel === 'Reports' ? ' active' : ''}`}
-                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
-                >
-                  <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#9888;</span>
-                  <span style={{ fontSize: '0.82rem', color: activePanel === 'Reports' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Reports' ? '600' : '400' }}>Reports</span>
-                  {reports.length > 0 && <span style={{ marginLeft: 'auto', minWidth: '16px', height: '16px', borderRadius: '8px', background: '#e63946', color: 'white', fontSize: '0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{reports.length}</span>}
-                </button>
-              )}
-              {user?.email === SUPER_OWNER_EMAIL && (
-                <button
-                  onClick={() => { openPanel('Brain'); setSidebarOpen(false) }}
-                  className={`sidebar-btn${activePanel === 'Brain' ? ' active' : ''}`}
-                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
-                >
-                  <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#129504;</span>
-                  <span style={{ fontSize: '0.82rem', color: activePanel === 'Brain' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'Brain' ? '600' : '400' }}>COR Brain</span>
-                  {activePanel === 'Brain' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
-                </button>
-              )}
-              {user?.email === SUPER_OWNER_EMAIL && (
-                <button
-                  onClick={() => { openPanel('GlobalLib'); setSidebarOpen(false) }}
-                  className={`sidebar-btn${activePanel === 'GlobalLib' ? ' active' : ''}`}
-                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
-                >
-                  <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#127760;</span>
-                  <span style={{ fontSize: '0.82rem', color: activePanel === 'GlobalLib' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'GlobalLib' ? '600' : '400' }}>Global Library</span>
-                  {activePanel === 'GlobalLib' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
-                </button>
-              )}
-            </>
           )}
+
+          {/* Collapsible groups */}
+          {NAV_GROUPS.map(group => {
+            const items = group.items.filter(it => navVisible(it.access))
+            if (items.length === 0) return null
+            const open = expandedGroups.has(group.id)
+            const hasActive = items.some(it => it.key === activePanel)
+            const groupBadge = items.reduce((sum, it) => { const b = navBadge(it); return sum + (b ? b.n : 0) }, 0)
+            return (
+              <div key={group.id} style={{ marginTop: '0.55rem' }}>
+                <button onClick={() => toggleGroup(group.id)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '0.4rem 0.6rem', background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '0.85rem', width: '18px', textAlign: 'center', flexShrink: 0 }}>{group.icon}</span>
+                  <span style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: hasActive ? '#e63946' : '#6b7280', fontWeight: 700, flex: 1, textAlign: 'left' }}>{group.label}</span>
+                  {!open && groupBadge > 0 && <span style={{ minWidth: '15px', height: '15px', borderRadius: '8px', background: '#e63946', color: '#fff', fontSize: '0.58rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{groupBadge}</span>}
+                  <span style={{ fontSize: '0.6rem', color: '#4a5568', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>&#9656;</span>
+                </button>
+                {open && items.map(item => {
+                  const active = activePanel === item.key
+                  const badge = navBadge(item)
+                  return (
+                    <button key={item.key} onClick={() => onNavItem(item)} className={`sidebar-btn${active ? ' active' : ''}`}
+                      style={{ width: '100%', padding: '0.45rem 0.75rem 0.45rem 1.05rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', textAlign: 'left' }}>
+                      <span style={{ fontSize: '1rem', width: '34px', textAlign: 'center', flexShrink: 0 }}>
+                        {(item as any).img ? <img src={(item as any).img} alt={item.label} style={{ width: '34px', height: '34px', objectFit: 'contain', verticalAlign: 'middle' }} /> : (item as any).emoji}
+                      </span>
+                      <span style={{ fontSize: '0.82rem', color: active ? '#e63946' : '#94a3b8', fontWeight: active ? 600 : 400, flex: 1 }}>{item.label}</span>
+                      {badge && <span style={{ minWidth: '16px', height: '16px', borderRadius: '8px', background: badge.color, color: '#fff', fontSize: '0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{badge.n}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
         </div>
         <div style={{ padding: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
           {userGroupName && (
