@@ -1647,7 +1647,7 @@ export default function Home() {
       const res = await fetch('/api/notes', {
         method: isNew ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: isNew ? undefined : openNoteId, userId: user.id, title: noteTitle.trim() || 'Untitled', body: noteBody, folder: noteFolder.trim() || null })
+        body: JSON.stringify({ id: isNew ? undefined : openNoteId, userId: user.id, title: noteTitle.trim() || 'Untitled', body: noteBody, folder: noteFolder.trim() || null, groupId: userGroupId || null })
       })
       const data = await res.json()
       if (!res.ok || data.error) { alert(data.error || 'Could not save note.'); setSavingNote(false); return }

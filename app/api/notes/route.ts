@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/notes — create a text note { userId, title, body, folder }
 export async function POST(req: NextRequest) {
-  const { userId, title, body, folder } = await req.json()
+  const { userId, title, body, folder, groupId } = await req.json()
   if (!userId || (!title?.trim() && !body?.trim())) {
     return NextResponse.json({ error: 'A title or some text is required' }, { status: 400 })
   }
@@ -56,9 +56,11 @@ export async function POST(req: NextRequest) {
       embedding,
       category: 'Notes',
       user_id: userId,
+      // Tag the note to the hospital it was written in, so it stays scoped there for multi-hospital users.
+      group_id: groupId || null,
       source_file: (title || 'Untitled').toString().slice(0, 200),
       folder: folder ? folder.toString() : null,
-      institution_id: 'hospital_a',
+      institution_id: groupId || 'hospital_a',
       created_at: new Date().toISOString(),
     })
     .select('id')

@@ -252,11 +252,14 @@ Return only the summary, no preamble.`
     // Visible if: platform-wide GLOBAL knowledge (everyone), this user's company, or legacy 'hospital_a'.
     // Strict isolation: a user may only see platform-wide GLOBAL rules, their OWN group's docs,
     // or their OWN personal docs. Never another institution's or user's content.
+    // A user's OWN content still respects the active hospital: content tagged to a group is only
+    // visible in THAT group. This stops an owner's UC Davis uploads leaking when they view UCSF, etc.
+    // (Untagged personal content — no group_id — remains visible to its owner everywhere.)
     const inGroup = (info: any) =>
       info && !info.archived && (
         info.institution_id === 'GLOBAL' ||
         (!!groupId && String(info.group_id) === String(groupId)) ||
-        (!!userId && !!info.user_id && String(info.user_id) === String(userId))
+        (!!userId && !!info.user_id && String(info.user_id) === String(userId) && (!info.group_id || String(info.group_id) === String(groupId)))
       )
 
     // 1) Semantic search across all docs.
@@ -348,13 +351,11 @@ Apply these SILENTLY and naturally — just give the corrected answer as if it w
   let userNotesContext = ''
   if (userId) {
     try {
-      const { data: notes } = await supabase
-        .from('documents')
-        .select('content, source_file')
-        .eq('category', 'Notes')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(8)
+      // Scope the user's notes to the hospital they're currently in: notes tagged to a group show
+      // only in that group; untagged (group-less) personal notes show everywhere for their owner.
+      let nq = supabase.from('documents').select('content, source_file').eq('category', 'Notes').eq('user_id', userId)
+      if (groupId) nq = nq.or(`group_id.is.null,group_id.eq.${groupId}`)
+      const { data: notes } = await nq.order('created_at', { ascending: false }).limit(8)
       if (notes && notes.length > 0) {
         userNotesContext = notes
           .map((n: any) => `${n.source_file ? n.source_file + ': ' : ''}${(n.content || '').slice(0, 800)}`)
