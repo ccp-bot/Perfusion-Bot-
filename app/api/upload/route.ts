@@ -12,6 +12,7 @@ const admin = process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : supabase
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
+const SUPER_OWNER = 'cliftonmarschel@gmail.com'
 
 // Split text into chunks of roughly maxChars, breaking on paragraph boundaries
 function chunkText(text: string, maxChars = 1500): string[] {
@@ -44,15 +45,22 @@ export async function POST(req: NextRequest) {
   const groupId = formData.get('groupId') as string
   const userRole = formData.get('userRole') as string
   const folder = formData.get('folder') as string
+  const scope = formData.get('scope') as string
 
   if (!category || !userId) {
     return NextResponse.json({ error: 'Missing category or userId' }, { status: 400 })
   }
 
+  // GLOBAL scope = platform-wide reference (e.g. IFUs) visible to every hospital. Super-owner only.
+  const isGlobal = scope === 'global' && userEmail?.toLowerCase() === SUPER_OWNER
+  if (scope === 'global' && !isGlobal) {
+    return NextResponse.json({ error: 'Only the platform owner can add global knowledge' }, { status: 403 })
+  }
+
   // Personal categories — any signed-in user can add their own.
   // Other categories (Protocol, Policy, etc.) are shared institutional content — owner/admin only.
   const personalCategories = ['Logbook', 'Case Notes', 'Notes']
-  if (!personalCategories.includes(category) && userRole !== 'owner' && userRole !== 'admin') {
+  if (!isGlobal && !personalCategories.includes(category) && userRole !== 'owner' && userRole !== 'admin') {
     return NextResponse.json({ error: 'Only owners and admins can upload content' }, { status: 403 })
   }
 
@@ -153,10 +161,10 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase.from('documents').insert({
       content: chunk,
       embedding,
-      institution_id: groupId || 'hospital_a',
+      institution_id: isGlobal ? 'GLOBAL' : (groupId || 'hospital_a'),
       category,
-      user_id: userId,
-      group_id: groupId || null,
+      user_id: isGlobal ? null : userId,
+      group_id: isGlobal ? null : (groupId || null),
       source_file: fileName,
       folder: folder || null,
       uploaded_by: userEmail || null,

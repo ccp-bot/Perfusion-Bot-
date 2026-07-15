@@ -191,6 +191,10 @@ export default function Home() {
   // COR Brain — global taught knowledge management
   const [globalRules, setGlobalRules] = useState<any[]>([])
   const [globalRulesLoading, setGlobalRulesLoading] = useState(false)
+  // Global Library — platform-wide reference docs (IFUs) uploaded by the owner for everyone
+  const [globalDocs, setGlobalDocs] = useState<any[]>([])
+  const [globalLibLoading, setGlobalLibLoading] = useState(false)
+  const [globalUploading, setGlobalUploading] = useState(false)
   const [answerTemplates, setAnswerTemplates] = useState<any[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [templateForm, setTemplateForm] = useState<{ id?: number; topic: string; format: string } | null>(null)
@@ -1024,6 +1028,66 @@ export default function Home() {
     try { await fetch('/api/reports', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, status: 'dismissed', email: user.email }) }) } catch {}
   }
 
+  // ── Global Library: platform-wide reference docs (IFUs) for every hospital ──
+  async function fetchGlobalLibrary() {
+    if (user?.email !== SUPER_OWNER_EMAIL) return
+    setGlobalLibLoading(true)
+    try {
+      const res = await fetch(`/api/global-library?email=${encodeURIComponent(user.email)}`)
+      const data = await res.json()
+      setGlobalDocs(data.docs || [])
+    } catch { setGlobalDocs([]) }
+    setGlobalLibLoading(false)
+  }
+  async function uploadGlobalDoc(file: File) {
+    if (!user || user.email !== SUPER_OWNER_EMAIL) return
+    setGlobalUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('category', 'Equipment')
+    fd.append('scope', 'global')
+    fd.append('userId', user.id)
+    fd.append('userEmail', user.email)
+    fd.append('userRole', userRole || 'owner')
+    fd.append('folder', currentFolder || '')
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && !data.error) fetchGlobalLibrary()
+      else alert(data.error || 'Could not upload this document.')
+    } catch { alert('Upload failed — check your connection and try again.') }
+    setGlobalUploading(false)
+  }
+  async function createGlobalLibFolder() {
+    if (!user || user.email !== SUPER_OWNER_EMAIL) return
+    const name = newFolderName.trim().replace(/\//g, '-')
+    if (!name) return
+    const path = currentFolder ? `${currentFolder}/${name}` : name
+    try {
+      const res = await fetch('/api/global-library', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'createFolder', folder: path, email: user.email }) })
+      const data = await res.json()
+      if (data.success) { setNewFolderName(''); fetchGlobalLibrary() }
+      else alert(data.error || 'Could not create folder.')
+    } catch { alert('Could not create folder.') }
+  }
+  async function deleteGlobalDoc(sourceFile: string) {
+    if (!user || user.email !== SUPER_OWNER_EMAIL) return
+    if (!confirm(`Delete "${sourceFile}" from the Global Library? It will stop being used for everyone.`)) return
+    try {
+      await fetch('/api/global-library', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, sourceFile }) })
+      fetchGlobalLibrary()
+    } catch {}
+  }
+  async function deleteGlobalLibFolder(path: string) {
+    if (!user || user.email !== SUPER_OWNER_EMAIL) return
+    if (!confirm(`Delete the folder "${path.split('/').pop()}" and everything inside it?`)) return
+    try {
+      await fetch('/api/global-library', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, folder: path }) })
+      if (currentFolder === path || currentFolder.startsWith(path + '/')) setCurrentFolder(path.split('/').slice(0, -1).join('/'))
+      fetchGlobalLibrary()
+    } catch {}
+  }
+
   // ── COR Brain: manage global taught knowledge ──
   async function fetchGlobalRules() {
     if (user?.email !== SUPER_OWNER_EMAIL) return
@@ -1204,7 +1268,7 @@ export default function Home() {
     setActivePanel(key)
     setOpenNoteId(null)
     setCurrentFolder('')
-    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); setAddingRule(false); fetchGlobalRules() } else if (key === 'Templates') { setTemplateForm(null); fetchAnswerTemplates() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
+    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); setAddingRule(false); fetchGlobalRules() } else if (key === 'GlobalLib') { fetchGlobalLibrary() } else if (key === 'Templates') { setTemplateForm(null); fetchAnswerTemplates() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
@@ -2315,6 +2379,17 @@ export default function Home() {
                   {activePanel === 'Brain' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
                 </button>
               )}
+              {user?.email === SUPER_OWNER_EMAIL && (
+                <button
+                  onClick={() => { openPanel('GlobalLib'); setSidebarOpen(false) }}
+                  className={`sidebar-btn${activePanel === 'GlobalLib' ? ' active' : ''}`}
+                  style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
+                >
+                  <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#127760;</span>
+                  <span style={{ fontSize: '0.82rem', color: activePanel === 'GlobalLib' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'GlobalLib' ? '600' : '400' }}>Global Library</span>
+                  {activePanel === 'GlobalLib' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -2364,9 +2439,9 @@ export default function Home() {
         <div className="slide-panel" style={{ width: '300px', background: '#0d1117', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', flexShrink: 0, animation: 'panelSlide 0.2s ease' }}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel === 'Brain' ? 'COR Brain' : activePanel}</div>
+              <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel === 'Brain' ? 'COR Brain' : activePanel === 'GlobalLib' ? 'Global Library' : activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'Templates' ? `${answerTemplates.length} templates` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.filter((e: any) => e.source_file !== '__folder__').length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'GlobalLib' ? `${globalDocs.filter((d:any)=>!d.isFolder).length} documents` : activePanel === 'Templates' ? `${answerTemplates.length} templates` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.filter((e: any) => e.source_file !== '__folder__').length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -2521,6 +2596,105 @@ export default function Home() {
                 ))}
               </div>
             )}
+
+            {activePanel === 'GlobalLib' && (() => {
+              const P = currentFolder
+              const prefix = P ? P + '/' : ''
+              const realDocs = globalDocs.filter((d: any) => !d.isFolder)
+              const allFolders = Array.from(new Set(globalDocs.map((d: any) => d.folder).filter(Boolean))) as string[]
+              const childSet = new Set<string>()
+              for (const f of allFolders) {
+                if (!P) { const top = f.split('/')[0]; if (top) childSet.add(top) }
+                else if (f !== P && f.startsWith(prefix)) { const seg = f.slice(prefix.length).split('/')[0]; if (seg) childSet.add(P + '/' + seg) }
+              }
+              const children = Array.from(childSet).sort()
+              const directDocs = realDocs.filter((d: any) => (d.folder || '') === P)
+              const crumb = (active: boolean) => ({ background: 'transparent', border: 'none', color: active ? '#e2e8f0' : '#e63946', fontSize: '0.82rem', fontWeight: active ? 600 : 400, cursor: 'pointer', padding: 0 })
+              return (
+                <>
+                  <div style={{ fontSize: '0.72rem', color: '#94a3b8', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '10px', padding: '0.6rem 0.75rem', marginBottom: '0.8rem', lineHeight: 1.5 }}>
+                    &#127760; Documents here are <strong style={{ color: '#e2e8f0' }}>platform-wide</strong> — every hospital&rsquo;s COR can find and cite them. Best for manufacturer <strong style={{ color: '#e2e8f0' }}>IFUs</strong> and reference standards. A hospital&rsquo;s own protocols still take priority.
+                  </div>
+
+                  {/* Breadcrumb + create folder */}
+                  <div style={{ marginBottom: '0.7rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.5rem' }}>
+                      <button onClick={() => setCurrentFolder('')} style={crumb(!P)}>&#128193; All</button>
+                      {P && P.split('/').map((seg, i, arr) => {
+                        const path = arr.slice(0, i + 1).join('/')
+                        return <span key={path} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><span style={{ color: '#4a5568' }}>/</span><button onClick={() => setCurrentFolder(path)} style={crumb(i === arr.length - 1)}>{seg}</button></span>
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createGlobalLibFolder() }} placeholder={P ? `New sub-folder in ${P.split('/').pop()}…` : '📁 New folder (e.g. Oxygenators, Cannulae)…'} style={fieldInputStyle} />
+                      <button onClick={createGlobalLibFolder} disabled={!newFolderName.trim()} style={{ padding: '0.45rem 0.8rem', borderRadius: '8px', border: 'none', background: newFolderName.trim() ? '#e63946' : '#2d3748', color: '#fff', fontSize: '0.75rem', cursor: newFolderName.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, whiteSpace: 'nowrap' }}>Create</button>
+                    </div>
+                  </div>
+
+                  {/* Upload */}
+                  <div style={{ marginBottom: '1rem' }}>
+                    <input type="file" accept=".pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" multiple onChange={async (e) => { const files = Array.from(e.target.files || []); for (const f of files) await uploadGlobalDoc(f); e.target.value = '' }} style={{ display: 'none' }} id="global-upload" />
+                    <label htmlFor="global-upload" onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={async (e) => { e.preventDefault(); setDragOver(false); const files = Array.from(e.dataTransfer.files || []); for (const f of files) await uploadGlobalDoc(f) }} style={{ display: 'block', padding: '0.75rem', borderRadius: '10px', border: `1px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? '#e63946' : 'rgba(255,255,255,0.06)'}`, background: dragOver ? 'rgba(230,57,70,0.08)' : 'rgba(255,255,255,0.02)', textAlign: 'center', cursor: 'pointer', fontSize: '0.78rem', color: '#94a3b8' }}>
+                      {globalUploading ? 'Uploading & indexing…' : (P ? `Upload IFUs into “${P.split('/').pop()}”` : 'Upload IFUs / reference docs (PDF, Word, Excel)')}
+                    </label>
+                  </div>
+
+                  {globalLibLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '1.5rem' }}>Loading…</div>}
+
+                  {!globalLibLoading && children.length === 0 && directDocs.length === 0 && (
+                    <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                      <div style={{ fontSize: '1.8rem', marginBottom: '0.6rem', opacity: 0.4 }}>&#127760;</div>
+                      <div style={{ color: '#4a5568', fontSize: '0.8rem' }}>{P ? 'This folder is empty.' : 'No global documents yet.'}</div>
+                      <div style={{ color: '#4a5568', fontSize: '0.72rem', marginTop: '0.3rem', opacity: 0.7 }}>Upload an IFU above — it becomes searchable for every hospital.</div>
+                    </div>
+                  )}
+
+                  {/* Sub-folders */}
+                  {children.map((childPath: string) => {
+                    const name = childPath.split('/').pop()
+                    const count = realDocs.filter((d: any) => (d.folder || '') === childPath || (d.folder || '').startsWith(childPath + '/')).length
+                    return (
+                      <div key={childPath} onClick={() => setCurrentFolder(childPath)} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', background: 'linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '0.7rem 0.85rem', marginBottom: '0.55rem', cursor: 'pointer' }}>
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                          <defs><linearGradient id={`glfg${childPath.replace(/[^a-z0-9]/gi, '')}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#fbbf24" /><stop offset="100%" stopColor="#f59e0b" /></linearGradient></defs>
+                          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" fill={`url(#glfg${childPath.replace(/[^a-z0-9]/gi, '')})`} />
+                        </svg>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                          <div style={{ fontSize: '0.64rem', color: '#64748b', marginTop: '1px' }}>{count} document{count !== 1 ? 's' : ''}</div>
+                        </div>
+                        <button onClick={ev => { ev.stopPropagation(); deleteGlobalLibFolder(childPath) }} title="Delete folder" style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0 }}>&#10005;</button>
+                        <span style={{ color: '#475569', fontSize: '1.1rem', flexShrink: 0 }}>&#8250;</span>
+                      </div>
+                    )
+                  })}
+
+                  {/* Documents here */}
+                  {directDocs.length > 0 && (
+                    <div style={{ marginTop: children.length > 0 ? '0.85rem' : 0 }}>
+                      {children.length > 0 && <div style={{ fontSize: '0.66rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>Documents here</div>}
+                      {directDocs.map((d: any) => {
+                        const ext = d.source_file?.split('.').pop()?.toLowerCase() || ''
+                        const icon = ext === 'pdf' ? '&#128196;' : ext === 'xlsx' || ext === 'xls' || ext === 'csv' ? '&#128202;' : ext === 'doc' || ext === 'docx' ? '&#128209;' : '&#128196;'
+                        return (
+                          <div key={d.folder + d.source_file} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.75rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
+                            <span style={{ fontSize: '1.2rem', flexShrink: 0, lineHeight: 1.2 }} dangerouslySetInnerHTML={{ __html: icon }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 500, lineHeight: 1.35, wordBreak: 'break-word' }}>{d.source_file}</div>
+                              <div style={{ fontSize: '0.64rem', color: '#22c55e', marginTop: '3px' }}>&#127760; Global · {d.chunks} section{d.chunks !== 1 ? 's' : ''} indexed</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'flex-end', flexShrink: 0 }}>
+                              {d.file_path && <button onClick={() => window.open(d.file_path, '_blank')} style={{ padding: '0.3rem 0.7rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: '0.7rem', cursor: 'pointer' }}>Open</button>}
+                              <button onClick={() => deleteGlobalDoc(d.source_file)} style={{ background: 'transparent', border: 'none', color: '#4a5568', fontSize: '0.7rem', cursor: 'pointer', opacity: 0.7 }}>&#10005; Delete</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
 
             {activePanel === 'Brain' && (() => {
               const P = brainFolder

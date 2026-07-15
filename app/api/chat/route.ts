@@ -285,7 +285,7 @@ Return only the summary, no preamble.`
       const orExpr = terms.map((t: string) => `content.ilike.%${t}%`).join(',')
       const { data: kw } = await supabase.from('documents')
         .select('id, content, group_id, institution_id, archived, source_file, user_id')
-        .in('category', ['Protocol', 'Policy'])
+        .in('category', ['Protocol', 'Policy', 'Equipment'])
         .or(orExpr)
         .limit(20)
       keywordDocs = (kw || []).filter(inGroup)
@@ -316,7 +316,9 @@ Return only the summary, no preamble.`
   // corrections that must apply on every answer, not depend on fuzzy retrieval, and must override protocols.
   let overrideRules: string[] = []
   try {
-    const { data: g } = await supabase.from('documents').select('content').eq('institution_id', 'GLOBAL').eq('category', 'Protocol').neq('archived', true).limit(50)
+    // Only taught TEXT rules count as authoritative overrides — never uploaded global documents
+    // (IFUs / reference material have a source_file and must stay ordinary retrievable knowledge).
+    const { data: g } = await supabase.from('documents').select('content').eq('institution_id', 'GLOBAL').eq('category', 'Protocol').is('source_file', null).neq('archived', true).limit(50)
     let team: any[] = []
     if (groupId) {
       const r = await supabase.from('documents').select('content').eq('group_id', groupId).eq('folder', 'Team Rules').neq('archived', true).limit(50)
