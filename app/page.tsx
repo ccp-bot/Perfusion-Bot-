@@ -195,6 +195,13 @@ export default function Home() {
   const [globalDocs, setGlobalDocs] = useState<any[]>([])
   const [globalLibLoading, setGlobalLibLoading] = useState(false)
   const [globalUploading, setGlobalUploading] = useState(false)
+  // Control Center — one-page view of what's feeding COR, per company or individual
+  const [ccMode, setCcMode] = useState<'company' | 'individual'>('company')
+  const [ccGroupId, setCcGroupId] = useState<string>('')
+  const [ccUserId, setCcUserId] = useState<string>('')
+  const [ccData, setCcData] = useState<any>(null)
+  const [ccMembers, setCcMembers] = useState<any[]>([])
+  const [ccLoading, setCcLoading] = useState(false)
   const [answerTemplates, setAnswerTemplates] = useState<any[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [templateForm, setTemplateForm] = useState<{ id?: number; topic: string; format: string } | null>(null)
@@ -1028,6 +1035,48 @@ export default function Home() {
     try { await fetch('/api/reports', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, status: 'dismissed', email: user.email }) }) } catch {}
   }
 
+  // ── Control Center: live view of what's feeding COR ──
+  const canControlCenter = () => user?.email === SUPER_OWNER_EMAIL || userRole === 'owner' || userRole === 'admin'
+  async function fetchControlCenter(groupId: string, uid?: string) {
+    if (!user || !groupId) return
+    setCcLoading(true)
+    try {
+      const params = new URLSearchParams({ email: user.email, role: userRole || '', groupId: String(groupId) })
+      if (uid) params.set('userId', uid)
+      const res = await fetch(`/api/control-center?${params.toString()}`)
+      const data = await res.json()
+      if (!data.error) setCcData(data)
+    } catch { /* ignore */ }
+    setCcLoading(false)
+  }
+  async function fetchCCMembers(groupId: string) {
+    try {
+      const res = await fetch(`/api/groups/members?groupId=${groupId}`)
+      const data = await res.json()
+      setCcMembers(data.members || [])
+    } catch { setCcMembers([]) }
+  }
+  function openControlCenter() {
+    if (!canControlCenter()) return
+    const gid = String(userGroupId || (allGroups[0]?.group_id ?? ''))
+    setCcMode('company'); setCcUserId(''); setCcData(null); setCcGroupId(gid)
+    if (gid) { fetchControlCenter(gid); fetchCCMembers(gid) }
+  }
+  function ccSwitchHospital(gid: string) {
+    setCcGroupId(gid); setCcUserId(''); setCcData(null)
+    fetchControlCenter(gid); fetchCCMembers(gid)
+  }
+  function ccSetMode(m: 'company' | 'individual') {
+    setCcMode(m)
+    if (m === 'individual') {
+      const first = ccUserId || (ccMembers.find((x: any) => x.user_id)?.user_id || '')
+      if (first) { setCcUserId(first); fetchControlCenter(ccGroupId, first) }
+    } else {
+      fetchControlCenter(ccGroupId)
+    }
+  }
+  function ccSelectPerson(uid: string) { setCcUserId(uid); fetchControlCenter(ccGroupId, uid) }
+
   // ── Global Library: platform-wide reference docs (IFUs) for every hospital ──
   async function fetchGlobalLibrary() {
     if (user?.email !== SUPER_OWNER_EMAIL) return
@@ -1268,7 +1317,7 @@ export default function Home() {
     setActivePanel(key)
     setOpenNoteId(null)
     setCurrentFolder('')
-    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); setAddingRule(false); fetchGlobalRules() } else if (key === 'GlobalLib') { fetchGlobalLibrary() } else if (key === 'Templates') { setTemplateForm(null); fetchAnswerTemplates() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
+    if (key === 'Users') { fetchAllUsers() } else if (key === 'Reports') { fetchReports() } else if (key === 'ControlCenter') { openControlCenter() } else if (key === 'Brain') { setBrainFolder(''); setEditingRuleId(null); setAddingRule(false); fetchGlobalRules() } else if (key === 'GlobalLib') { fetchGlobalLibrary() } else if (key === 'Templates') { setTemplateForm(null); fetchAnswerTemplates() } else if (key === 'Notes') { fetchNotes() } else { fetchPanel(key) }
     if (key === 'Protocol' || key === 'Policy') {
       markNotificationsRead(key)
     }
@@ -2329,6 +2378,15 @@ export default function Home() {
             <>
               <div style={{ fontSize: '0.6rem', color: '#4a5568', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem', marginTop: '0.75rem', marginBottom: '0.5rem' }}>Management</div>
               <button
+                onClick={() => { openPanel('ControlCenter'); setSidebarOpen(false) }}
+                className={`sidebar-btn${activePanel === 'ControlCenter' ? ' active' : ''}`}
+                style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: activePanel === 'ControlCenter' ? 'rgba(230,57,70,0.06)' : 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
+              >
+                <span style={{ fontSize: '1.2rem', width: '50px', textAlign: 'center', flexShrink: 0 }}>&#128202;</span>
+                <span style={{ fontSize: '0.82rem', color: activePanel === 'ControlCenter' ? '#e63946' : '#94a3b8', fontWeight: activePanel === 'ControlCenter' ? '600' : '400' }}>Control Center</span>
+                {activePanel === 'ControlCenter' && <div style={{ marginLeft: 'auto', width: '4px', height: '4px', borderRadius: '50%', background: '#e63946', flexShrink: 0 }} />}
+              </button>
+              <button
                 onClick={() => { openPanel('Admin'); setSidebarOpen(false) }}
                 className={`sidebar-btn${activePanel === 'Admin' ? ' active' : ''}`}
                 style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', background: 'transparent', border: '1px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.15s ease', marginBottom: '2px', textAlign: 'left' }}
@@ -2439,9 +2497,9 @@ export default function Home() {
         <div className="slide-panel" style={{ width: '300px', background: '#0d1117', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', flexShrink: 0, animation: 'panelSlide 0.2s ease' }}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel === 'Brain' ? 'COR Brain' : activePanel === 'GlobalLib' ? 'Global Library' : activePanel}</div>
+              <div style={{ fontWeight: '600', color: '#ffffff', fontSize: '0.88rem' }}>{activePanel === 'Brain' ? 'COR Brain' : activePanel === 'GlobalLib' ? 'Global Library' : activePanel === 'ControlCenter' ? 'Control Center' : activePanel}</div>
               <div style={{ fontSize: '0.7rem', color: '#4a5568', marginTop: '1px' }}>
-                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'GlobalLib' ? `${globalDocs.filter((d:any)=>!d.isFolder).length} documents` : activePanel === 'Templates' ? `${answerTemplates.length} templates` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.filter((e: any) => e.source_file !== '__folder__').length} saved entries`}
+                {activePanel === 'History' ? `${conversations.length} conversations` : activePanel === 'Admin' ? `${groupMembers.length} members` : activePanel === 'Users' ? `${allUsers.length} users` : activePanel === 'Reports' ? `${reports.length} open` : activePanel === 'Brain' ? `${globalRules.length} global rules` : activePanel === 'GlobalLib' ? `${globalDocs.filter((d:any)=>!d.isFolder).length} documents` : activePanel === 'ControlCenter' ? "how COR is thinking" : activePanel === 'Templates' ? `${answerTemplates.length} templates` : activePanel === 'Notes' ? `${notesList.length} notes` : activePanel === 'Checklists' ? `${checklistFiles.length} files` : activePanel === 'Equipment' ? `${inventoryItems.length} items` : `${panelEntries.filter((e: any) => e.source_file !== '__folder__').length} saved entries`}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -2596,6 +2654,106 @@ export default function Home() {
                 ))}
               </div>
             )}
+
+            {activePanel === 'ControlCenter' && (() => {
+              const c = ccData?.company
+              const g = ccData?.global
+              const ind = ccData?.individual
+              const hospName = allGroups.find((x: any) => String(x.group_id) === String(ccGroupId))?.group?.name || 'this hospital'
+              const person = ccMembers.find((m: any) => String(m.user_id) === String(ccUserId))
+              const personName = person ? (person.email ? person.email.split('@')[0] : 'Member') : ''
+              const selStyle: any = { flex: 1, minWidth: 0, padding: '0.45rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: '#0d1117', color: '#e2e8f0', fontSize: '0.8rem', cursor: 'pointer' }
+              const Layer = (n: number, color: string, name: string, sub: string, count: any) => (
+                <div key={n + name} style={{ position: 'relative', display: 'grid', gridTemplateColumns: '30px 1fr auto', gap: '0.7rem', alignItems: 'center', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderLeft: `3px solid ${color}`, borderRadius: '11px', padding: '0.55rem 0.75rem', marginBottom: '0.45rem' }}>
+                  <div style={{ width: '30px', height: '30px', borderRadius: '50%', border: `2px solid ${color}`, color, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: '0.78rem', background: '#0d1117' }}>{n}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.86rem', color: '#f1f5f9', fontWeight: 600 }}>{name}</div>
+                    <div style={{ fontSize: '0.68rem', color: '#64748b' }}>{sub}</div>
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color, fontVariantNumeric: 'tabular-nums' }}>{count}</div>
+                </div>
+              )
+              const Tile = (color: string, ico: string, big: any, lab: string, meta: string, target: string) => (
+                <div key={lab} onClick={() => target && openPanel(target)} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '13px', padding: '0.8rem 0.85rem', cursor: target ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', gap: '0.1rem', minHeight: '96px' }}>
+                  <div style={{ fontSize: '1rem' }} dangerouslySetInnerHTML={{ __html: ico }} />
+                  <div style={{ fontSize: '1.6rem', fontWeight: 800, lineHeight: 1, color, fontVariantNumeric: 'tabular-nums' }}>{big}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#e2e8f0' }}>{lab}</div>
+                  <div style={{ fontSize: '0.62rem', color: '#64748b', marginTop: 'auto' }}>{meta}</div>
+                </div>
+              )
+              return (
+                <>
+                  {/* Scope controls */}
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '0.6rem 0.7rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                    <div style={{ display: 'inline-flex', background: '#0d1117', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '9px', padding: '3px' }}>
+                      {(['company', 'individual'] as const).map(m => (
+                        <button key={m} onClick={() => ccSetMode(m)} style={{ border: 0, background: ccMode === m ? '#e63946' : 'transparent', color: ccMode === m ? '#fff' : '#94a3b8', fontSize: '0.76rem', fontWeight: 600, padding: '0.35rem 0.75rem', borderRadius: '7px', cursor: 'pointer', textTransform: 'capitalize' }}>{m}</button>
+                      ))}
+                    </div>
+                    <select value={ccGroupId} onChange={e => ccSwitchHospital(e.target.value)} style={selStyle}>
+                      {allGroups.map((x: any) => <option key={x.group_id} value={String(x.group_id)}>{x.group?.name}</option>)}
+                    </select>
+                    {ccMode === 'individual' && (
+                      <select value={ccUserId} onChange={e => ccSelectPerson(e.target.value)} style={selStyle}>
+                        {ccMembers.filter((m: any) => m.user_id).length === 0 && <option value="">No members yet</option>}
+                        {ccMembers.filter((m: any) => m.user_id).map((m: any) => <option key={m.user_id} value={String(m.user_id)}>{(m.email || 'member').split('@')[0]} · {m.role}</option>)}
+                      </select>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.9rem' }}>
+                    Viewing {ccMode === 'company' ? <b style={{ color: '#e2e8f0' }}>{hospName}</b> : <><b style={{ color: '#e2e8f0' }}>{personName || 'a member'}</b> <span style={{ color: '#64748b' }}>· {hospName}</span></>}
+                  </div>
+
+                  {ccLoading && <div style={{ textAlign: 'center', color: '#4a5568', fontSize: '0.82rem', marginTop: '2rem' }}>Loading…</div>}
+
+                  {!ccLoading && c && (
+                    <>
+                      <div style={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4a5568', marginBottom: '0.6rem' }}>How COR is thinking</div>
+                      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '13px', padding: '0.85rem', marginBottom: '1.4rem' }}>
+                        <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginBottom: '0.55rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}><span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#e63946' }} />A question comes in…</div>
+                        {ccMode === 'company' ? (
+                          <>
+                            {Layer(1, '#e63946', 'Taught corrections', 'Rules taught to COR — always win', c.corrections)}
+                            {Layer(2, '#22c55e', `${hospName.split(' ').slice(0, 2).join(' ')} protocols & policies`, 'Primary source, cited by name', c.protocols + c.policies)}
+                            {Layer(3, '#7c83ff', 'Global reference / IFUs', 'Shared platform-wide knowledge', g?.reference ?? 0)}
+                            {Layer(4, '#64748b', 'COR’s trained expertise', 'Fallback when nothing above applies', '—')}
+                          </>
+                        ) : (
+                          <>
+                            {Layer(1, '#e63946', 'Taught corrections', 'From their hospital + platform', c.corrections)}
+                            {Layer(2, '#22c55e', `${hospName.split(' ').slice(0, 2).join(' ')} protocols & policies`, 'Inherited from their hospital', c.protocols + c.policies)}
+                            {Layer(3, '#2dd4bf', 'Their personal notes', 'Only this person sees these', ind?.notes ?? 0)}
+                            {Layer(4, '#7c83ff', 'Global reference / IFUs', 'Shared platform-wide knowledge', g?.reference ?? 0)}
+                            {Layer(5, '#64748b', 'COR’s trained expertise', 'Fallback', '—')}
+                          </>
+                        )}
+                        <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '0.35rem' }}><span style={{ color: '#22c55e', fontWeight: 700 }}>✓ Cited answer</span> — higher layers win over lower ones.</div>
+                      </div>
+
+                      <div style={{ fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#4a5568', marginBottom: '0.6rem' }}>What’s feeding COR — tap to manage</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.6rem' }}>
+                        {ccMode === 'company' ? [
+                          Tile('#e63946', '&#9889;', c.corrections, 'Taught corrections', 'authoritative', 'Brain'),
+                          Tile('#22c55e', '&#128220;', c.protocols, 'Protocols', 'cited by name', 'Protocol'),
+                          Tile('#22c55e', '&#128203;', c.policies, 'Policies', 'institutional', 'Policy'),
+                          Tile('#22c55e', '&#9989;', c.checklists, 'Checklists', 'files', 'Checklists'),
+                          Tile('#f5a623', '&#129517;', c.templates, 'Answer templates', 'answer formats', 'Templates'),
+                          Tile('#7c83ff', '&#127760;', g?.reference ?? 0, 'Global reference', 'IFUs & standards', 'GlobalLib'),
+                          Tile('#2dd4bf', '&#128101;', c.team, 'Team members', 'in this hospital', 'Admin'),
+                        ] : [
+                          Tile('#2dd4bf', '&#128221;', ind?.notes ?? 0, 'Personal notes', 'only they see', 'Notes'),
+                          Tile('#2dd4bf', '&#128214;', ind?.cases ?? 0, 'Logbook cases', 'logged by them', 'Logbook'),
+                          Tile('#22c55e', '&#128220;', c.protocols + c.policies, 'Hospital knowledge', 'inherited', 'Protocol'),
+                          Tile('#e63946', '&#9889;', c.corrections, 'Corrections they get', 'from their hospital', 'Brain'),
+                          Tile('#7c83ff', '&#127760;', g?.reference ?? 0, 'Global reference', 'same for everyone', 'GlobalLib'),
+                        ]}
+                      </div>
+                    </>
+                  )}
+                </>
+              )
+            })()}
 
             {activePanel === 'GlobalLib' && (() => {
               const P = currentFolder
