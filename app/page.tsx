@@ -280,6 +280,8 @@ export default function Home() {
   const inputBeforeRecordRef = useRef('')
   const liveRecognitionRef = useRef<any>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const phRef = useRef<HTMLDivElement>(null)
   const userRef = useRef<any>(null)
   const activePanelRef = useRef<string | null>(null)
   const currentConvIdRef = useRef<number | null>(null)
@@ -347,6 +349,19 @@ export default function Home() {
     }, 5000)
     return () => clearInterval(id)
   }, [])
+
+  // Size the chat box to fit its content — or, when empty, the FULL placeholder (1 or 2 lines),
+  // so the whole prompt is always visible and vertically centered. Runs after each render.
+  useEffect(() => {
+    const ta = taRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    if (input) { ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; return }
+    if (listening) { ta.style.height = '42px'; return }
+    const oh = phRef.current?.offsetHeight || 18
+    // 24px = the textarea's top+bottom padding; adding it keeps equal space above/below → centered.
+    ta.style.height = Math.min(Math.max(oh + 24, 42), 120) + 'px'
+  })
 
   // Fetch group membership when user is set
   useEffect(() => {
@@ -4079,12 +4094,12 @@ export default function Home() {
                 placeholder=""
                 rows={1}
                 style={{ width: '100%', padding: '0.75rem 3rem 0.75rem 1.1rem', borderRadius: '18px', border: `1px solid ${listening ? 'rgba(230,57,70,0.5)' : 'rgba(255,255,255,0.1)'}`, background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s ease', resize: 'none', overflow: 'hidden', minHeight: '42px', maxHeight: '120px', fontFamily: 'inherit', lineHeight: '1.4' }}
-                ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px' } }}
+                ref={taRef}
               />
-              {/* Custom placeholder: vertically centered, always one line with an ellipsis — reliable on iOS
-                  where a native textarea placeholder would wrap to a second line and look off-center. */}
+              {/* Custom placeholder: shows the FULL text (wraps to a 2nd line if needed) and stays
+                  vertically centered because the box is sized to it (see the sizing effect above). */}
               {!input && !listening && (
-                <div style={{ position: 'absolute', left: '1.1rem', right: '2.8rem', top: '50%', transform: 'translateY(-50%)', color: '#4a5568', fontSize: '0.88rem', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none' }}>
+                <div ref={phRef} style={{ position: 'absolute', left: '1.1rem', right: '1.1rem', top: '0.75rem', color: '#4a5568', fontSize: '0.88rem', lineHeight: 1.4, whiteSpace: 'normal', overflowWrap: 'break-word', pointerEvents: 'none' }}>
                   {caseLogExtraMode ? 'Item name + qty (e.g. "Cell Saver tubing 2") or "done"' : caseLogReview ? 'Add more details, or use the card above to save…' : caseLogging ? (caseLogMissing[0] ? `Tell me the ${caseLogMissing[0].toLowerCase()} (or several at once)…` : 'Tell COR about your case…') : COR_PLACEHOLDERS[placeholderIndex]}
                 </div>
               )}
